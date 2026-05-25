@@ -4,8 +4,6 @@ import { storeUser } from '../utils/auth';
 import { validateEmployee } from '../utils/sheets';
 import { getConfig } from '../utils/config';
 import {
-  Clock,
-  Shield,
   MapPin,
   Camera,
   Mail,
@@ -85,13 +83,13 @@ export default function LoginScreen({ onLogin, onShowSettings }: Props) {
           </span>
         </div>
 
+        {/* Logo */}
         <div className="relative inline-block mb-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-700 rounded-2xl flex items-center justify-center shadow-2xl mx-auto">
-            <Clock className="w-10 h-10 text-white" />
-          </div>
-          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-green-500 rounded-full flex items-center justify-center border-2 border-white shadow-lg">
-            <Shield className="w-3.5 h-3.5 text-white" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="MilMetro Logo"
+            className="w-24 h-24 object-contain mx-auto drop-shadow-2xl"
+          />
         </div>
 
         <h1 className="text-2xl font-extrabold text-white tracking-tight">

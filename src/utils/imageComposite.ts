@@ -44,6 +44,9 @@ export async function createCompositeImage(
       ctx.fillText(config.APP_TITLE, canvas.width * 0.97, bannerH * 0.65);
       ctx.shadowBlur = 0;
 
+      // ── Logo watermark (top-right corner) ──────────────────
+      await drawLogoWatermark(ctx, canvas.width, bannerH);
+
       // ── Bottom overlay gradient ─────────────────────────────
       const overlayHeight = canvas.height * 0.32;
       const gradient = ctx.createLinearGradient(0, canvas.height - overlayHeight, 0, canvas.height);
@@ -252,4 +255,50 @@ function roundedRect(
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+// helper – draw logo watermark
+async function drawLogoWatermark(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  bannerHeight: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const logo = new Image();
+    logo.crossOrigin = 'anonymous';
+    
+    logo.onload = () => {
+      // Calculate logo size (40px or 8% of canvas width, whichever is smaller)
+      const logoSize = Math.min(40, canvasWidth * 0.08);
+      const padding = canvasWidth * 0.02;
+      const x = canvasWidth - logoSize - padding;
+      const y = bannerHeight + padding;
+      
+      // Save context state
+      ctx.save();
+      
+      // Draw semi-transparent logo
+      ctx.globalAlpha = 0.85;
+      
+      // Draw circular background
+      ctx.beginPath();
+      ctx.arc(x + logoSize / 2, y + logoSize / 2, logoSize / 2 + 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fill();
+      
+      // Draw logo
+      ctx.drawImage(logo, x, y, logoSize, logoSize);
+      
+      // Restore context
+      ctx.restore();
+      resolve();
+    };
+    
+    logo.onerror = () => {
+      // Silently fail if logo can't load
+      resolve();
+    };
+    
+    logo.src = '/logo.png';
+  });
 }
