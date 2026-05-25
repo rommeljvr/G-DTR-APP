@@ -68,10 +68,11 @@ export default function Dashboard({ user, onLogout }: Props) {
     return () => clearInterval(timer);
   }, []);
 
-  const loadRecords = () => {
-    const last = getLastAction(user.email);
+  const loadRecords = async () => {
+    const last = await getLastAction(user.email);
     setLastAction(last);
-    setTodayRecords(getTodayRecords(user.email));
+    const today = await getTodayRecords(user.email);
+    setTodayRecords(today);
   };
 
   const fetchLocation = async () => {

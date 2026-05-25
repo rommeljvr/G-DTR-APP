@@ -252,13 +252,52 @@ export function getLocalRecords(): AttendanceRecord[] {
   }
 }
 
-export function getLastAction(userEmail: string): AttendanceRecord | null {
+export async function getLastAction(userEmail: string): Promise<AttendanceRecord | null> {
+  const scriptUrl = getScriptUrl();
+  
+  // Try server first
+  if (scriptUrl) {
+    try {
+      const res = await fetch(
+        `${scriptUrl}?action=getLastAction&email=${encodeURIComponent(userEmail)}`,
+        { method: 'GET', redirect: 'follow' }
+      );
+      const json = await res.json();
+      if (json.success && json.lastAction) {
+        return json.lastAction;
+      }
+    } catch (err) {
+      console.log('Server fetch failed, falling back to local:', err);
+    }
+  }
+  
+  // Fallback to local records
   const records = getLocalRecords();
   const userRecords = records.filter((r) => r.userEmail === userEmail);
   return userRecords.length > 0 ? userRecords[0] : null;
 }
 
-export function getTodayRecords(userEmail: string): AttendanceRecord[] {
+export async function getTodayRecords(userEmail: string): Promise<AttendanceRecord[]> {
+  const scriptUrl = getScriptUrl();
+  
+  // Try server first
+  if (scriptUrl) {
+    try {
+      const res = await fetch(
+        `${scriptUrl}?action=getHistory&email=${encodeURIComponent(userEmail)}`,
+        { method: 'GET', redirect: 'follow' }
+      );
+      const json = await res.json();
+      if (json.success && json.records) {
+        const today = new Date().toLocaleDateString('en-US');
+        return json.records.filter((r: AttendanceRecord) => r.date === today);
+      }
+    } catch (err) {
+      console.log('Server fetch failed, falling back to local:', err);
+    }
+  }
+  
+  // Fallback to local records
   const records = getLocalRecords();
   const today = new Date().toLocaleDateString('en-US');
   return records.filter((r) => r.userEmail === userEmail && r.date === today);
