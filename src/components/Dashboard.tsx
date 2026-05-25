@@ -50,6 +50,7 @@ export default function Dashboard({ user, onLogout }: Props) {
   const [locationData, setLocationData] = useState<LocationData | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [validatingLocation, setValidatingLocation] = useState(false);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -172,16 +173,51 @@ export default function Dashboard({ user, onLogout }: Props) {
     }
   };
 
-  const handleAttendanceAction = () => {
-    if (!locationData) {
+  const handleAttendanceAction = async () => {
+    // Start location validation
+    setValidatingLocation(true);
+    setNotification(null);
+
+    try {
+      // Check if we have valid location data
+      let loc = locationData;
+      
+      if (!loc) {
+        // Try to fetch location
+        setNotification({
+          type: 'success',
+          message: 'Acquiring GPS location...',
+        });
+        loc = await getLocationData();
+        setLocationData(loc);
+      }
+
+      // Validate location accuracy (reject if > 100m accuracy)
+      if (loc.accuracy > 100) {
+        setNotification({
+          type: 'error',
+          message: `GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`,
+        });
+        setValidatingLocation(false);
+        return;
+      }
+
+      // Location validated - proceed to camera
+      setValidatingLocation(false);
+      setNotification(null);
+      setCompositePreview(null);
+      setShowCamera(true);
+    } catch (err) {
+      setValidatingLocation(false);
+      const message =
+        err instanceof GeolocationPositionError
+          ? geoMsg(err)
+          : 'Unable to get location. Please enable GPS and try again.';
       setNotification({
         type: 'error',
-        message: 'Please wait for GPS location to be acquired.',
+        message,
       });
-      return;
     }
-    setCompositePreview(null);
-    setShowCamera(true);
   };
 
   const dismissNotification = () => {
@@ -428,8 +464,8 @@ export default function Dashboard({ user, onLogout }: Props) {
         {/* ── Main action button ─────────────────────────── */}
         <button
           onClick={handleAttendanceAction}
-          disabled={processing || !locationData}
-          className={`w-full relative overflow-hidden rounded-2xl p-6 text-center active:scale-[0.97] transition-all duration-200 shadow-xl disabled:opacity-50 ${
+          disabled={processing || validatingLocation || locationLoading}
+          className={`w-full relative overflow-hidden rounded-2xl p-6 text-center active:scale-[0.97] transition-all duration-200 shadow-xl disabled:opacity-60 ${
             nextAction === 'TIME_IN'
               ? 'bg-gradient-to-r from-green-500 to-emerald-600'
               : 'bg-gradient-to-r from-orange-500 to-red-500'
@@ -437,14 +473,18 @@ export default function Dashboard({ user, onLogout }: Props) {
         >
           <div className="flex items-center justify-center gap-3">
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
-              {nextAction === 'TIME_IN' ? (
+              {validatingLocation || locationLoading ? (
+                <Loader2 className="w-7 h-7 text-white animate-spin" />
+              ) : nextAction === 'TIME_IN' ? (
                 <LogInIcon className="w-7 h-7 text-white" />
               ) : (
                 <LogOutIcon className="w-7 h-7 text-white" />
               )}
             </div>
             <div className="text-left">
-              <p className="text-white/80 text-xs font-medium">Tap to Record</p>
+              <p className="text-white/80 text-xs font-medium">
+                {validatingLocation ? 'Validating GPS...' : locationLoading ? 'Acquiring GPS...' : 'Tap to Record'}
+              </p>
               <p className="text-white text-2xl font-bold">
                 {nextAction === 'TIME_IN' ? 'TIME IN' : 'TIME OUT'}
               </p>
@@ -453,7 +493,9 @@ export default function Dashboard({ user, onLogout }: Props) {
           </div>
           <div className="flex items-center justify-center gap-2 mt-3 text-white/70 text-xs">
             <Camera className="w-3.5 h-3.5" />
-            <span>Photo + GPS capture required</span>
+            <span>
+              {validatingLocation ? 'Checking location accuracy...' : 'Photo + GPS capture required'}
+            </span>
           </div>
         </button>
 
