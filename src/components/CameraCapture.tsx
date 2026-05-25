@@ -31,9 +31,17 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: facing,
-          width: { ideal: 1280 },
-          height: { ideal: 960 },
-        },
+          // Request highest possible resolution
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          // Advanced camera settings for quality
+          advanced: [
+            { focusMode: 'continuous' },
+            { brightness: { ideal: 128 } },
+            { exposureMode: 'continuous' },
+            { whiteBalanceMode: 'continuous' },
+          ],
+        } as MediaTrackConstraints,
         audio: false,
       };
 
@@ -90,7 +98,7 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
 
     ctx.drawImage(video, 0, 0);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     setCapturedPhoto(dataUrl);
     stopStream();
   };
