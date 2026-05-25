@@ -224,25 +224,10 @@ export async function createCompositeImage(
           finalize();
         };
 
-        // Map provider options (uncomment one that works for you)
+        // Map provider: Geoapify Static Maps (free tier: 3000/day)
         const lat = location.latitude;
         const lng = location.longitude;
-        
-        // Option 1: MapQuest Static Map (free tier, needs API key for production)
-        // Get key at: https://developer.mapquest.com/
-        // mapImg.src = `https://www.mapquestapi.com/staticmap/v4/getmap?key=YOUR_KEY&size=300,300&zoom=16&center=${lat},${lng}&pois=${lat},${lng}`;
-        
-        // Option 2: Geoapify Static Maps (free tier: 3000/day, needs API key)
-        // Get key at: https://www.geoapify.com/static-maps-api/
-        // mapImg.src = `https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=300&height=300&center=lonlat:${lng},${lat}&zoom=16&apiKey=YOUR_KEY`;
-        
-        // Option 3: Stadia Maps (free tier: 2000/day, needs API key)
-        // Get key at: https://stadiamaps.com/
-        // mapImg.src = `https://api.stadiamaps.com/static/stamen_terrain_background?api_key=YOUR_KEY&center=${lat},${lng}&zoom=16&width=300&height=300`;
-        
-        // For now: Use placeholder that shows coordinates clearly
-        // The onerror handler above will display a styled coordinate box
-        mapImg.src = ''; // Trigger onerror immediately to show styled fallback
+        mapImg.src = `https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=300&height=300&center=lonlat:${lng},${lat}&zoom=16&marker=lonlat:${lng},${lat};color:%23dc2626;size:medium&apiKey=3f10ba2b05f44705be7bdd72e00b8f78`;
       } catch {
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       }
