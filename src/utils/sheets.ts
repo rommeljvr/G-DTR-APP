@@ -83,7 +83,12 @@ export async function submitAttendance(
 
   try {
     const photoSize = record.photo ? record.photo.length : 0;
-    console.log(`Submitting attendance. Photo size: ${photoSize} bytes`);
+    const hasBase64Prefix = record.photo ? record.photo.includes('base64,') : false;
+    console.log(`Submitting attendance. Photo size: ${photoSize} bytes, has base64 prefix: ${hasBase64Prefix}`);
+
+    if (!record.photo || photoSize < 100) {
+      console.warn('Photo data is missing or too small');
+    }
 
     const payload = {
       action: 'submitAttendance',
@@ -108,6 +113,9 @@ export async function submitAttendance(
     };
 
     console.log('Sending to script:', scriptUrl);
+    console.log('Payload data keys:', Object.keys(payload.data));
+    console.log('Photo payload size:', payload.data.photo ? payload.data.photo.length : 0);
+
     const response = await fetch(scriptUrl, {
       method: 'POST',
       redirect: 'follow',
@@ -115,7 +123,21 @@ export async function submitAttendance(
       body: JSON.stringify(payload),
     });
 
-    const result = await response.json();
+    console.log('Response status:', response.status, response.statusText);
+    const responseText = await response.text();
+    console.log('Raw response:', responseText.substring(0, 500));
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseErr) {
+      console.error('Failed to parse response as JSON:', parseErr);
+      return {
+        success: false,
+        message: 'Server returned invalid JSON. Check console for details.',
+      };
+    }
+
     console.log('Script response:', result);
 
     if (result.imageId) {
@@ -356,6 +378,7 @@ function doGet(e) {
   if (action === 'getLastAction')    return getLastAction(email);
   if (action === 'getHistory')       return getHistory(email);
   if (action === 'getSettings')      return getSettings();
+  if (action === 'checkAuth')        return checkDriveAuthorization();
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -449,6 +472,17 @@ function findColumnIndex(headers, possibleNames) {
 // ══════════════════════════════════════════════════════════════════
 
 function submitAttendance(data, clientFolderId) {
+  Logger.log('=== SUBMIT ATTENDANCE START ===');
+  Logger.log('User: ' + (data.userName || 'unknown'));
+  Logger.log('Action: ' + (data.action || 'unknown'));
+  Logger.log('Photo present: ' + (data.photo ? 'YES' : 'NO'));
+  
+  if (data.photo) {
+    Logger.log('Photo type: ' + typeof data.photo);
+    Logger.log('Photo length: ' + String(data.photo).length);
+    Logger.log('Has base64 prefix: ' + (String(data.photo).indexOf('base64,') > -1));
+  }
+
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Attendance');
 
@@ -467,18 +501,23 @@ function submitAttendance(data, clientFolderId) {
   }
 
   var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  Logger.log('Using folder ID: ' + folderId);
 
   // Upload image to Google Drive
   var imageUrl = '';
   var imageId  = '';
   try {
     if (data.photo && String(data.photo).indexOf('base64,') > -1) {
+      Logger.log('Attempting Drive upload...');
       var uploadResult = uploadImageToDrive(data, folderId);
       imageUrl = uploadResult.url;
       imageId  = uploadResult.id;
+      Logger.log('Drive upload SUCCESS - ID: ' + imageId);
+    } else {
+      Logger.log('Skipping upload - photo missing or no base64 prefix');
     }
   } catch (err) {
-    Logger.log('Drive upload error: ' + err.toString());
+    Logger.log('Drive upload ERROR: ' + err.toString());
     imageUrl = 'UPLOAD_ERROR: ' + err.toString().substring(0, 100);
   }
 
@@ -558,6 +597,35 @@ function formatFileName(data) {
   var name   = (data.userName || 'user').replace(/[^a-zA-Z0-9]/g, '_');
   var action = data.action || 'LOG';
   return 'DTR_' + name + '_' + action + '_' + ts + '.jpg';
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  AUTHORIZATION CHECK
+//  Call this endpoint to verify Drive permissions are granted
+// ══════════════════════════════════════════════════════════════════
+
+function checkDriveAuthorization() {
+  try {
+    // Try to access Drive - this will throw if not authorized
+    var rootFolder = DriveApp.getRootFolder();
+    var testFile = rootFolder.createFile('test_auth.txt', 'Drive API test', MimeType.PLAIN_TEXT);
+    testFile.setTrashed(true);
+    
+    return _json({
+      success: true,
+      authorized: true,
+      message: 'Drive API is properly authorized',
+      canUpload: true
+    });
+  } catch (err) {
+    return _json({
+      success: false,
+      authorized: false,
+      message: 'Drive API NOT authorized. Please re-deploy with proper permissions.',
+      error: err.toString(),
+      instructions: '1. Go to Deploy → Manage deployments. 2. Delete current deployment. 3. Deploy → New deployment → Web app. 4. Execute as: Me, Who has access: Anyone. 5. Click "Review permissions" → "Advanced" → "Go to (unsafe)" → "Allow"'
+    });
+  }
 }
 
 function getImage(fileId) {
@@ -656,7 +724,6 @@ function getSettings() {
 function _json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHeader('Access-Control-Allow-Origin', '*');
+    .setMimeType(ContentService.MimeType.JSON);
 }
 `;

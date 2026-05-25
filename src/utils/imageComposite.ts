@@ -151,27 +151,98 @@ export async function createCompositeImage(
 
         mapImg.onerror = () => {
           ctx.shadowBlur = 0;
-          ctx.fillStyle = 'rgba(30,64,175,0.8)';
           const radius = 8;
+          
+          // Draw map-like background (terrain style)
+          const mapBg = ctx.createLinearGradient(mapX, mapY, mapX + mapSize, mapY + mapSize);
+          mapBg.addColorStop(0, '#e8f5e9');   // light green
+          mapBg.addColorStop(0.5, '#c8e6c9'); // medium green
+          mapBg.addColorStop(1, '#a5d6a7');  // darker green
+          ctx.fillStyle = mapBg;
           ctx.beginPath();
           roundedRect(ctx, mapX, mapY, mapSize, mapSize, radius);
           ctx.fill();
-          ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+          
+          // Draw "roads" (grid lines)
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)';
           ctx.lineWidth = 2;
+          for (let i = 1; i < 4; i++) {
+            // Vertical roads
+            ctx.beginPath();
+            ctx.moveTo(mapX + (mapSize * i / 4), mapY);
+            ctx.lineTo(mapX + (mapSize * i / 4), mapY + mapSize);
+            ctx.stroke();
+            // Horizontal roads
+            ctx.beginPath();
+            ctx.moveTo(mapX, mapY + (mapSize * i / 4));
+            ctx.lineTo(mapX + mapSize, mapY + (mapSize * i / 4));
+            ctx.stroke();
+          }
+          
+          // Border
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          roundedRect(ctx, mapX, mapY, mapSize, mapSize, radius);
           ctx.stroke();
-
-          ctx.font = `bold ${fontSize}px 'Inter', sans-serif`;
+          
+          // Draw pin marker
+          const pinX = mapX + mapSize / 2;
+          const pinY = mapY + mapSize / 2;
+          
+          // Pin shadow
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath();
+          ctx.ellipse(pinX, pinY + 8, 6, 3, 0, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Pin body
+          ctx.fillStyle = '#dc2626'; // red-600
+          ctx.beginPath();
+          ctx.arc(pinX, pinY - 8, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#991b1b'; // darker red for bottom
+          ctx.beginPath();
+          ctx.moveTo(pinX, pinY - 8);
+          ctx.lineTo(pinX - 6, pinY);
+          ctx.lineTo(pinX + 6, pinY);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Pin center dot
           ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(pinX, pinY - 8, 3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Coordinates below map
+          ctx.font = `bold ${Math.floor(smallFontSize * 0.9)}px 'Inter', sans-serif`;
+          ctx.fillStyle = '#1e40af';
           ctx.textAlign = 'center';
-          ctx.fillText('📍', mapX + mapSize / 2, mapY + mapSize / 2 - fontSize);
-          ctx.font = `${smallFontSize}px 'Inter', sans-serif`;
-          ctx.fillText(`${location.latitude.toFixed(4)}`, mapX + mapSize / 2, mapY + mapSize / 2 + 5);
-          ctx.fillText(`${location.longitude.toFixed(4)}`, mapX + mapSize / 2, mapY + mapSize / 2 + smallFontSize + 8);
+          ctx.fillText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, mapX + mapSize / 2, mapY + mapSize + smallFontSize + 4);
 
           finalize();
         };
 
-        mapImg.src = `https://staticmap.openstreetmap.de/staticmap.php?center=${location.latitude},${location.longitude}&zoom=16&size=300x300&markers=${location.latitude},${location.longitude},red-pushpin`;
+        // Map provider options (uncomment one that works for you)
+        const lat = location.latitude;
+        const lng = location.longitude;
+        
+        // Option 1: MapQuest Static Map (free tier, needs API key for production)
+        // Get key at: https://developer.mapquest.com/
+        // mapImg.src = `https://www.mapquestapi.com/staticmap/v4/getmap?key=YOUR_KEY&size=300,300&zoom=16&center=${lat},${lng}&pois=${lat},${lng}`;
+        
+        // Option 2: Geoapify Static Maps (free tier: 3000/day, needs API key)
+        // Get key at: https://www.geoapify.com/static-maps-api/
+        // mapImg.src = `https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=300&height=300&center=lonlat:${lng},${lat}&zoom=16&apiKey=YOUR_KEY`;
+        
+        // Option 3: Stadia Maps (free tier: 2000/day, needs API key)
+        // Get key at: https://stadiamaps.com/
+        // mapImg.src = `https://api.stadiamaps.com/static/stamen_terrain_background?api_key=YOUR_KEY&center=${lat},${lng}&zoom=16&width=300&height=300`;
+        
+        // For now: Use placeholder that shows coordinates clearly
+        // The onerror handler above will display a styled coordinate box
+        mapImg.src = ''; // Trigger onerror immediately to show styled fallback
       } catch {
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       }
