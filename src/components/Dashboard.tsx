@@ -309,21 +309,38 @@ export default function Dashboard({ user, onLogout }: Props) {
       )}
 
       {/* ── Header ───────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 px-4 pt-3 pb-6">
-        {/* Org bar */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-white/90 text-[11px] font-bold tracking-wider uppercase">
-              {config.ORGANIZATION}
-            </span>
+      <div className="bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 px-4 pt-4 pb-6">
+        {/* Organization Branding Bar */}
+        <div className="flex items-center justify-between mb-4">
+          {/* Logo + Org Name */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl p-1.5 border border-white/20">
+              <img
+                src="/logo.png"
+                alt="Organization Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-base leading-tight">
+                {config.ORGANIZATION}
+              </h1>
+              <div className="flex items-center gap-1.5">
+                <Building2 className="w-3 h-3 text-emerald-400" />
+                <span className="text-emerald-400/90 text-[10px] font-medium">
+                  {config.APP_TITLE}
+                </span>
+              </div>
+            </div>
           </div>
+
+          {/* Standardized Logout Button */}
           <button
             onClick={onLogout}
-            className="text-blue-200/60 hover:text-white text-[11px] flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg active:scale-95 transition-all"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white/90 text-xs font-medium px-3 py-2 rounded-xl active:scale-95 transition-all"
           >
-            <LogOutIcon className="w-3 h-3" />
-            Logout
+            <LogOutIcon className="w-4 h-4" />
+            <span>Logout</span>
           </button>
         </div>
 

@@ -74,28 +74,34 @@ export default function LoginScreen({ onLogin, onShowSettings }: Props) {
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-8">
-      {/* Org + Logo */}
-      <div className="text-center mb-6 slide-up">
-        <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5 mb-5">
-          <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-white/90 text-xs font-semibold tracking-wider uppercase">
+      {/* Organization Branding */}
+      <div className="text-center mb-8 slide-up">
+        {/* Main Logo - Larger */}
+        <div className="relative inline-block mb-5">
+          <div className="w-32 h-32 bg-white/10 backdrop-blur-sm rounded-3xl p-3 border border-white/20 shadow-2xl">
+            <img
+              src="/logo.png"
+              alt="Organization Logo"
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </div>
+
+        {/* Organization Name - Prominent */}
+        <div className="mb-3">
+          <h1 className="text-3xl font-bold text-white tracking-tight mb-1">
             {config.ORGANIZATION}
-          </span>
+          </h1>
+          <div className="flex items-center justify-center gap-2">
+            <div className="h-px w-8 bg-gradient-to-r from-transparent to-emerald-400/50" />
+            <Building2 className="w-4 h-4 text-emerald-400" />
+            <div className="h-px w-8 bg-gradient-to-l from-transparent to-emerald-400/50" />
+          </div>
         </div>
 
-        {/* Logo */}
-        <div className="relative inline-block mb-4">
-          <img
-            src="/logo.png"
-            alt="MilMetro Logo"
-            className="w-24 h-24 object-contain mx-auto drop-shadow-2xl"
-          />
-        </div>
-
-        <h1 className="text-2xl font-extrabold text-white tracking-tight">
-          {config.APP_TITLE}
-        </h1>
-        <p className="text-blue-200/70 text-sm mt-1">Employee Attendance System</p>
+        {/* App Title & Tagline */}
+        <p className="text-xl font-semibold text-white/90">{config.APP_TITLE}</p>
+        <p className="text-blue-200/60 text-sm mt-1">Employee Attendance System</p>
       </div>
 
       {/* Feature cards */}
