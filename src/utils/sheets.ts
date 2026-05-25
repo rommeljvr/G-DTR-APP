@@ -697,6 +697,28 @@ function getLastAction(email) {
   var sheet = ss.getSheetByName('Attendance');
   if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, lastAction: null });
 
+  // Helper to format date from sheet
+  function formatDate(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
+    }
+    return String(val);
+  }
+
+  // Helper to format time from sheet
+  function formatTime(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      var hrs = val.getHours();
+      var mins = val.getMinutes();
+      var ampm = hrs >= 12 ? 'PM' : 'AM';
+      hrs = hrs % 12 || 12;
+      return hrs + ':' + (mins < 10 ? '0' + mins : mins) + ' ' + ampm;
+    }
+    return String(val);
+  }
+
   var rows = sheet.getDataRange().getValues();
   for (var i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][3]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
@@ -704,9 +726,9 @@ function getLastAction(email) {
         success: true,
         lastAction: {
           action:      rows[i][4],
-          timestamp:   rows[i][5],
-          date:        rows[i][6],
-          time:        rows[i][7],
+          timestamp:   formatDate(rows[i][6]) + ' ' + formatTime(rows[i][7]),
+          date:        formatDate(rows[i][6]),
+          time:        formatTime(rows[i][7]),
           department:  rows[i][13] || '',
           designation: rows[i][14] || '',
           imageId:     rows[i][15] || '',
@@ -723,6 +745,28 @@ function getHistory(email) {
   var sheet = ss.getSheetByName('Attendance');
   if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
 
+  // Helper to format date from sheet
+  function formatDate(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
+    }
+    return String(val);
+  }
+
+  // Helper to format time from sheet
+  function formatTime(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      var hrs = val.getHours();
+      var mins = val.getMinutes();
+      var ampm = hrs >= 12 ? 'PM' : 'AM';
+      hrs = hrs % 12 || 12;
+      return hrs + ':' + (mins < 10 ? '0' + mins : mins) + ' ' + ampm;
+    }
+    return String(val);
+  }
+
   var rows    = sheet.getDataRange().getValues();
   var records = [];
   for (var i = 1; i < rows.length; i++) {
@@ -730,9 +774,9 @@ function getHistory(email) {
       records.push({
         id:          rows[i][0],
         action:      rows[i][4],
-        timestamp:   rows[i][5],
-        date:        rows[i][6],
-        time:        rows[i][7],
+        timestamp:   formatDate(rows[i][6]) + ' ' + formatTime(rows[i][7]),
+        date:        formatDate(rows[i][6]),
+        time:        formatTime(rows[i][7]),
         latitude:    rows[i][8],
         longitude:   rows[i][9],
         address:     rows[i][11],
