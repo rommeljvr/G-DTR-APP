@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: google-sheets-dtr-system
+    ports:
+      - "0.0.0.0:3000:80"
+      - "0.0.0.0:3443:443"
+    restart: unless-stopped
