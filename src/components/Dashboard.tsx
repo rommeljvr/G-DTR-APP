@@ -59,6 +59,8 @@ export default function Dashboard({ user, onLogout }: Props) {
   } | null>(null);
   const [compositePreview, setCompositePreview] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [isCountingDown, setIsCountingDown] = useState(false);
 
   const nextAction: 'TIME_IN' | 'TIME_OUT' =
     lastAction?.action === 'TIME_IN' ? 'TIME_OUT' : 'TIME_IN';
@@ -69,6 +71,19 @@ export default function Dashboard({ user, onLogout }: Props) {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (isCountingDown && countdown !== null && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (isCountingDown && countdown === 0) {
+      setIsCountingDown(false);
+      setCountdown(null);
+    }
+  }, [isCountingDown, countdown]);
 
   const loadRecords = async () => {
     const last = await getLastAction(user.email);
@@ -237,6 +252,24 @@ export default function Dashboard({ user, onLogout }: Props) {
       });
       return;
     }
+
+    // Start 10-second countdown
+    setIsCountingDown(true);
+    setCountdown(10);
+    setNotification({
+      type: 'success',
+      message: 'Get ready for photo capture...\nStarting in 10 seconds',
+    });
+
+    // Wait for countdown to complete
+    await new Promise(resolve => {
+      const checkCountdown = setInterval(() => {
+        if (!isCountingDown) {
+          clearInterval(checkCountdown);
+          resolve(null);
+        }
+      }, 100);
+    });
 
     // Proceed to camera with validated location
     setNotification(null);
@@ -477,13 +510,10 @@ export default function Dashboard({ user, onLogout }: Props) {
             </button>
           </div>
 
-          {locationData && (
-            <div className="space-y-1.5">
-              <p className="text-white/90 text-xs leading-relaxed">{locationData.address}</p>
-              <div className="flex items-center gap-3 text-blue-200/50 text-[11px]">
-                <span>📍 {locationData.latitude.toFixed(6)}, {locationData.longitude.toFixed(6)}</span>
-                <span>🎯 ±{locationData.accuracy.toFixed(1)}m</span>
-              </div>
+          {!locationValidated && !validatingLocation && (
+            <div className="text-blue-200/50 text-xs text-center py-2">
+              <MapPin className="w-4 h-4 mx-auto mb-1 opacity-50" />
+              <span>Location hidden until validation</span>
             </div>
           )}
 
@@ -502,54 +532,89 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
         </div>
 
-        {/* ── Location validation section ─────────────────── */}
-        <div className="mb-4">
-          {locationValidated && validatedLocation ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-300 text-xs font-medium">
-                    Location Validated
-                  </span>
-                  <span className="text-emerald-400/70 text-[10px]">
-                    ±{validatedLocation.accuracy.toFixed(1)}m accuracy
-                  </span>
-                </div>
-                <button
-                  onClick={refreshLocationForValidation}
-                  disabled={validatingLocation}
-                  className="text-emerald-400/60 hover:text-emerald-300 text-xs flex items-center gap-1 active:scale-95 transition-all"
-                >
-                  <Crosshair className="w-3 h-3" />
-                  Refresh
-                </button>
+        {/* GPS Location Display - Only shown after validation */}
+        {locationValidated && validatedLocation && (
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-300 text-xs font-medium">Validated Location</span>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-white/80 text-xs leading-relaxed">{validatedLocation.address}</p>
+              <div className="flex items-center gap-3 text-emerald-400/50 text-[11px]">
+                <span>📍 {validatedLocation.latitude.toFixed(6)}, {validatedLocation.longitude.toFixed(6)}</span>
+                <span>🎯 ±{validatedLocation.accuracy.toFixed(1)}m</span>
               </div>
             </div>
-          ) : (
-            <button
-              onClick={refreshLocationForValidation}
-              disabled={validatingLocation || processing}
-              className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl p-3 active:scale-[0.98] transition-all disabled:opacity-60"
-            >
-              <div className="flex items-center justify-center gap-2">
-                {validatingLocation ? (
-                  <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                ) : (
-                  <Crosshair className="w-4 h-4 text-blue-400" />
-                )}
-                <span className="text-blue-300 text-sm font-medium">
-                  {validatingLocation ? 'Validating GPS...' : 'Validate Location First'}
-                </span>
+          </div>
+        )}
+
+        {/* Countdown Timer */}
+        {isCountingDown && countdown !== null && (
+          <div className="fixed top-4 left-4 z-50">
+            <div className="relative w-16 h-16">
+              {/* Circular progress background */}
+              <svg className="transform -rotate-90 w-16 h-16">
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="28"
+                  stroke="rgba(255,255,255,0.2)"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                {/* Progress circle */}
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="28"
+                  stroke="url(#gradient)"
+                  strokeWidth="4"
+                  fill="none"
+                  strokeDasharray={`${2 * Math.PI * 28}`}
+                  strokeDashoffset={`${2 * Math.PI * 28 * (1 - (10 - countdown) / 10)}`}
+                  className="transition-all duration-1000 ease-linear"
+                />
+                {/* Gradient definition */}
+                <defs>
+                  <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#3b82f6" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              {/* Countdown number */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-white font-bold text-lg">{countdown}</span>
               </div>
-              {!validatingLocation && (
-                <p className="text-blue-200/50 text-xs mt-1">
-                  Tap to check GPS accuracy before {nextAction === 'TIME_IN' ? 'Time In' : 'Time Out'}
-                </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Location validation button ─────────────────── */}
+        {!locationValidated && (
+          <button
+            onClick={refreshLocationForValidation}
+            disabled={validatingLocation || processing}
+            className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl p-3 mb-4 active:scale-[0.98] transition-all disabled:opacity-60"
+          >
+            <div className="flex items-center justify-center gap-2">
+              {validatingLocation ? (
+                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+              ) : (
+                <Crosshair className="w-4 h-4 text-blue-400" />
               )}
-            </button>
-          )}
-        </div>
+              <span className="text-blue-300 text-sm font-medium">
+                {validatingLocation ? 'Validating GPS...' : 'Validate Location First'}
+              </span>
+            </div>
+            {!validatingLocation && (
+              <p className="text-blue-200/50 text-xs mt-1">
+                Tap to check GPS accuracy before {nextAction === 'TIME_IN' ? 'Time In' : 'Time Out'}
+              </p>
+            )}
+          </button>
+        )}
 
         {/* ── Main action button ─────────────────────────── */}
         <button
