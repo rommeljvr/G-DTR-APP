@@ -122,6 +122,12 @@ export default function Dashboard({ user, onLogout }: Props) {
         type: 'success',
         message: `Location validated! Accuracy: ±${loc.accuracy.toFixed(1)}m`,
       });
+      
+      // Start 30-second countdown after success message
+      setTimeout(() => {
+        setIsCountingDown(true);
+        setCountdown(30);
+      }, 1000); // Start countdown after 1 second delay
     } catch (err) {
       const message =
         err instanceof GeolocationPositionError
@@ -240,20 +246,11 @@ export default function Dashboard({ user, onLogout }: Props) {
       return;
     }
 
-    // Start 30-second countdown (runs independently)
-    setIsCountingDown(true);
-    setCountdown(30);
-    setNotification({
-      type: 'success',
-      message: 'Location validated! Ready for photo capture.',
-    });
-
     // Proceed to camera immediately with validated location
-    setTimeout(() => {
-      setNotification(null);
-      setCompositePreview(null);
-      setShowCamera(true);
-    }, 500); // Small delay to show success message
+    // Countdown is already running from validation
+    setNotification(null);
+    setCompositePreview(null);
+    setShowCamera(true);
   };
 
   const dismissNotification = () => {
