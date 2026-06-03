@@ -82,6 +82,13 @@ export default function Dashboard({ user, onLogout }: Props) {
     } else if (isCountingDown && countdown === 0) {
       setIsCountingDown(false);
       setCountdown(null);
+      // Auto-disable location validation after countdown expires
+      setLocationValidated(false);
+      setValidatedLocation(null);
+      setNotification({
+        type: 'error',
+        message: 'Countdown expired. Please validate your location again.',
+      });
     }
   }, [isCountingDown, countdown]);
 
@@ -489,49 +496,6 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
         </div>
 
-        {/* Location card */}
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-white/80 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-blue-400" />
-              GPS Location
-            </h3>
-            <button
-              onClick={fetchLocation}
-              disabled={locationLoading}
-              className="text-blue-400 text-xs flex items-center gap-1 active:scale-95 transition-transform"
-            >
-              {locationLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Crosshair className="w-3.5 h-3.5" />
-              )}
-              {locationLoading ? 'Locating...' : 'Refresh'}
-            </button>
-          </div>
-
-          {!locationValidated && !validatingLocation && (
-            <div className="text-blue-200/50 text-xs text-center py-2">
-              <MapPin className="w-4 h-4 mx-auto mb-1 opacity-50" />
-              <span>Location hidden until validation</span>
-            </div>
-          )}
-
-          {locationError && (
-            <div className="flex items-start gap-2 text-orange-300 text-xs">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{locationError}</span>
-            </div>
-          )}
-
-          {locationLoading && !locationData && (
-            <div className="flex items-center gap-2 text-blue-200/50 text-xs">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Acquiring GPS…</span>
-            </div>
-          )}
-        </div>
-
         {/* GPS Location Display - Only shown after validation */}
         {locationValidated && validatedLocation && (
           <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 mb-4">
@@ -544,48 +508,6 @@ export default function Dashboard({ user, onLogout }: Props) {
               <div className="flex items-center gap-3 text-emerald-400/50 text-[11px]">
                 <span>📍 {validatedLocation.latitude.toFixed(6)}, {validatedLocation.longitude.toFixed(6)}</span>
                 <span>🎯 ±{validatedLocation.accuracy.toFixed(1)}m</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Countdown Timer */}
-        {isCountingDown && countdown !== null && (
-          <div className="fixed top-4 left-4 z-50">
-            <div className="relative w-16 h-16">
-              {/* Circular progress background */}
-              <svg className="transform -rotate-90 w-16 h-16">
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="28"
-                  stroke="rgba(255,255,255,0.2)"
-                  strokeWidth="4"
-                  fill="none"
-                />
-                {/* Progress circle */}
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="28"
-                  stroke="url(#gradient)"
-                  strokeWidth="4"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 28}`}
-                  strokeDashoffset={`${2 * Math.PI * 28 * (1 - (10 - countdown) / 10)}`}
-                  className="transition-all duration-1000 ease-linear"
-                />
-                {/* Gradient definition */}
-                <defs>
-                  <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#10b981" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              {/* Countdown number */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">{countdown}</span>
               </div>
             </div>
           </div>
@@ -617,46 +539,90 @@ export default function Dashboard({ user, onLogout }: Props) {
         )}
 
         {/* ── Main action button ─────────────────────────── */}
-        <button
-          onClick={handleAttendanceAction}
-          disabled={processing || !locationValidated || validatingLocation}
-          className={`w-full relative overflow-hidden rounded-2xl p-6 text-center active:scale-[0.97] transition-all duration-200 shadow-xl disabled:opacity-60 ${
-            locationValidated
-              ? nextAction === 'TIME_IN'
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-                : 'bg-gradient-to-r from-orange-500 to-red-500'
-              : 'bg-gradient-to-r from-gray-500 to-gray-600'
-          }`}
-        >
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
-              {processing ? (
-                <Loader2 className="w-7 h-7 text-white animate-spin" />
-              ) : !locationValidated ? (
-                <MapPin className="w-7 h-7 text-white/60" />
-              ) : nextAction === 'TIME_IN' ? (
-                <LogInIcon className="w-7 h-7 text-white" />
-              ) : (
-                <LogOutIcon className="w-7 h-7 text-white" />
-              )}
+        <div className="relative">
+          <button
+            onClick={handleAttendanceAction}
+            disabled={processing || !locationValidated || validatingLocation}
+            className={`w-full relative overflow-hidden rounded-2xl p-6 text-center active:scale-[0.97] transition-all duration-200 shadow-xl disabled:opacity-60 ${
+              locationValidated
+                ? nextAction === 'TIME_IN'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                  : 'bg-gradient-to-r from-orange-500 to-red-500'
+                : 'bg-gradient-to-r from-gray-500 to-gray-600'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                {processing ? (
+                  <Loader2 className="w-7 h-7 text-white animate-spin" />
+                ) : !locationValidated ? (
+                  <MapPin className="w-7 h-7 text-white/60" />
+                ) : nextAction === 'TIME_IN' ? (
+                  <LogInIcon className="w-7 h-7 text-white" />
+                ) : (
+                  <LogOutIcon className="w-7 h-7 text-white" />
+                )}
+              </div>
+              <div className="text-left">
+                <p className="text-white/80 text-xs font-medium">
+                  {!locationValidated ? 'Location Required' : processing ? 'Processing...' : isCountingDown ? 'Get Ready...' : 'Ready to Record'}
+                </p>
+                <p className="text-white text-2xl font-bold">
+                  {nextAction === 'TIME_IN' ? 'TIME IN' : 'TIME OUT'}
+                </p>
+              </div>
+              <ChevronRight className={`w-6 h-6 ml-auto ${!locationValidated ? 'text-white/30' : 'text-white/60'}`} />
             </div>
-            <div className="text-left">
-              <p className="text-white/80 text-xs font-medium">
-                {!locationValidated ? 'Location Required' : processing ? 'Processing...' : 'Ready to Record'}
-              </p>
-              <p className="text-white text-2xl font-bold">
-                {nextAction === 'TIME_IN' ? 'TIME IN' : 'TIME OUT'}
-              </p>
+            <div className="flex items-center justify-center gap-2 mt-3 text-white/70 text-xs">
+              <Camera className="w-3.5 h-3.5" />
+              <span>
+                {!locationValidated ? 'Validate location first' : isCountingDown ? 'Photo capture starting...' : 'Photo capture ready'}
+              </span>
             </div>
-            <ChevronRight className={`w-6 h-6 ml-auto ${!locationValidated ? 'text-white/30' : 'text-white/60'}`} />
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-3 text-white/70 text-xs">
-            <Camera className="w-3.5 h-3.5" />
-            <span>
-              {!locationValidated ? 'Validate location first' : 'Photo capture ready'}
-            </span>
-          </div>
-        </button>
+          </button>
+
+          {/* Countdown Timer Overlay */}
+          {isCountingDown && countdown !== null && (
+            <div className="absolute top-2 left-2 z-10">
+              <div className="relative w-12 h-12">
+                {/* Circular progress background */}
+                <svg className="transform -rotate-90 w-12 h-12">
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="20"
+                    stroke="rgba(255,255,255,0.3)"
+                    strokeWidth="3"
+                    fill="none"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="20"
+                    stroke="url(#gradient)"
+                    strokeWidth="3"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 20}`}
+                    strokeDashoffset={`${2 * Math.PI * 20 * (1 - (10 - countdown) / 10)}`}
+                    className="transition-all duration-1000 ease-linear"
+                  />
+                  {/* Gradient definition */}
+                  <defs>
+                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#10b981" />
+                      <stop offset="100%" stopColor="#3b82f6" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                {/* Countdown number */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">{countdown}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* ── Today's log with thumbnails ────────────────── */}
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
