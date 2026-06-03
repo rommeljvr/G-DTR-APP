@@ -207,6 +207,12 @@ export default function Dashboard({ user, onLogout }: Props) {
         });
         loadRecords();
         
+        // Stop countdown immediately since process completed successfully
+        if (isCountingDown) {
+          setIsCountingDown(false);
+          setCountdown(null);
+        }
+        
         // Auto-disable location validation to force fresh validation for next transaction
         setLocationValidated(false);
         setValidatedLocation(null);
@@ -234,28 +240,20 @@ export default function Dashboard({ user, onLogout }: Props) {
       return;
     }
 
-    // Start 30-second countdown
+    // Start 30-second countdown (runs independently)
     setIsCountingDown(true);
     setCountdown(30);
     setNotification({
       type: 'success',
-      message: 'Get ready for photo capture...\nStarting in 30 seconds',
+      message: 'Location validated! Ready for photo capture.',
     });
 
-    // Wait for countdown to complete
-    await new Promise(resolve => {
-      const checkCountdown = setInterval(() => {
-        if (!isCountingDown) {
-          clearInterval(checkCountdown);
-          resolve(null);
-        }
-      }, 100);
-    });
-
-    // Proceed to camera with validated location
-    setNotification(null);
-    setCompositePreview(null);
-    setShowCamera(true);
+    // Proceed to camera immediately with validated location
+    setTimeout(() => {
+      setNotification(null);
+      setCompositePreview(null);
+      setShowCamera(true);
+    }, 500); // Small delay to show success message
   };
 
   const dismissNotification = () => {
