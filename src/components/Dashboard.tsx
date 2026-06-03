@@ -552,7 +552,7 @@ export default function Dashboard({ user, onLogout }: Props) {
 
           {/* Countdown Timer Overlay */}
           {isCountingDown && countdown !== null && (
-            <div className="absolute bottom-2 left-2 z-10">
+            <div className="absolute bottom-2 right-2 z-10">
               <div className="relative w-12 h-12">
                 {/* Circular progress background */}
                 <svg className="transform -rotate-90 w-12 h-12">
