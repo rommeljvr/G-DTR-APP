@@ -21,7 +21,6 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   ChevronRight,
   Crosshair,
   Building2,
@@ -47,9 +46,6 @@ export default function Dashboard({ user, onLogout }: Props) {
   const [showCamera, setShowCamera] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [locationData, setLocationData] = useState<LocationData | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState('');
   const [validatingLocation, setValidatingLocation] = useState(false);
   const [locationValidated, setLocationValidated] = useState(false);
   const [validatedLocation, setValidatedLocation] = useState<LocationData | null>(null);
@@ -67,7 +63,6 @@ export default function Dashboard({ user, onLogout }: Props) {
 
   useEffect(() => {
     loadRecords();
-    fetchLocation();
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -99,26 +94,8 @@ export default function Dashboard({ user, onLogout }: Props) {
     setTodayRecords(today);
   };
 
-  const fetchLocation = async () => {
-    setLocationLoading(true);
-    setLocationError('');
-    try {
-      const loc = await getLocationData();
-      setLocationData(loc);
-    } catch (err: unknown) {
-      const message =
-        err instanceof GeolocationPositionError
-          ? geoMsg(err)
-          : 'Unable to get location';
-      setLocationError(message);
-    } finally {
-      setLocationLoading(false);
-    }
-  };
-
   const refreshLocationForValidation = async () => {
     setValidatingLocation(true);
-    setLocationError('');
     setNotification({
       type: 'success',
       message: 'Validating GPS location...',
@@ -129,7 +106,6 @@ export default function Dashboard({ user, onLogout }: Props) {
       
       // Validate location accuracy (reject if > 100m accuracy)
       if (loc.accuracy > 100) {
-        setLocationError(`GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`);
         setNotification({
           type: 'error',
           message: `GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`,
@@ -140,7 +116,6 @@ export default function Dashboard({ user, onLogout }: Props) {
       }
 
       // Location is valid
-      setLocationData(loc);
       setValidatedLocation(loc);
       setLocationValidated(true);
       setNotification({
@@ -152,7 +127,6 @@ export default function Dashboard({ user, onLogout }: Props) {
         err instanceof GeolocationPositionError
           ? geoMsg(err)
           : 'Unable to get location. Please enable GPS and try again.';
-      setLocationError(message);
       setNotification({
         type: 'error',
         message,
