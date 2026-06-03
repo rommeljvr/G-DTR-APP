@@ -234,12 +234,12 @@ export default function Dashboard({ user, onLogout }: Props) {
       return;
     }
 
-    // Start 10-second countdown
+    // Start 30-second countdown
     setIsCountingDown(true);
-    setCountdown(10);
+    setCountdown(30);
     setNotification({
       type: 'success',
-      message: 'Get ready for photo capture...\nStarting in 10 seconds',
+      message: 'Get ready for photo capture...\nStarting in 30 seconds',
     });
 
     // Wait for countdown to complete
@@ -557,7 +557,7 @@ export default function Dashboard({ user, onLogout }: Props) {
 
           {/* Countdown Timer Overlay */}
           {isCountingDown && countdown !== null && (
-            <div className="absolute top-2 left-2 z-10">
+            <div className="absolute bottom-2 left-2 z-10">
               <div className="relative w-12 h-12">
                 {/* Circular progress background */}
                 <svg className="transform -rotate-90 w-12 h-12">
@@ -578,7 +578,7 @@ export default function Dashboard({ user, onLogout }: Props) {
                     strokeWidth="3"
                     fill="none"
                     strokeDasharray={`${2 * Math.PI * 20}`}
-                    strokeDashoffset={`${2 * Math.PI * 20 * (1 - (10 - countdown) / 10)}`}
+                    strokeDashoffset={`${2 * Math.PI * 20 * (1 - (30 - countdown) / 30)}`}
                     className="transition-all duration-1000 ease-linear"
                   />
                   {/* Gradient definition */}
