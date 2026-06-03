@@ -51,6 +51,8 @@ export default function Dashboard({ user, onLogout }: Props) {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [validatingLocation, setValidatingLocation] = useState(false);
+  const [locationValidated, setLocationValidated] = useState(false);
+  const [validatedLocation, setValidatedLocation] = useState<LocationData | null>(null);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -92,6 +94,54 @@ export default function Dashboard({ user, onLogout }: Props) {
     }
   };
 
+  const refreshLocationForValidation = async () => {
+    setValidatingLocation(true);
+    setLocationError('');
+    setNotification({
+      type: 'success',
+      message: 'Validating GPS location...',
+    });
+
+    try {
+      const loc = await getLocationData();
+      
+      // Validate location accuracy (reject if > 100m accuracy)
+      if (loc.accuracy > 100) {
+        setLocationError(`GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`);
+        setNotification({
+          type: 'error',
+          message: `GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`,
+        });
+        setLocationValidated(false);
+        setValidatedLocation(null);
+        return;
+      }
+
+      // Location is valid
+      setLocationData(loc);
+      setValidatedLocation(loc);
+      setLocationValidated(true);
+      setNotification({
+        type: 'success',
+        message: `Location validated! Accuracy: ±${loc.accuracy.toFixed(1)}m`,
+      });
+    } catch (err) {
+      const message =
+        err instanceof GeolocationPositionError
+          ? geoMsg(err)
+          : 'Unable to get location. Please enable GPS and try again.';
+      setLocationError(message);
+      setNotification({
+        type: 'error',
+        message,
+      });
+      setLocationValidated(false);
+      setValidatedLocation(null);
+    } finally {
+      setValidatingLocation(false);
+    }
+  };
+
   const geoMsg = (e: GeolocationPositionError) => {
     switch (e.code) {
       case e.PERMISSION_DENIED:
@@ -111,10 +161,10 @@ export default function Dashboard({ user, onLogout }: Props) {
     setNotification(null);
 
     try {
-      let loc = locationData;
+      // Use the validated location - ensure it's the same for both caption and image
+      const loc = validatedLocation;
       if (!loc) {
-        loc = await getLocationData();
-        setLocationData(loc);
+        throw new Error('No validated location available. Please refresh location first.');
       }
 
       const deviceInfo = getDeviceString();
@@ -160,6 +210,10 @@ export default function Dashboard({ user, onLogout }: Props) {
           message: `${nextAction === 'TIME_IN' ? 'Time In' : 'Time Out'} recorded!${driveMsg}`,
         });
         loadRecords();
+        
+        // Auto-disable location validation to force fresh validation for next transaction
+        setLocationValidated(false);
+        setValidatedLocation(null);
       } else {
         setNotification({ type: 'error', message: result.message });
       }
@@ -175,50 +229,19 @@ export default function Dashboard({ user, onLogout }: Props) {
   };
 
   const handleAttendanceAction = async () => {
-    // Start location validation
-    setValidatingLocation(true);
-    setNotification(null);
-
-    try {
-      // Check if we have valid location data
-      let loc = locationData;
-      
-      if (!loc) {
-        // Try to fetch location
-        setNotification({
-          type: 'success',
-          message: 'Acquiring GPS location...',
-        });
-        loc = await getLocationData();
-        setLocationData(loc);
-      }
-
-      // Validate location accuracy (reject if > 100m accuracy)
-      if (loc.accuracy > 100) {
-        setNotification({
-          type: 'error',
-          message: `GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`,
-        });
-        setValidatingLocation(false);
-        return;
-      }
-
-      // Location validated - proceed to camera
-      setValidatingLocation(false);
-      setNotification(null);
-      setCompositePreview(null);
-      setShowCamera(true);
-    } catch (err) {
-      setValidatingLocation(false);
-      const message =
-        err instanceof GeolocationPositionError
-          ? geoMsg(err)
-          : 'Unable to get location. Please enable GPS and try again.';
+    // Check if location is validated
+    if (!locationValidated || !validatedLocation) {
       setNotification({
         type: 'error',
-        message,
+        message: 'Please validate your location first by tapping the refresh button.',
       });
+      return;
     }
+
+    // Proceed to camera with validated location
+    setNotification(null);
+    setCompositePreview(null);
+    setShowCamera(true);
   };
 
   const dismissNotification = () => {
@@ -479,20 +502,73 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
         </div>
 
+        {/* ── Location validation section ─────────────────── */}
+        <div className="mb-4">
+          {locationValidated && validatedLocation ? (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-300 text-xs font-medium">
+                    Location Validated
+                  </span>
+                  <span className="text-emerald-400/70 text-[10px]">
+                    ±{validatedLocation.accuracy.toFixed(1)}m accuracy
+                  </span>
+                </div>
+                <button
+                  onClick={refreshLocationForValidation}
+                  disabled={validatingLocation}
+                  className="text-emerald-400/60 hover:text-emerald-300 text-xs flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  <Crosshair className="w-3 h-3" />
+                  Refresh
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={refreshLocationForValidation}
+              disabled={validatingLocation || processing}
+              className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl p-3 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              <div className="flex items-center justify-center gap-2">
+                {validatingLocation ? (
+                  <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                ) : (
+                  <Crosshair className="w-4 h-4 text-blue-400" />
+                )}
+                <span className="text-blue-300 text-sm font-medium">
+                  {validatingLocation ? 'Validating GPS...' : 'Validate Location First'}
+                </span>
+              </div>
+              {!validatingLocation && (
+                <p className="text-blue-200/50 text-xs mt-1">
+                  Tap to check GPS accuracy before {nextAction === 'TIME_IN' ? 'Time In' : 'Time Out'}
+                </p>
+              )}
+            </button>
+          )}
+        </div>
+
         {/* ── Main action button ─────────────────────────── */}
         <button
           onClick={handleAttendanceAction}
-          disabled={processing || validatingLocation || locationLoading}
+          disabled={processing || !locationValidated || validatingLocation}
           className={`w-full relative overflow-hidden rounded-2xl p-6 text-center active:scale-[0.97] transition-all duration-200 shadow-xl disabled:opacity-60 ${
-            nextAction === 'TIME_IN'
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-              : 'bg-gradient-to-r from-orange-500 to-red-500'
+            locationValidated
+              ? nextAction === 'TIME_IN'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                : 'bg-gradient-to-r from-orange-500 to-red-500'
+              : 'bg-gradient-to-r from-gray-500 to-gray-600'
           }`}
         >
           <div className="flex items-center justify-center gap-3">
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
-              {validatingLocation || locationLoading ? (
+              {processing ? (
                 <Loader2 className="w-7 h-7 text-white animate-spin" />
+              ) : !locationValidated ? (
+                <MapPin className="w-7 h-7 text-white/60" />
               ) : nextAction === 'TIME_IN' ? (
                 <LogInIcon className="w-7 h-7 text-white" />
               ) : (
@@ -501,18 +577,18 @@ export default function Dashboard({ user, onLogout }: Props) {
             </div>
             <div className="text-left">
               <p className="text-white/80 text-xs font-medium">
-                {validatingLocation ? 'Validating GPS...' : locationLoading ? 'Acquiring GPS...' : 'Tap to Record'}
+                {!locationValidated ? 'Location Required' : processing ? 'Processing...' : 'Ready to Record'}
               </p>
               <p className="text-white text-2xl font-bold">
                 {nextAction === 'TIME_IN' ? 'TIME IN' : 'TIME OUT'}
               </p>
             </div>
-            <ChevronRight className="w-6 h-6 text-white/60 ml-auto" />
+            <ChevronRight className={`w-6 h-6 ml-auto ${!locationValidated ? 'text-white/30' : 'text-white/60'}`} />
           </div>
           <div className="flex items-center justify-center gap-2 mt-3 text-white/70 text-xs">
             <Camera className="w-3.5 h-3.5" />
             <span>
-              {validatingLocation ? 'Checking location accuracy...' : 'Photo + GPS capture required'}
+              {!locationValidated ? 'Validate location first' : 'Photo capture ready'}
             </span>
           </div>
         </button>
