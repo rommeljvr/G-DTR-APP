@@ -185,8 +185,9 @@ export async function getLeaveCredits(
 }
 
 export async function submitLeaveApplication(
-  application: Omit<import('../types').LeaveApplication, 'id' | 'submittedAt'>
-): Promise<{ success: boolean; message: string; id?: string }> {
+  application: Omit<import('../types').LeaveApplication, 'id' | 'submittedAt'>,
+  documentData?: string
+): Promise<{ success: boolean; message: string; id?: string; docId?: string; docUrl?: string }> {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) {
     return { success: false, message: 'No script URL configured' };
@@ -194,7 +195,10 @@ export async function submitLeaveApplication(
   try {
     const payload = {
       action: 'submitLeave',
-      data: application,
+      data: {
+        ...application,
+        documentData: documentData || '',
+      },
     };
     const response = await fetch(scriptUrl, {
       method: 'POST',
@@ -207,6 +211,8 @@ export async function submitLeaveApplication(
       success: result.success !== false,
       message: result.message || 'Leave application submitted',
       id: result.id,
+      docId: result.docId,
+      docUrl: result.docUrl,
     };
   } catch (err) {
     console.error('submitLeave error:', err);
@@ -251,6 +257,34 @@ export async function fetchImageBase64(imageId: string): Promise<string | null> 
     return null;
   } catch {
     return null;
+  }
+}
+
+// ─── fetch leave document as base64 from Google Drive ───────────────
+
+const docCache = new Map<string, string>();
+
+export async function fetchDocumentBase64(docId: string): Promise<{ base64: string | null; fileName?: string; viewUrl?: string }> {
+  if (!docId) return { base64: null };
+
+  if (docCache.has(docId)) return { base64: docCache.get(docId)! };
+
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { base64: null };
+
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getDocument&id=${encodeURIComponent(docId)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    if (json.success && json.base64) {
+      docCache.set(docId, json.base64);
+      return { base64: json.base64, fileName: json.fileName, viewUrl: json.viewUrl };
+    }
+    return { base64: null };
+  } catch {
+    return { base64: null };
   }
 }
 
@@ -473,6 +507,7 @@ function doGet(e) {
   if (action === 'getHistory')       return getHistory(email);
   if (action === 'getSettings')      return getSettings();
   if (action === 'getLeaveCredits')  return getLeaveCredits(email);
+  if (action === 'getDocument')      return getDocument(id);
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -663,48 +698,6 @@ function uploadImageToDrive(data, folderId) {
 
   var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
   var subName   = 'DTR_' + monthKey;
-  var subIter   = folder.getFoldersByName(subName);
-  var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
-
-  var file = subFolder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-  return {
-    id:  file.getId(),
-    url: 'https://drive.google.com/file/d/' + file.getId() + '/view'
-  };
-}
-
-function uploadDocumentToDrive(data, folderId) {
-  var raw = String(data.documentUrl);
-  var parts = raw.split('base64,');
-  if (parts.length < 2) throw new Error('Invalid base64 document data');
-  var base64 = parts[1];
-  if (!base64 || base64.length < 10) throw new Error('Empty document data');
-
-  // Detect mime type from data URI
-  var mimeMatch = raw.match(/data:([^;]+);base64,/);
-  var mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
-  var extMap = {
-    'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
-    'application/pdf': '.pdf',
-    'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
-  };
-  var ext = extMap[mime] || '.bin';
-
-  var decoded = Utilities.base64Decode(base64);
-  var ts      = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
-  var name    = (data.employeeName || 'user').replace(/[^a-zA-Z0-9]/g, '_');
-  var fileName = 'LEAVE_DOC_' + name + '_' + ts + ext;
-  var blob    = Utilities.newBlob(decoded, mime, fileName);
-
-  var folder;
-  try { folder = DriveApp.getFolderById(folderId); }
-  catch (e) { folder = DriveApp.getRootFolder(); }
-
-  var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
-  var subName   = 'LeaveDocuments_' + monthKey;
   var subIter   = folder.getFoldersByName(subName);
   var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
 
@@ -1164,34 +1157,30 @@ function submitLeave(data) {
     sheet.appendRow([
       'ID', 'Employee Name', 'Email', 'Leave Type', 'Start Date', 'End Date',
       'Mode', 'Half Day Period', 'Entries (JSON)', 'Total Days',
-      'Payment Status', 'Reason', 'Document URL', 'Status', 'Submitted At'
+      'Payment Status', 'Reason', 'Document ID', 'Document URL', 'Status', 'Submitted At'
     ]);
-    var hdr = sheet.getRange(1, 1, 1, 15);
+    var hdr = sheet.getRange(1, 1, 1, 16);
     hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
     hdr.setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
   }
 
+  // Upload supporting document to Drive (same pattern as attendance photo)
+  var docUrl = '';
+  var docId  = '';
+  try {
+    if (data.documentData && String(data.documentData).indexOf('base64,') > -1) {
+      var docResult = uploadDocumentToDrive(data);
+      docUrl = docResult.url;
+      docId  = docResult.id;
+    }
+  } catch (err) {
+    Logger.log('Leave doc upload error: ' + err.toString());
+    docUrl = 'UPLOAD_ERROR: ' + err.toString().substring(0, 100);
+  }
+
   var id = Utilities.getUuid();
   var now = new Date().toISOString();
-
-  // Upload supporting document to Drive (same approach as attendance photo)
-  var documentDriveUrl = '';
-  var documentDriveId  = '';
-  if (data.documentUrl && String(data.documentUrl).indexOf('base64,') > -1) {
-    try {
-      var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
-      var docResult = uploadDocumentToDrive(data, folderId);
-      documentDriveUrl = docResult.url;
-      documentDriveId  = docResult.id;
-    } catch (err) {
-      Logger.log('Leave document upload error: ' + err.toString());
-      documentDriveUrl = 'UPLOAD_ERROR: ' + err.toString().substring(0, 100);
-    }
-  } else if (data.documentUrl) {
-    // Already a URL (not base64), store as-is
-    documentDriveUrl = data.documentUrl;
-  }
 
   sheet.appendRow([
     id,
@@ -1206,30 +1195,102 @@ function submitLeave(data) {
     data.totalDays      || 0,
     data.paymentStatus  || 'Unpaid',
     data.reason         || '',
-    documentDriveUrl,
+    docId,
+    docUrl,
     'Pending',
     now
   ]);
+
+  var lastRow = sheet.getLastRow();
+  if (docUrl && docUrl.indexOf('http') === 0) {
+    sheet.getRange(lastRow, 14).setFormula('=HYPERLINK("' + docUrl + '","\uD83D\uDCC4 View")');
+  }
 
   // Deduct leave credits for Paid leaves
   if (data.paymentStatus === 'Paid' && data.leaveType !== 'Emergency Leave') {
     deductLeaveCredit(data.email, data.leaveType, data.totalDays);
   }
 
-  // Set clickable hyperlink for document URL (col 13)
-  if (documentDriveUrl && documentDriveUrl.indexOf('http') === 0) {
-    var lastRow = sheet.getLastRow();
-    sheet.getRange(lastRow, 13).setFormula('=HYPERLINK("' + documentDriveUrl + '","📎 View")' );
-  }
-
-  try { sheet.autoResizeColumns(1, 15); } catch (ex) {}
+  try { sheet.autoResizeColumns(1, 16); } catch (ex) {}
 
   return _json({
     success: true,
     message: 'Leave application submitted successfully',
     id: id,
-    documentUrl: documentDriveUrl || ''
+    docId: docId,
+    docUrl: docUrl
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LEAVE DOCUMENT – UPLOAD & GET
+//  Mirrors uploadImageToDrive / getImage for attendance photos
+// ══════════════════════════════════════════════════════════════════
+
+function uploadDocumentToDrive(data) {
+  var raw    = String(data.documentData);
+  var parts  = raw.split('base64,');
+  var base64 = parts[1];
+  if (!base64 || base64.length < 10) throw new Error('Invalid base64 document data');
+
+  // Detect MIME type from data URI prefix
+  var mimeRaw = raw.split(';')[0].replace('data:', '') || 'application/octet-stream';
+  var extMap  = {
+    'image/jpeg':       'jpg',
+    'image/png':        'png',
+    'image/gif':        'gif',
+    'application/pdf':  'pdf',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
+  };
+  var ext = extMap[mimeRaw] || 'bin';
+
+  var decoded = Utilities.base64Decode(base64);
+  var ts      = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  var name    = (data.employeeName || data.email || 'user').replace(/[^a-zA-Z0-9]/g, '_');
+  var fileName = 'LEAVE_' + name + '_' + ts + '.' + ext;
+  var blob    = Utilities.newBlob(decoded, mimeRaw, fileName);
+
+  var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  var folder;
+  try { folder = DriveApp.getFolderById(folderId); }
+  catch (e) {
+    Logger.log('Leave doc folder not found → root. ' + e);
+    folder = DriveApp.getRootFolder();
+  }
+
+  var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  var subName   = 'LEAVE_DOCS_' + monthKey;
+  var subIter   = folder.getFoldersByName(subName);
+  var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
+
+  var file = subFolder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  return {
+    id:  file.getId(),
+    url: 'https://drive.google.com/file/d/' + file.getId() + '/view'
+  };
+}
+
+function getDocument(fileId) {
+  if (!fileId) return _json({ success: false, message: 'Missing file ID' });
+  try {
+    var file  = DriveApp.getFileById(fileId);
+    var blob  = file.getBlob();
+    var bytes = blob.getBytes();
+    var b64   = Utilities.base64Encode(bytes);
+    var mime  = blob.getContentType() || 'application/octet-stream';
+    return _json({
+      success:  true,
+      base64:   'data:' + mime + ';base64,' + b64,
+      fileName: file.getName(),
+      fileSize: bytes.length,
+      viewUrl:  'https://drive.google.com/file/d/' + fileId + '/view'
+    });
+  } catch (err) {
+    return _json({ success: false, message: 'getDocument error: ' + err.toString() });
+  }
 }
 
 function deductLeaveCredit(email, leaveType, days) {

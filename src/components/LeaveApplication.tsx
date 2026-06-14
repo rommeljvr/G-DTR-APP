@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   FileText, ChevronLeft, Calendar, User as UserIcon,
   AlertCircle, CheckCircle2, Loader2, Info, CreditCard,
-  Clock, Sun, Sunset, Paperclip, X,
+  Clock, Sun, Sunset, Paperclip, X, ExternalLink,
 } from 'lucide-react';
 import { User, LeaveType, LeaveMode, HalfDayPeriod, PaymentStatus, LeaveCredits } from '../types';
 import { getLeaveCredits, submitLeaveApplication } from '../utils/sheets';
@@ -57,6 +57,7 @@ export default function LeaveApplication({ user, onBack }: Props) {
   const [creditsError, setCreditsError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [submittedDocUrl, setSubmittedDocUrl] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // ── Rules enforcement ──────────────────────────────────────────
@@ -165,26 +166,29 @@ export default function LeaveApplication({ user, onBack }: Props) {
     setSubmitting(true);
     setResult(null);
 
-    const res = await submitLeaveApplication({
-      employeeName: emp?.name || user.name || '',
-      email: user.email || emp?.email || '',
-      leaveType,
-      startDate,
-      endDate,
-      mode,
-      halfDayPeriod: mode === 'Half Day' ? halfDayPeriod : undefined,
-      entries: buildEntries(),
-      totalDays,
-      paymentStatus: isEmergency ? 'Unpaid' : paymentStatus,
-      reason: reason.trim(),
-      documentUrl: documentUrl || undefined,
-      status: 'Pending',
-    });
+    const res = await submitLeaveApplication(
+      {
+        employeeName: emp?.name || user.name || '',
+        email: user.email || emp?.email || '',
+        leaveType,
+        startDate,
+        endDate,
+        mode,
+        halfDayPeriod: mode === 'Half Day' ? halfDayPeriod : undefined,
+        entries: buildEntries(),
+        totalDays,
+        paymentStatus: isEmergency ? 'Unpaid' : paymentStatus,
+        reason: reason.trim(),
+        status: 'Pending',
+      },
+      documentUrl || undefined
+    );
 
     setSubmitting(false);
     setResult({ type: res.success ? 'success' : 'error', message: res.message });
 
     if (res.success) {
+      setSubmittedDocUrl(res.docUrl || '');
       setStartDate('');
       setEndDate('');
       setReason('');
@@ -519,9 +523,22 @@ export default function LeaveApplication({ user, onBack }: Props) {
             {result.type === 'success'
               ? <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
               : <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
-            <p className={`text-sm ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
-              {result.message}
-            </p>
+            <div className="flex flex-col gap-1.5">
+              <p className={`text-sm ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
+                {result.message}
+              </p>
+              {result.type === 'success' && submittedDocUrl && (
+                <a
+                  href={submittedDocUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-blue-300 text-xs underline underline-offset-2"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View attached document
+                </a>
+              )}
+            </div>
           </div>
         )}
 
@@ -532,7 +549,7 @@ export default function LeaveApplication({ user, onBack }: Props) {
           className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-bold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 text-sm"
         >
           {submitting ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> {documentFile ? 'Uploading document…' : 'Submitting…'}</>
+            <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
           ) : (
             <><FileText className="w-4 h-4" /> Submit Leave Application</>
           )}
