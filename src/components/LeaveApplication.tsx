@@ -78,8 +78,13 @@ export default function LeaveApplication({ user, onBack }: Props) {
     setCreditsLoading(true);
     setCreditsError('');
     getLeaveCredits(email).then((res) => {
-      if (res.success && res.credits) setCredits(res.credits);
-      else setCreditsError(res.message);
+      if (res.success && res.credits) {
+        setCredits(res.credits);
+      } else {
+        // Show zero credits with a soft warning — sheet may not be set up yet
+        setCredits({ vacationLeave: 0, sickLeave: 0, birthdayLeave: 0 });
+        setCreditsError(res.message);
+      }
       setCreditsLoading(false);
     });
   }, [user.email, emp?.email]);
@@ -238,24 +243,27 @@ export default function LeaveApplication({ user, onBack }: Props) {
               <Loader2 className="w-3 h-3 animate-spin" />
               Loading credits…
             </div>
-          ) : creditsError ? (
-            <div className="flex items-center gap-2 text-amber-400/80 text-xs">
-              <AlertCircle className="w-3 h-3" />
-              {creditsError}
-            </div>
           ) : credits ? (
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'Vacation', value: credits.vacationLeave, color: 'text-blue-400' },
-                { label: 'Sick', value: credits.sickLeave, color: 'text-red-400' },
-                { label: 'Birthday', value: credits.birthdayLeave, color: 'text-pink-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-white/5 rounded-xl p-2.5 text-center">
-                  <p className={`text-lg font-bold ${color}`}>{value}</p>
-                  <p className="text-white/40 text-[10px] mt-0.5">{label}</p>
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Vacation', value: credits.vacationLeave, color: 'text-blue-400' },
+                  { label: 'Sick', value: credits.sickLeave, color: 'text-red-400' },
+                  { label: 'Birthday', value: credits.birthdayLeave, color: 'text-pink-400' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-white/5 rounded-xl p-2.5 text-center">
+                    <p className={`text-lg font-bold ${color}`}>{value}</p>
+                    <p className="text-white/40 text-[10px] mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+              {creditsError && (
+                <div className="flex items-center gap-2 mt-2 text-amber-400/70 text-[11px]">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {creditsError}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             <p className="text-white/30 text-xs">Credits not available</p>
           )}
