@@ -88,7 +88,8 @@ export interface LeaveApplication {
   entries: LeaveEntry[];
   totalDays: number;
   paymentStatus: PaymentStatus;
-  remarks: string;
+  reason: string;
+  documentUrl?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   submittedAt: string;
 }

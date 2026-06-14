@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   FileText, ChevronLeft, Calendar, User as UserIcon,
   AlertCircle, CheckCircle2, Loader2, Info, CreditCard,
-  Clock, Sun, Sunset,
+  Clock, Sun, Sunset, Paperclip, X,
 } from 'lucide-react';
 import { User, LeaveType, LeaveMode, HalfDayPeriod, PaymentStatus, LeaveCredits } from '../types';
 import { getLeaveCredits, submitLeaveApplication } from '../utils/sheets';
@@ -49,7 +49,9 @@ export default function LeaveApplication({ user, onBack }: Props) {
   const [mode, setMode] = useState<LeaveMode>('Full Day');
   const [halfDayPeriod, setHalfDayPeriod] = useState<HalfDayPeriod>('AM');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Paid');
-  const [remarks, setRemarks] = useState('');
+  const [reason, setReason] = useState('');
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentUrl, setDocumentUrl] = useState('');
   const [credits, setCredits] = useState<LeaveCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState('');
@@ -151,6 +153,7 @@ export default function LeaveApplication({ user, onBack }: Props) {
     if (startDate && endDate && endDate < startDate) e.endDate = 'End date must be after start date';
     if (mode === 'Half Day' && !halfDayPeriod) e.halfDayPeriod = 'Please select AM or PM';
     if (isBirthday && mode === 'Half Day') e.mode = 'Birthday Leave must be Full Day';
+    if (!reason.trim()) e.reason = 'Reason is required';
     if (creditInsufficient) e.credits = `Insufficient credits. Available: ${creditAvailable}, Needed: ${totalDays}`;
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -173,7 +176,8 @@ export default function LeaveApplication({ user, onBack }: Props) {
       entries: buildEntries(),
       totalDays,
       paymentStatus: isEmergency ? 'Unpaid' : paymentStatus,
-      remarks: remarks || 'Pending',
+      reason: reason.trim(),
+      documentUrl: documentUrl || undefined,
       status: 'Pending',
     });
 
@@ -183,7 +187,9 @@ export default function LeaveApplication({ user, onBack }: Props) {
     if (res.success) {
       setStartDate('');
       setEndDate('');
-      setRemarks('');
+      setReason('');
+      setDocumentFile(null);
+      setDocumentUrl('');
       setMode('Full Day');
       // Refresh credits
       const email = user.email || emp?.email || '';
@@ -418,16 +424,62 @@ export default function LeaveApplication({ user, onBack }: Props) {
           </div>
         )}
 
-        {/* Remarks */}
+        {/* Reason */}
         <div className="space-y-2">
-          <p className="text-white/60 text-xs font-semibold uppercase tracking-wider px-1">Remarks <span className="text-white/20 normal-case">(optional)</span></p>
+          <p className="text-white/60 text-xs font-semibold uppercase tracking-wider px-1">
+            Reason <span className="text-red-400">*</span>
+          </p>
           <textarea
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
             rows={3}
-            placeholder="Enter reason or note…"
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none focus:border-blue-400/60 resize-none"
+            placeholder="State your reason for leave…"
+            className={`w-full bg-white/5 border rounded-xl px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none resize-none ${
+              errors.reason ? 'border-red-500/60 focus:border-red-400' : 'border-white/10 focus:border-blue-400/60'
+            }`}
           />
+          {errors.reason && (
+            <p className="text-red-400 text-[11px] flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{errors.reason}
+            </p>
+          )}
+        </div>
+
+        {/* Document Attachment */}
+        <div className="space-y-2">
+          <p className="text-white/60 text-xs font-semibold uppercase tracking-wider px-1">
+            Supporting Document <span className="text-white/30 normal-case font-normal">(optional)</span>
+          </p>
+          {documentFile ? (
+            <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+              <Paperclip className="w-4 h-4 text-blue-400 shrink-0" />
+              <span className="text-white/80 text-sm truncate flex-1">{documentFile.name}</span>
+              <button
+                onClick={() => { setDocumentFile(null); setDocumentUrl(''); }}
+                className="text-white/30 hover:text-red-400 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex items-center gap-3 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/10 transition-colors">
+              <Paperclip className="w-4 h-4 text-blue-400/60" />
+              <span className="text-white/40 text-sm">Tap to attach a file or image</span>
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setDocumentFile(file);
+                  const reader = new FileReader();
+                  reader.onload = () => setDocumentUrl(reader.result as string);
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          )}
         </div>
 
         {/* Duration Summary */}

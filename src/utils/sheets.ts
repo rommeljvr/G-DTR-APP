@@ -1107,9 +1107,9 @@ function submitLeave(data) {
     sheet.appendRow([
       'ID', 'Employee Name', 'Email', 'Leave Type', 'Start Date', 'End Date',
       'Mode', 'Half Day Period', 'Entries (JSON)', 'Total Days',
-      'Payment Status', 'Remarks', 'Status', 'Submitted At'
+      'Payment Status', 'Reason', 'Document URL', 'Status', 'Submitted At'
     ]);
-    var hdr = sheet.getRange(1, 1, 1, 14);
+    var hdr = sheet.getRange(1, 1, 1, 15);
     hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
     hdr.setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
@@ -1130,7 +1130,8 @@ function submitLeave(data) {
     JSON.stringify(data.entries || []),
     data.totalDays      || 0,
     data.paymentStatus  || 'Unpaid',
-    data.remarks        || '',
+    data.reason         || '',
+    data.documentUrl    || '',
     'Pending',
     now
   ]);
@@ -1140,7 +1141,7 @@ function submitLeave(data) {
     deductLeaveCredit(data.email, data.leaveType, data.totalDays);
   }
 
-  try { sheet.autoResizeColumns(1, 14); } catch (ex) {}
+  try { sheet.autoResizeColumns(1, 15); } catch (ex) {}
 
   return _json({
     success: true,
