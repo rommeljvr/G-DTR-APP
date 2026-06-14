@@ -1091,7 +1091,13 @@ function getLeaveCredits(email) {
     }
   }
 
-  return _json({ success: false, message: 'Employee not found in LeaveCredits sheet' });
+  // Auto-insert a default credits row for new employees
+  sheet.appendRow([email, email, 0, 0, 0]);
+  return _json({
+    success: true,
+    credits: { vacationLeave: 0, sickLeave: 0, birthdayLeave: 0 },
+    message: 'New employee — default credits (0) created'
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1099,6 +1105,15 @@ function getLeaveCredits(email) {
 // ══════════════════════════════════════════════════════════════════
 
 function submitLeave(data) {
+  // Server-side validation
+  if (!data)                 return _json({ success: false, message: 'No data received' });
+  if (!data.email)           return _json({ success: false, message: 'Email is required' });
+  if (!data.leaveType)       return _json({ success: false, message: 'Leave type is required' });
+  if (!data.startDate)       return _json({ success: false, message: 'Start date is required' });
+  if (!data.endDate)         return _json({ success: false, message: 'End date is required' });
+  if (!data.reason || !String(data.reason).trim()) return _json({ success: false, message: 'Reason is required' });
+  if (!data.totalDays || data.totalDays <= 0)      return _json({ success: false, message: 'Total days must be greater than 0' });
+
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('LeaveApplications');
 
