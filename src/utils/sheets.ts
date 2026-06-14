@@ -161,6 +161,59 @@ export async function submitAttendance(
   }
 }
 
+// ─── leave credits ────────────────────────────────────────────────
+
+export async function getLeaveCredits(
+  email: string
+): Promise<{ success: boolean; credits?: import('../types').LeaveCredits; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getLeaveCredits&email=${encodeURIComponent(email)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    if (json.success) {
+      return { success: true, credits: json.credits, message: 'Credits loaded' };
+    }
+    return { success: false, message: json.message || 'Failed to fetch credits' };
+  } catch (err) {
+    console.error('getLeaveCredits error:', err);
+    return { success: false, message: 'Unable to fetch leave credits' };
+  }
+}
+
+export async function submitLeaveApplication(
+  application: Omit<import('../types').LeaveApplication, 'id' | 'submittedAt'>
+): Promise<{ success: boolean; message: string; id?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) {
+    return { success: false, message: 'No script URL configured' };
+  }
+  try {
+    const payload = {
+      action: 'submitLeave',
+      data: application,
+    };
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    return {
+      success: result.success !== false,
+      message: result.message || 'Leave application submitted',
+      id: result.id,
+    };
+  } catch (err) {
+    console.error('submitLeave error:', err);
+    return { success: false, message: 'Submission failed. Please try again.' };
+  }
+}
+
 // ─── fetch image as base64 from Google Drive ──────────────────────
 
 const imageCache = new Map<string, string>();
@@ -390,6 +443,7 @@ function doPost(e) {
     if (data.action === 'getLastAction')    return getLastAction(data.email);
     if (data.action === 'getHistory')       return getHistory(data.email);
     if (data.action === 'getSettings')      return getSettings();
+    if (data.action === 'submitLeave')      return submitLeave(data.data);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -418,6 +472,7 @@ function doGet(e) {
   if (action === 'getLastAction')    return getLastAction(email);
   if (action === 'getHistory')       return getHistory(email);
   if (action === 'getSettings')      return getSettings();
+  if (action === 'getLeaveCredits')  return getLeaveCredits(email);
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -988,5 +1043,139 @@ function recoverAttendanceImageByRow(rowNumber) {
     message: "No matching file found in Drive",
     row: rowNumber
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LEAVE CREDITS
+//  Reads from "LeaveCredits" sheet — columns:
+//  Employee Name | Email | Vacation Leave | Sick Leave | Birthday Leave
+// ══════════════════════════════════════════════════════════════════
+
+function getLeaveCredits(email) {
+  if (!email) return _json({ success: false, message: 'Email is required' });
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveCredits');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('LeaveCredits');
+    sheet.appendRow(['Employee Name', 'Email', 'Vacation Leave', 'Sick Leave', 'Birthday Leave']);
+    var hdr = sheet.getRange(1, 1, 1, 5);
+    hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+    return _json({ success: false, message: 'LeaveCredits sheet created. Please populate it.' });
+  }
+
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var emailLower = String(email).trim().toLowerCase();
+
+  var colEmail   = findColumnIndex(headers, ['Email', 'Email Address']);
+  var colVacation = findColumnIndex(headers, ['Vacation Leave', 'VL', 'Vacation']);
+  var colSick     = findColumnIndex(headers, ['Sick Leave', 'SL', 'Sick']);
+  var colBirthday = findColumnIndex(headers, ['Birthday Leave', 'BL', 'Birthday']);
+
+  if (colEmail === -1) return _json({ success: false, message: 'Email column not found in LeaveCredits sheet' });
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowEmail = String(rows[i][colEmail] || '').trim().toLowerCase();
+    if (rowEmail === emailLower) {
+      return _json({
+        success: true,
+        credits: {
+          vacationLeave: colVacation !== -1 ? Number(rows[i][colVacation]) || 0 : 0,
+          sickLeave:     colSick     !== -1 ? Number(rows[i][colSick])     || 0 : 0,
+          birthdayLeave: colBirthday !== -1 ? Number(rows[i][colBirthday]) || 0 : 0
+        }
+      });
+    }
+  }
+
+  return _json({ success: false, message: 'Employee not found in LeaveCredits sheet' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SUBMIT LEAVE APPLICATION
+// ══════════════════════════════════════════════════════════════════
+
+function submitLeave(data) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('LeaveApplications');
+    sheet.appendRow([
+      'ID', 'Employee Name', 'Email', 'Leave Type', 'Start Date', 'End Date',
+      'Mode', 'Half Day Period', 'Entries (JSON)', 'Total Days',
+      'Payment Status', 'Remarks', 'Status', 'Submitted At'
+    ]);
+    var hdr = sheet.getRange(1, 1, 1, 14);
+    hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
+    hdr.setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+  }
+
+  var id = Utilities.getUuid();
+  var now = new Date().toISOString();
+
+  sheet.appendRow([
+    id,
+    data.employeeName   || '',
+    data.email          || '',
+    data.leaveType      || '',
+    data.startDate      || '',
+    data.endDate        || '',
+    data.mode           || '',
+    data.halfDayPeriod  || '',
+    JSON.stringify(data.entries || []),
+    data.totalDays      || 0,
+    data.paymentStatus  || 'Unpaid',
+    data.remarks        || '',
+    'Pending',
+    now
+  ]);
+
+  // Deduct leave credits for Paid leaves
+  if (data.paymentStatus === 'Paid' && data.leaveType !== 'Emergency Leave') {
+    deductLeaveCredit(data.email, data.leaveType, data.totalDays);
+  }
+
+  try { sheet.autoResizeColumns(1, 14); } catch (ex) {}
+
+  return _json({
+    success: true,
+    message: 'Leave application submitted successfully',
+    id: id
+  });
+}
+
+function deductLeaveCredit(email, leaveType, days) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveCredits');
+  if (!sheet) return;
+
+  var colMap = {
+    'Vacation Leave': 'Vacation Leave',
+    'Sick Leave':     'Sick Leave',
+    'Birthday Leave': 'Birthday Leave'
+  };
+
+  var creditCol = colMap[leaveType];
+  if (!creditCol) return;
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var colEmail   = findColumnIndex(headers, ['Email', 'Email Address']);
+  var colCredit  = findColumnIndex(headers, [creditCol]);
+  if (colEmail === -1 || colCredit === -1) return;
+
+  var emailLower = String(email).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][colEmail] || '').trim().toLowerCase() === emailLower) {
+      var current = Number(rows[i][colCredit]) || 0;
+      sheet.getRange(i + 1, colCredit + 1).setValue(Math.max(0, current - days));
+      return;
+    }
+  }
 }
 `;

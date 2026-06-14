@@ -57,3 +57,38 @@ export interface DeviceInfo {
 }
 
 export type AppScreen = 'login' | 'dashboard' | 'camera' | 'history' | 'setup';
+
+export type LeaveType = 'Vacation Leave' | 'Sick Leave' | 'Birthday Leave' | 'Emergency Leave';
+export type LeaveMode = 'Full Day' | 'Half Day';
+export type HalfDayPeriod = 'AM' | 'PM';
+export type PaymentStatus = 'Paid' | 'Unpaid';
+
+export interface LeaveEntry {
+  date: string;
+  mode: LeaveMode;
+  halfDayPeriod?: HalfDayPeriod;
+  days: number;
+}
+
+export interface LeaveCredits {
+  vacationLeave: number;
+  sickLeave: number;
+  birthdayLeave: number;
+}
+
+export interface LeaveApplication {
+  id: string;
+  employeeName: string;
+  email: string;
+  leaveType: LeaveType;
+  startDate: string;
+  endDate: string;
+  mode: LeaveMode;
+  halfDayPeriod?: HalfDayPeriod;
+  entries: LeaveEntry[];
+  totalDays: number;
+  paymentStatus: PaymentStatus;
+  remarks: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  submittedAt: string;
+}

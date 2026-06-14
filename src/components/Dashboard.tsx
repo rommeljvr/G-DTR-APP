@@ -9,6 +9,7 @@ import { getConfig } from '../utils/config';
 import CameraCapture from './CameraCapture';
 import AttendanceHistory from './AttendanceHistory';
 import SetupScreen from './SetupScreen';
+import LeaveApplication from './LeaveApplication';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -17,6 +18,7 @@ import {
   Camera,
   History,
   Settings,
+  FileText,
   User as UserIcon,
   Loader2,
   CheckCircle2,
@@ -36,7 +38,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'setup';
+type Tab = 'home' | 'history' | 'leave' | 'setup';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -316,6 +318,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   if (activeTab === 'setup') {
     return <SetupScreen onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'leave') {
+    return <LeaveApplication user={user} onBack={() => setActiveTab('home')} />;
   }
 
   // ── Main render ──────────────────────────────────────────
@@ -710,6 +716,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             [
               { id: 'home' as Tab, icon: Clock, label: 'Home' },
               { id: 'history' as Tab, icon: History, label: 'History' },
+              { id: 'leave' as Tab, icon: FileText, label: 'Leave' },
               { id: 'setup' as Tab, icon: Settings, label: 'Settings' },
             ] as const
           ).map(({ id, icon: Icon, label }) => (
