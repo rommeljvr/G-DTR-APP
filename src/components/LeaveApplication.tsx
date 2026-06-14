@@ -532,7 +532,7 @@ export default function LeaveApplication({ user, onBack }: Props) {
           className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-bold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 text-sm"
         >
           {submitting ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+            <><Loader2 className="w-4 h-4 animate-spin" /> {documentFile ? 'Uploading document…' : 'Submitting…'}</>
           ) : (
             <><FileText className="w-4 h-4" /> Submit Leave Application</>
           )}

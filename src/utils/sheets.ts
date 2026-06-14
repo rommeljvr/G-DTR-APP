@@ -675,6 +675,48 @@ function uploadImageToDrive(data, folderId) {
   };
 }
 
+function uploadDocumentToDrive(data, folderId) {
+  var raw = String(data.documentUrl);
+  var parts = raw.split('base64,');
+  if (parts.length < 2) throw new Error('Invalid base64 document data');
+  var base64 = parts[1];
+  if (!base64 || base64.length < 10) throw new Error('Empty document data');
+
+  // Detect mime type from data URI
+  var mimeMatch = raw.match(/data:([^;]+);base64,/);
+  var mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+  var extMap = {
+    'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+  };
+  var ext = extMap[mime] || '.bin';
+
+  var decoded = Utilities.base64Decode(base64);
+  var ts      = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  var name    = (data.employeeName || 'user').replace(/[^a-zA-Z0-9]/g, '_');
+  var fileName = 'LEAVE_DOC_' + name + '_' + ts + ext;
+  var blob    = Utilities.newBlob(decoded, mime, fileName);
+
+  var folder;
+  try { folder = DriveApp.getFolderById(folderId); }
+  catch (e) { folder = DriveApp.getRootFolder(); }
+
+  var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  var subName   = 'LeaveDocuments_' + monthKey;
+  var subIter   = folder.getFoldersByName(subName);
+  var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
+
+  var file = subFolder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  return {
+    id:  file.getId(),
+    url: 'https://drive.google.com/file/d/' + file.getId() + '/view'
+  };
+}
+
 function formatFileName(data) {
   var ts     = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
   var name   = (data.userName || 'user').replace(/[^a-zA-Z0-9]/g, '_');
@@ -1133,6 +1175,24 @@ function submitLeave(data) {
   var id = Utilities.getUuid();
   var now = new Date().toISOString();
 
+  // Upload supporting document to Drive (same approach as attendance photo)
+  var documentDriveUrl = '';
+  var documentDriveId  = '';
+  if (data.documentUrl && String(data.documentUrl).indexOf('base64,') > -1) {
+    try {
+      var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+      var docResult = uploadDocumentToDrive(data, folderId);
+      documentDriveUrl = docResult.url;
+      documentDriveId  = docResult.id;
+    } catch (err) {
+      Logger.log('Leave document upload error: ' + err.toString());
+      documentDriveUrl = 'UPLOAD_ERROR: ' + err.toString().substring(0, 100);
+    }
+  } else if (data.documentUrl) {
+    // Already a URL (not base64), store as-is
+    documentDriveUrl = data.documentUrl;
+  }
+
   sheet.appendRow([
     id,
     data.employeeName   || '',
@@ -1146,7 +1206,7 @@ function submitLeave(data) {
     data.totalDays      || 0,
     data.paymentStatus  || 'Unpaid',
     data.reason         || '',
-    data.documentUrl    || '',
+    documentDriveUrl,
     'Pending',
     now
   ]);
@@ -1156,12 +1216,19 @@ function submitLeave(data) {
     deductLeaveCredit(data.email, data.leaveType, data.totalDays);
   }
 
+  // Set clickable hyperlink for document URL (col 13)
+  if (documentDriveUrl && documentDriveUrl.indexOf('http') === 0) {
+    var lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow, 13).setFormula('=HYPERLINK("' + documentDriveUrl + '","📎 View")' );
+  }
+
   try { sheet.autoResizeColumns(1, 15); } catch (ex) {}
 
   return _json({
     success: true,
     message: 'Leave application submitted successfully',
-    id: id
+    id: id,
+    documentUrl: documentDriveUrl || ''
   });
 }
 
