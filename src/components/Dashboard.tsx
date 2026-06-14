@@ -1,14 +1,14 @@
+/// <reference path="../pwa.d.ts" />
 import { useState, useEffect } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
-import { getLastAction, getTodayRecords, submitAttendance } from '../utils/sheets';
-import { getLocationData } from '../utils/location';
+import { getLastAction, submitAttendance } from '../utils/sheets';
+import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
 import { createCompositeImage } from '../utils/imageComposite';
 import { getConfig } from '../utils/config';
 import CameraCapture from './CameraCapture';
 import AttendanceHistory from './AttendanceHistory';
 import SetupScreen from './SetupScreen';
-import DriveImage from './DriveImage';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -24,25 +24,27 @@ import {
   ChevronRight,
   Crosshair,
   Building2,
-  Image as ImageIcon,
   X,
   Briefcase,
+  MoreVertical,
 } from 'lucide-react';
 
 interface Props {
   user: User;
   onLogout: () => void;
+  installPrompt?: BeforeInstallPromptEvent | null;
+  isInstalled?: boolean;
 }
 
 type Tab = 'home' | 'history' | 'setup';
 
-export default function Dashboard({ user, onLogout }: Props) {
+export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const config = getConfig();
   const emp = user.employee;
 
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [lastAction, setLastAction] = useState<AttendanceRecord | null>(null);
-  const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [showCamera, setShowCamera] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -57,9 +59,39 @@ export default function Dashboard({ user, onLogout }: Props) {
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isCountingDown, setIsCountingDown] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [shortcutNotice, setShortcutNotice] = useState(false);
 
   const nextAction: 'TIME_IN' | 'TIME_OUT' =
     lastAction?.action === 'TIME_IN' ? 'TIME_OUT' : 'TIME_IN';
+
+  const formatDisplayDate = (val: string): string => {
+    if (!val) return '';
+    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const d = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    return val;
+  };
+
+  const formatDisplayTime = (val: string): string => {
+    if (!val) return '';
+    const isIsoString = /^\d{4}-\d{2}-\d{2}T/.test(val);
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      const hrs = isIsoString ? d.getUTCHours() : d.getHours();
+      const mins = isIsoString ? d.getUTCMinutes() : d.getMinutes();
+      const ampm = hrs >= 12 ? 'PM' : 'AM';
+      const h = hrs % 12 || 12;
+      return `${h}:${mins.toString().padStart(2, '0')} ${ampm}`;
+    }
+    return val;
+  };
 
   useEffect(() => {
     loadRecords();
@@ -90,8 +122,6 @@ export default function Dashboard({ user, onLogout }: Props) {
   const loadRecords = async () => {
     const last = await getLastAction(user.email);
     setLastAction(last);
-    const today = await getTodayRecords(user.email);
-    setTodayRecords(today);
   };
 
   const refreshLocationForValidation = async () => {
@@ -102,7 +132,7 @@ export default function Dashboard({ user, onLogout }: Props) {
     });
 
     try {
-      const loc = await getLocationData();
+      let loc = await getLocationData();
       
       // Validate location accuracy (reject if > 100m accuracy)
       if (loc.accuracy > 100) {
@@ -113,6 +143,17 @@ export default function Dashboard({ user, onLogout }: Props) {
         setLocationValidated(false);
         setValidatedLocation(null);
         return;
+      }
+
+      // Validate that the address corresponds to the captured coordinates
+      const { mismatch, verifiedAddress } = await validateAddressCoordinates(
+        loc.latitude,
+        loc.longitude,
+        loc.address
+      );
+      if (mismatch) {
+        loc = { ...loc, address: verifiedAddress };
+        console.warn('[DTR] Address corrected to match coordinates:', verifiedAddress);
       }
 
       // Location is valid
@@ -294,6 +335,73 @@ export default function Dashboard({ user, onLogout }: Props) {
         </div>
       )}
 
+      {/* Add Shortcut / Install modal */}
+      {shortcutNotice && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 mx-2 w-full max-w-sm border border-white/10 slide-up">
+            {isInstalled ? (
+              <>
+                <div className="text-center mb-5">
+                  <CheckCircle2 className="w-14 h-14 text-green-400 mx-auto mb-3" />
+                  <h3 className="text-white font-bold text-lg mb-1">Already Installed</h3>
+                  <p className="text-blue-200/60 text-sm">This app is already added to your home screen.</p>
+                </div>
+              </>
+            ) : isIOS ? (
+              <>
+                <div className="text-center mb-4">
+                  <div className="w-14 h-14 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <ChevronRight className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg mb-1">Add to Home Screen</h3>
+                  <p className="text-blue-200/60 text-sm mb-1">Follow these steps in Safari:</p>
+                </div>
+                <div className="space-y-2 mb-5">
+                  <div className="flex items-start gap-3 bg-white/5 rounded-xl px-4 py-3">
+                    <span className="text-blue-400 font-bold text-sm mt-0.5">1</span>
+                    <p className="text-white/80 text-sm">Tap the <span className="font-bold">Share</span> icon at the bottom of Safari</p>
+                  </div>
+                  <div className="flex items-start gap-3 bg-white/5 rounded-xl px-4 py-3">
+                    <span className="text-blue-400 font-bold text-sm mt-0.5">2</span>
+                    <p className="text-white/80 text-sm">Scroll down and tap <span className="font-bold">"Add to Home Screen"</span></p>
+                  </div>
+                  <div className="flex items-start gap-3 bg-white/5 rounded-xl px-4 py-3">
+                    <span className="text-blue-400 font-bold text-sm mt-0.5">3</span>
+                    <p className="text-white/80 text-sm">Tap <span className="font-bold">Add</span> to confirm</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-4">
+                  <div className="w-14 h-14 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <ChevronRight className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg mb-1">Add Shortcut</h3>
+                  <p className="text-blue-200/60 text-sm">Use your browser menu to add this app:</p>
+                </div>
+                <div className="space-y-2 mb-5">
+                  <div className="bg-white/5 rounded-xl px-4 py-3">
+                    <p className="text-blue-200/60 text-[11px] font-semibold uppercase tracking-wider mb-1">Android Chrome</p>
+                    <p className="text-white/80 text-sm">Tap <span className="font-bold">⋮</span> → <span className="font-bold">"Add to Home screen"</span></p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl px-4 py-3">
+                    <p className="text-blue-200/60 text-[11px] font-semibold uppercase tracking-wider mb-1">Desktop Chrome / Edge</p>
+                    <p className="text-white/80 text-sm">Click <span className="font-bold">⋮</span> → <span className="font-bold">"Save and share"</span> → <span className="font-bold">"Create shortcut"</span></p>
+                  </div>
+                </div>
+              </>
+            )}
+            <button
+              onClick={() => setShortcutNotice(false)}
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold py-3 rounded-xl active:scale-95 transition-transform"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Success / Error modal */}
       {notification && !processing && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
@@ -456,7 +564,7 @@ export default function Dashboard({ user, onLogout }: Props) {
             <div className="flex items-center gap-2 text-blue-200/60 text-xs">
               <Clock className="w-3.5 h-3.5" />
               <span>
-                Last: {lastAction.action === 'TIME_IN' ? 'In' : 'Out'} at {lastAction.time} — {lastAction.date}
+                Last: {lastAction.action === 'TIME_IN' ? 'In' : 'Out'} at {formatDisplayTime(lastAction.time)} — {formatDisplayDate(lastAction.date)}
               </span>
             </div>
           )}
@@ -593,70 +701,11 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
         </div>
 
-        {/* ── Today's log with thumbnails ────────────────── */}
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
-          <h3 className="text-white/80 text-xs font-medium uppercase tracking-wider mb-3">
-            Today's Log
-          </h3>
-
-          {todayRecords.length === 0 ? (
-            <p className="text-blue-200/40 text-xs text-center py-3">No records for today</p>
-          ) : (
-            <div className="space-y-2">
-              {todayRecords.map((record, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2.5"
-                >
-                  {(record.photo || record.imageId) ? (
-                    <DriveImage
-                      photo={record.photo}
-                      imageId={record.imageId}
-                      thumbnail
-                      className="w-11 h-11 rounded-lg overflow-hidden shrink-0 border border-white/10"
-                      onClick={(src) => setPreviewPhoto(src)}
-                    />
-                  ) : (
-                    <div
-                      className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${
-                        record.action === 'TIME_IN'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-orange-500/20 text-orange-400'
-                      }`}
-                    >
-                      {record.action === 'TIME_IN' ? (
-                        <LogInIcon className="w-5 h-5" />
-                      ) : (
-                        <LogOutIcon className="w-5 h-5" />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium">
-                      {record.action === 'TIME_IN' ? 'Time In' : 'Time Out'}
-                    </p>
-                    <p className="text-blue-200/50 text-[11px]">{record.time}</p>
-                  </div>
-
-                  <div className="text-right flex flex-col items-end gap-0.5">
-                    <p className="text-blue-200/40 text-[10px]">
-                      ±{record.accuracy?.toFixed(0) || '?'}m
-                    </p>
-                    {(record.photo || record.imageId) && (
-                      <ImageIcon className="w-3 h-3 text-blue-400/40" />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── Bottom nav ───────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10">
-        <div className="flex items-center justify-around py-2 pb-3 max-w-lg mx-auto">
+        <div className="flex items-end justify-around py-2 pb-3 max-w-lg mx-auto">
           {(
             [
               { id: 'home' as Tab, icon: Clock, label: 'Home' },
@@ -675,6 +724,41 @@ export default function Dashboard({ user, onLogout }: Props) {
               <span className="text-[10px] font-medium">{label}</span>
             </button>
           ))}
+
+          {/* 3-dot menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu((prev: boolean) => !prev)}
+              className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all active:scale-90 text-white/40"
+            >
+              <MoreVertical className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Menu</span>
+            </button>
+
+            {showMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowMenu(false)}
+                />
+                <div className="absolute bottom-12 right-0 z-50 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+                  <button
+                    onClick={async () => {
+                      setShowMenu(false);
+                      if (installPrompt && !isInstalled) {
+                        await installPrompt.prompt();
+                      } else {
+                        setShortcutNotice(true);
+                      }
+                    }}
+                    className="w-full text-left px-4 py-3 text-white/80 text-sm hover:bg-white/10 active:bg-white/20 transition-colors"
+                  >
+                    Add Shortcut
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

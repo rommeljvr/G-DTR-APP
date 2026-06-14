@@ -305,7 +305,8 @@ export async function getTodayRecords(userEmail: string): Promise<AttendanceReco
 
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
-export const APPS_SCRIPT_TEMPLATE = `// ================================================================
+export const APPS_SCRIPT_TEMPLATE = `
+// ================================================================
 //  Smart DTR System – Google Apps Script Backend  v4.0
 //  ✅ Employee validation from Employee sheet
 //  ✅ Attendance logging to Google Sheets
@@ -417,7 +418,6 @@ function doGet(e) {
   if (action === 'getLastAction')    return getLastAction(email);
   if (action === 'getHistory')       return getHistory(email);
   if (action === 'getSettings')      return getSettings();
-  if (action === 'checkAuth')        return checkDriveAuthorization();
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -511,17 +511,6 @@ function findColumnIndex(headers, possibleNames) {
 // ══════════════════════════════════════════════════════════════════
 
 function submitAttendance(data, clientFolderId) {
-  Logger.log('=== SUBMIT ATTENDANCE START ===');
-  Logger.log('User: ' + (data.userName || 'unknown'));
-  Logger.log('Action: ' + (data.action || 'unknown'));
-  Logger.log('Photo present: ' + (data.photo ? 'YES' : 'NO'));
-  
-  if (data.photo) {
-    Logger.log('Photo type: ' + typeof data.photo);
-    Logger.log('Photo length: ' + String(data.photo).length);
-    Logger.log('Has base64 prefix: ' + (String(data.photo).indexOf('base64,') > -1));
-  }
-
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Attendance');
 
@@ -540,23 +529,18 @@ function submitAttendance(data, clientFolderId) {
   }
 
   var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
-  Logger.log('Using folder ID: ' + folderId);
 
   // Upload image to Google Drive
   var imageUrl = '';
   var imageId  = '';
   try {
     if (data.photo && String(data.photo).indexOf('base64,') > -1) {
-      Logger.log('Attempting Drive upload...');
       var uploadResult = uploadImageToDrive(data, folderId);
       imageUrl = uploadResult.url;
       imageId  = uploadResult.id;
-      Logger.log('Drive upload SUCCESS - ID: ' + imageId);
-    } else {
-      Logger.log('Skipping upload - photo missing or no base64 prefix');
     }
   } catch (err) {
-    Logger.log('Drive upload ERROR: ' + err.toString());
+    Logger.log('Drive upload error: ' + err.toString());
     imageUrl = 'UPLOAD_ERROR: ' + err.toString().substring(0, 100);
   }
 
@@ -584,6 +568,11 @@ function submitAttendance(data, clientFolderId) {
   var lastRow = sheet.getLastRow();
   if (imageUrl && imageUrl.indexOf('http') === 0) {
     sheet.getRange(lastRow, 17).setFormula('=HYPERLINK("' + imageUrl + '","📷 View")');
+  }
+
+  // Fix missing Image ID
+  if (!imageId || String(imageId).trim() === '') {
+    recoverAttendanceImageByRow(lastRow);
   }
 
   try { sheet.autoResizeColumns(1, 17); } catch (ex) {}
@@ -638,35 +627,6 @@ function formatFileName(data) {
   return 'DTR_' + name + '_' + action + '_' + ts + '.jpg';
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  AUTHORIZATION CHECK
-//  Call this endpoint to verify Drive permissions are granted
-// ══════════════════════════════════════════════════════════════════
-
-function checkDriveAuthorization() {
-  try {
-    // Try to access Drive - this will throw if not authorized
-    var rootFolder = DriveApp.getRootFolder();
-    var testFile = rootFolder.createFile('test_auth.txt', 'Drive API test', MimeType.PLAIN_TEXT);
-    testFile.setTrashed(true);
-    
-    return _json({
-      success: true,
-      authorized: true,
-      message: 'Drive API is properly authorized',
-      canUpload: true
-    });
-  } catch (err) {
-    return _json({
-      success: false,
-      authorized: false,
-      message: 'Drive API NOT authorized. Please re-deploy with proper permissions.',
-      error: err.toString(),
-      instructions: '1. Go to Deploy → Manage deployments. 2. Delete current deployment. 3. Deploy → New deployment → Web app. 4. Execute as: Me, Who has access: Anyone. 5. Click "Review permissions" → "Advanced" → "Go to (unsafe)" → "Allow"'
-    });
-  }
-}
-
 function getImage(fileId) {
   if (!fileId) return _json({ success: false, message: 'Missing file ID' });
 
@@ -697,28 +657,6 @@ function getLastAction(email) {
   var sheet = ss.getSheetByName('Attendance');
   if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, lastAction: null });
 
-  // Helper to format date from sheet
-  function formatDate(val) {
-    if (!val) return '';
-    if (val instanceof Date) {
-      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
-    }
-    return String(val);
-  }
-
-  // Helper to format time from sheet
-  function formatTime(val) {
-    if (!val) return '';
-    if (val instanceof Date) {
-      var hrs = val.getHours();
-      var mins = val.getMinutes();
-      var ampm = hrs >= 12 ? 'PM' : 'AM';
-      hrs = hrs % 12 || 12;
-      return hrs + ':' + (mins < 10 ? '0' + mins : mins) + ' ' + ampm;
-    }
-    return String(val);
-  }
-
   var rows = sheet.getDataRange().getValues();
   for (var i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][3]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
@@ -726,9 +664,9 @@ function getLastAction(email) {
         success: true,
         lastAction: {
           action:      rows[i][4],
-          timestamp:   formatDate(rows[i][6]) + ' ' + formatTime(rows[i][7]),
-          date:        formatDate(rows[i][6]),
-          time:        formatTime(rows[i][7]),
+          timestamp:   rows[i][5],
+          date:        rows[i][6],
+          time:        rows[i][7],
           department:  rows[i][13] || '',
           designation: rows[i][14] || '',
           imageId:     rows[i][15] || '',
@@ -745,28 +683,6 @@ function getHistory(email) {
   var sheet = ss.getSheetByName('Attendance');
   if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
 
-  // Helper to format date from sheet
-  function formatDate(val) {
-    if (!val) return '';
-    if (val instanceof Date) {
-      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
-    }
-    return String(val);
-  }
-
-  // Helper to format time from sheet
-  function formatTime(val) {
-    if (!val) return '';
-    if (val instanceof Date) {
-      var hrs = val.getHours();
-      var mins = val.getMinutes();
-      var ampm = hrs >= 12 ? 'PM' : 'AM';
-      hrs = hrs % 12 || 12;
-      return hrs + ':' + (mins < 10 ? '0' + mins : mins) + ' ' + ampm;
-    }
-    return String(val);
-  }
-
   var rows    = sheet.getDataRange().getValues();
   var records = [];
   for (var i = 1; i < rows.length; i++) {
@@ -774,9 +690,9 @@ function getHistory(email) {
       records.push({
         id:          rows[i][0],
         action:      rows[i][4],
-        timestamp:   formatDate(rows[i][6]) + ' ' + formatTime(rows[i][7]),
-        date:        formatDate(rows[i][6]),
-        time:        formatTime(rows[i][7]),
+        timestamp:   rows[i][5],
+        date:        rows[i][6],
+        time:        rows[i][7],
         latitude:    rows[i][8],
         longitude:   rows[i][9],
         address:     rows[i][11],
@@ -808,5 +724,269 @@ function _json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function checkDriveAuthorization() {
+  try {
+    // Try to access Drive - this will throw if not authorized
+    var rootFolder = DriveApp.getRootFolder();
+    var testFile = rootFolder.createFile('test_auth.txt', 'Drive API test', MimeType.PLAIN_TEXT);
+    testFile.setTrashed(true);
+ 
+    return _json({
+      success: true,
+      authorized: true,
+      message: 'Drive API is properly authorized',
+      canUpload: true
+    });
+  } catch (err) {
+    return _json({
+      success: false,
+      authorized: false,
+      message: 'Drive API NOT authorized. Please re-deploy with proper permissions.',
+      error: err.toString(),
+      instructions: '1. Go to Deploy → Manage deployments. 2. Delete current deployment. 3. Deploy → New deployment → Web app. 4. Execute as: Me, Who has access: Anyone. 5. Click "Review permissions" → "Advanced" → "Go to (unsafe)" → "Allow"'
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ATTENDANCE IMAGE COLUMN REPAIR TOOL (MANUAL RUN)
+// ════════════════════════════════════════════════════════════════
+
+function repairAttendanceImageColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Attendance');
+
+  if (!sheet) return;
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+
+  var updated = 0;
+  var failedUploads = 0;
+
+  for (var i = 0; i < data.length; i++) {
+
+    var row = data[i];
+    var sheetRow = i + 2;
+
+    var imageId  = row[15];
+    var imageUrl = row[16];
+
+    // --------------------------------------------------
+    // CASE 1: Upload error detected
+    // --------------------------------------------------
+    if (imageUrl && String(imageUrl).indexOf('UPLOAD_ERROR') === 0) {
+      sheet.getRange(sheetRow, 17).setValue('FAILED_UPLOAD');
+      failedUploads++;
+      continue;
+    }
+
+    var extractedId = null;
+
+    // --------------------------------------------------
+    // CASE 2: Try extract Drive ID from URL
+    // --------------------------------------------------
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.indexOf('http') === 0) {
+      var match = imageUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                  imageUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+
+      if (match) extractedId = match[1];
+    }
+
+    // --------------------------------------------------
+    // CASE 3: Fix missing Image ID
+    // --------------------------------------------------
+    if (!imageId && extractedId) {
+      sheet.getRange(sheetRow, 16).setValue(extractedId);
+      imageId = extractedId;
+      updated++;
+    }
+
+    // --------------------------------------------------
+    // CASE 4: Rebuild valid URL
+    // --------------------------------------------------
+    if (imageId && (!imageUrl || imageUrl.indexOf('http') !== 0)) {
+      var newUrl = 'https://drive.google.com/file/d/' + imageId + '/view';
+
+      sheet.getRange(sheetRow, 17).setValue(newUrl);
+      updated++;
+    }
+
+    // --------------------------------------------------
+    // CASE 5: Ensure hyperlink formatting
+    // --------------------------------------------------
+    if (imageUrl && imageUrl.indexOf('http') === 0) {
+      sheet.getRange(sheetRow, 17)
+        .setFormula('=HYPERLINK("' + imageUrl + '","📷 View")');
+    }
+  }
+
+  Logger.log("Updated: " + updated);
+  Logger.log("Failed uploads: " + failedUploads);
+
+  return _json({
+    success: true,
+    updatedRows: updated,
+    failedUploads: failedUploads,
+    message: "Repair completed (including upload errors)"
+  });
+}
+
+function recoverAttendanceImagesFromDrive() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Attendance');
+  if (!sheet) return;
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  var folder = DriveApp.getFolderById(folderId);
+
+  var data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+
+  var updated = 0;
+
+  // Collect all Drive files once (performance optimized)
+  var files = [];
+  var subFolders = folder.getFolders();
+
+  while (subFolders.hasNext()) {
+    var sub = subFolders.next();
+    var f = sub.getFiles();
+
+    while (f.hasNext()) {
+      files.push(f.next());
+    }
+  }
+
+  for (var i = 0; i < data.length; i++) {
+
+    var row = data[i];
+    var sheetRow = i + 2;
+
+    var userName = row[2];
+    var action   = row[4];
+
+    var imageId  = row[15];
+    var imageUrl = row[16];
+
+    // ✔ ONLY PROCESS IF Image ID IS EMPTY
+    if (imageId && String(imageId).trim() !== '') continue;
+
+    if (!userName || !action) continue;
+
+    var cleanName = String(userName).replace(/[^a-zA-Z0-9]/g, '_');
+
+    for (var j = 0; j < files.length; j++) {
+
+      var file = files[j];
+      var fileName = file.getName();
+
+      if (fileName.indexOf(cleanName) > -1 && fileName.indexOf(action) > -1) {
+
+        var id = file.getId();
+        var url = 'https://drive.google.com/file/d/' + id + '/view';
+
+        sheet.getRange(sheetRow, 16).setValue(id);
+        sheet.getRange(sheetRow, 17).setValue(url);
+
+        updated++;
+        break;
+      }
+    }
+  }
+
+  return _json({
+    success: true,
+    message: "Full recovery completed (Image ID only missing rows)",
+    updatedRows: updated
+  });
+}
+
+function recoverAttendanceImageByRow(rowNumber) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Attendance');
+  if (!sheet) return;
+
+  if (!rowNumber || rowNumber < 2) {
+    return _json({
+      success: false,
+      message: "Invalid row number. Must be 2 or higher."
+    });
+  }
+
+  var row = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var userName = row[2];
+  var action   = row[4];
+
+  var imageId  = row[15];
+  var imageUrl = row[16];
+
+  if (imageId && String(imageId).trim() !== '') {
+    return _json({
+      success: true,
+      message: "Row already has Image ID",
+      row: rowNumber
+    });
+  }
+
+  if (!userName || !action) {
+    return _json({
+      success: false,
+      message: "Missing userName or action in row",
+      row: rowNumber
+    });
+  }
+
+  var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  var folder = DriveApp.getFolderById(folderId);
+
+  var files = [];
+  var subFolders = folder.getFolders();
+
+  while (subFolders.hasNext()) {
+    var sub = subFolders.next();
+    var f = sub.getFiles();
+    while (f.hasNext()) {
+      files.push(f.next());
+    }
+  }
+
+  var cleanName = String(userName).replace(/[^a-zA-Z0-9]/g, '_');
+
+  for (var i = 0; i < files.length; i++) {
+
+    var file = files[i];
+    var fileName = file.getName();
+
+    if (fileName.indexOf(cleanName) > -1 && fileName.indexOf(action) > -1) {
+
+      var id = file.getId();
+      var url = 'https://drive.google.com/file/d/' + id + '/view';
+
+      sheet.getRange(rowNumber, 16).setValue(id);
+      sheet.getRange(rowNumber, 17).setValue(url);
+
+      return _json({
+        success: true,
+        message: "Row repaired successfully",
+        row: rowNumber,
+        imageId: id,
+        imageUrl: url
+      });
+    }
+  }
+
+  return _json({
+    success: false,
+    message: "No matching file found in Drive",
+    row: rowNumber
+  });
 }
 `;

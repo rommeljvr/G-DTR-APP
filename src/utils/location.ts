@@ -46,6 +46,24 @@ export function getMapImageUrl(lat: number, lon: number): string {
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=${zoom}&size=300x200&markers=${lat},${lon},red-pushpin`;
 }
 
+export async function validateAddressCoordinates(
+  lat: number,
+  lon: number,
+  address: string
+): Promise<{ valid: boolean; mismatch: boolean; verifiedAddress: string }> {
+  const verifiedAddress = await reverseGeocode(lat, lon);
+  const mismatch = verifiedAddress !== address;
+  if (mismatch) {
+    console.warn(
+      `[DTR] Address-coordinate mismatch detected.\n` +
+      `  Coordinates : ${lat.toFixed(6)}, ${lon.toFixed(6)}\n` +
+      `  Original    : ${address}\n` +
+      `  Verified    : ${verifiedAddress}`
+    );
+  }
+  return { valid: !mismatch, mismatch, verifiedAddress };
+}
+
 export async function getLocationData(): Promise<LocationData> {
   const position = await getCurrentPosition();
   const { latitude, longitude, accuracy } = position.coords;

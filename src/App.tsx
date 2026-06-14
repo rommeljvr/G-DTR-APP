@@ -10,12 +10,22 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches
+    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
   const config = getConfig();
 
   useEffect(() => {
     const storedUser = getStoredUser();
     if (storedUser) setUser(storedUser);
     setLoading(false);
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleLogin = (u: User) => setUser(u);
@@ -59,5 +69,5 @@ export default function App() {
 
   if (!user) return <LoginScreen onLogin={handleLogin} onShowSettings={() => setShowSettings(true)} />;
 
-  return <Dashboard user={user} onLogout={handleLogout} />;
+  return <Dashboard user={user} onLogout={handleLogout} installPrompt={installPrompt} isInstalled={isInstalled} />;
 }
