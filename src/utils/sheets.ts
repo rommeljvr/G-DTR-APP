@@ -1203,7 +1203,7 @@ function submitLeave(data) {
 
   var lastRow = sheet.getLastRow();
   if (docUrl && docUrl.indexOf('http') === 0) {
-    sheet.getRange(lastRow, 14).setFormula('=HYPERLINK("' + docUrl + '","\uD83D\uDCC4 View")');
+    sheet.getRange(lastRow, 14).setFormula('=HYPERLINK("' + docUrl + '","📄 View")');
   }
 
   // Deduct leave credits for Paid leaves
