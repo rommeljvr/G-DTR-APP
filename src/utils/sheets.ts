@@ -220,6 +220,33 @@ export async function submitLeaveApplication(
   }
 }
 
+// ─── cancel leave application ─────────────────────────────────────
+
+export async function cancelLeave(
+  id: string,
+  email: string
+): Promise<{ success: boolean; message: string; cancelledAt?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cancelLeave', id, email }),
+    });
+    const json = await res.json();
+    return {
+      success: json.success,
+      message: json.message || (json.success ? 'Cancelled' : 'Failed to cancel'),
+      cancelledAt: json.cancelledAt,
+    };
+  } catch (err) {
+    console.error('cancelLeave error:', err);
+    return { success: false, message: 'Unable to cancel leave application' };
+  }
+}
+
 // ─── leave history ────────────────────────────────────────────────
 
 export interface LeaveRecord {
@@ -521,6 +548,7 @@ function doPost(e) {
     if (data.action === 'getHistory')       return getHistory(data.email);
     if (data.action === 'getSettings')      return (data.email && data.email.toLowerCase() === ADMIN_EMAIL) ? getSettings() : _json({ success: false, message: 'Unauthorized' });
     if (data.action === 'submitLeave')      return submitLeave(data.data);
+    if (data.action === 'cancelLeave')      return cancelLeave(data.id, data.email);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1268,6 +1296,84 @@ function submitLeave(data) {
     docId: docId,
     docUrl: docUrl
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CANCEL LEAVE APPLICATION
+//  Sets status to Cancelled; only allowed if current status is Pending
+//  and the requesting email matches the application email
+// ══════════════════════════════════════════════════════════════════
+
+function cancelLeave(id, email) {
+  if (!id)    return _json({ success: false, message: 'Leave ID is required' });
+  if (!email) return _json({ success: false, message: 'Email is required' });
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+  if (!sheet) return _json({ success: false, message: 'LeaveApplications sheet not found' });
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+
+  function col(name) {
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim().toLowerCase() === name.toLowerCase()) return c;
+    }
+    return -1;
+  }
+
+  var cId     = col('ID');
+  var cEmail  = col('Email');
+  var cStatus = col('Status');
+
+  if (cId === -1 || cEmail === -1 || cStatus === -1) {
+    return _json({ success: false, message: 'Required columns not found in LeaveApplications sheet' });
+  }
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowId    = String(rows[i][cId]    || '').trim();
+    var rowEmail = String(rows[i][cEmail] || '').trim().toLowerCase();
+    var rowStatus = String(rows[i][cStatus] || '').trim();
+
+    if (rowId !== String(id).trim()) continue;
+
+    // Ownership check
+    if (rowEmail !== String(email).trim().toLowerCase()) {
+      return _json({ success: false, message: 'Unauthorized: this application does not belong to you' });
+    }
+
+    // Only Pending can be cancelled
+    if (rowStatus !== 'Pending') {
+      return _json({ success: false, message: 'Only Pending applications can be cancelled. Current status: ' + rowStatus });
+    }
+
+    var cancelledAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    var sheetRow = i + 1;
+
+    sheet.getRange(sheetRow, cStatus + 1).setValue('Cancelled');
+
+    // Record cancellation timestamp in the column after Status if it exists
+    var cCancelledAt = col('Cancelled At');
+    if (cCancelledAt !== -1) {
+      sheet.getRange(sheetRow, cCancelledAt + 1).setValue(cancelledAt);
+    } else {
+      // Append timestamp note to reason column if no dedicated column
+      var cReason = col('Reason');
+      if (cReason !== -1) {
+        var existingReason = String(sheet.getRange(sheetRow, cReason + 1).getValue() || '');
+        sheet.getRange(sheetRow, cReason + 1).setValue(existingReason + ' [Cancelled: ' + cancelledAt + ']');
+      }
+    }
+
+    return _json({
+      success: true,
+      message: 'Leave application cancelled successfully',
+      id: id,
+      cancelledAt: cancelledAt
+    });
+  }
+
+  return _json({ success: false, message: 'Leave application not found with ID: ' + id });
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -5,7 +5,7 @@ import {
   ExternalLink, AlertCircle, Eye, Download,
 } from 'lucide-react';
 import { User } from '../types';
-import { getLeaveHistory, LeaveRecord } from '../utils/sheets';
+import { getLeaveHistory, cancelLeave, LeaveRecord } from '../utils/sheets';
 
 interface Props {
   user: User;
@@ -51,6 +51,9 @@ export default function LeaveReport({ user, onBack }: Props) {
   const [error, setError]         = useState('');
   const [selected, setSelected]   = useState<LeaveRecord | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   // Filters
   const [search, setSearch]       = useState('');
@@ -139,6 +142,22 @@ export default function LeaveReport({ user, onBack }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleCancel = async () => {
+    if (!selected) return;
+    setCancelling(true);
+    setCancelError('');
+    const res = await cancelLeave(selected.id, user.email || '');
+    setCancelling(false);
+    if (res.success) {
+      const updated = { ...selected, status: 'Cancelled' };
+      setSelected(updated);
+      setRecords(prev => prev.map(r => r.id === selected.id ? updated : r));
+      setShowConfirm(false);
+    } else {
+      setCancelError(res.message);
+    }
+  };
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ChevronDown className="w-3 h-3 opacity-30" />;
     return sortDir === 'asc'
@@ -148,6 +167,44 @@ export default function LeaveReport({ user, onBack }: Props) {
 
   return (
     <div className="min-h-dvh flex flex-col pb-6 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+
+      {/* Cancel confirmation dialog */}
+      {showConfirm && selected && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center px-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm slide-up">
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mx-auto mb-3">
+                <AlertCircle className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-white font-bold text-base mb-1">Cancel Application?</h3>
+              <p className="text-white/50 text-sm">
+                This will cancel your <span className="text-white/80 font-medium">{selected.leaveType}</span> request
+                from <span className="text-white/80 font-medium">{fmtDate(selected.startDate)}</span>. This cannot be undone.
+              </p>
+              {cancelError && (
+                <p className="mt-3 text-red-400 text-xs bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{cancelError}</p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowConfirm(false); setCancelError(''); }}
+                disabled={cancelling}
+                className="flex-1 py-3 rounded-xl bg-white/10 text-white/70 text-sm font-semibold active:scale-95 transition-transform disabled:opacity-40"
+              >
+                Keep
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {cancelling ? 'Cancelling…' : 'Yes, Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail modal */}
       {selected && (
@@ -210,8 +267,17 @@ export default function LeaveReport({ user, onBack }: Props) {
               )}
             </div>
 
-            <div className="px-5 pb-6">
-              <button onClick={() => setSelected(null)}
+            <div className="px-5 pb-6 space-y-2">
+              {selected.status === 'Pending' && (
+                <button
+                  onClick={() => { setCancelError(''); setShowConfirm(true); }}
+                  className="w-full flex items-center justify-center gap-2 bg-red-500/10 border border-red-400/20 text-red-400 font-semibold py-3 rounded-xl active:scale-95 transition-transform text-sm"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel Application
+                </button>
+              )}
+              <button onClick={() => { setSelected(null); setCancelError(''); setShowConfirm(false); }}
                 className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold py-3 rounded-xl active:scale-95 transition-transform">
                 Close
               </button>

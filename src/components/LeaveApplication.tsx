@@ -154,6 +154,19 @@ export default function LeaveApplication({ user, onBack, onViewReports }: Props)
     if (startDate && endDate && endDate < startDate) e.endDate = 'End date must be after start date';
     if (mode === 'Half Day' && !halfDayPeriod) e.halfDayPeriod = 'Please select AM or PM';
     if (isBirthday && mode === 'Half Day') e.mode = 'Birthday Leave must be Full Day';
+
+    // Birthday Leave: single-day only
+    if (isBirthday && startDate && endDate && startDate !== endDate) {
+      e.endDate = 'Birthday Leave must be a single-day application (start and end date must be the same)';
+    }
+
+    // Sick Leave: dates must not be in the future
+    if (leaveType === 'Sick Leave') {
+      const today = new Date().toISOString().split('T')[0];
+      if (startDate && startDate > today) e.startDate = 'Sick Leave start date cannot be a future date';
+      if (endDate && endDate > today) e.endDate = 'Sick Leave end date cannot be a future date';
+    }
+
     if (!reason.trim()) e.reason = 'Reason is required';
     if (creditInsufficient) e.credits = `Insufficient credits. Available: ${creditAvailable}, Needed: ${totalDays}`;
     setErrors(e);
