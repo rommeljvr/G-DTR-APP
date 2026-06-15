@@ -1206,6 +1206,10 @@ function submitLeave(data) {
     sheet.getRange(lastRow, 14).setFormula('=HYPERLINK("' + docUrl + '","📄 View")');
   }
 
+  // Fix missing Document ID
+  if (!docId || String(docId).trim() === '') {
+    recoverLeaveDocumentByRow(lastRow);
+  }
   // Deduct leave credits for Paid leaves
   if (data.paymentStatus === 'Paid' && data.leaveType !== 'Emergency Leave') {
     deductLeaveCredit(data.email, data.leaveType, data.totalDays);
@@ -1321,5 +1325,105 @@ function deductLeaveCredit(email, leaveType, days) {
       return;
     }
   }
+}
+
+function recoverLeaveDocumentByRow(rowNumber) {
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+
+  if (!sheet) return;
+
+  if (!rowNumber || rowNumber < 2) {
+    return _json({
+      success: false,
+      message: "Invalid row number. Must be 2 or higher."
+    });
+  }
+
+  var row = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var employeeName = row[1];
+  var email        = row[2];
+
+  var docId        = row[12];
+  var docUrl       = row[13];
+
+  // Already repaired
+  if (docId && String(docId).trim() !== '') {
+    return _json({
+      success: true,
+      message: "Row already has Document ID",
+      row: rowNumber
+    });
+  }
+
+  if (!employeeName && !email) {
+    return _json({
+      success: false,
+      message: "Missing employee information",
+      row: rowNumber
+    });
+  }
+
+  var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+
+  var folder;
+  try {
+    folder = DriveApp.getFolderById(folderId);
+  } catch (e) {
+    return _json({
+      success: false,
+      message: "Folder not found: " + e.toString()
+    });
+  }
+
+  var files = [];
+  var subFolders = folder.getFolders();
+
+  while (subFolders.hasNext()) {
+    var sub = subFolders.next();
+
+    // Only scan Leave document folders
+    if (sub.getName().indexOf('LEAVE_DOCS_') !== 0) continue;
+
+    var f = sub.getFiles();
+
+    while (f.hasNext()) {
+      files.push(f.next());
+    }
+  }
+
+  var cleanName = String(employeeName || email)
+    .replace(/[^a-zA-Z0-9]/g, '_');
+
+  for (var i = 0; i < files.length; i++) {
+
+    var file = files[i];
+    var fileName = file.getName();
+
+    if (fileName.indexOf('LEAVE_' + cleanName) > -1) {
+
+      var id  = file.getId();
+      var url = 'https://drive.google.com/file/d/' + id + '/view';
+
+      sheet.getRange(rowNumber, 13).setValue(id);
+      sheet.getRange(rowNumber, 14).setValue(url);
+
+      return _json({
+        success: true,
+        message: "Leave document recovered successfully",
+        row: rowNumber,
+        documentId: id,
+        documentUrl: url
+      });
+    }
+  }
+
+  return _json({
+    success: false,
+    message: "No matching leave document found",
+    row: rowNumber
+  });
 }
 `;

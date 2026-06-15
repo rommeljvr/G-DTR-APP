@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   FileText, ChevronLeft, Calendar, User as UserIcon,
-  AlertCircle, CheckCircle2, Loader2, Info, CreditCard,
-  Clock, Sun, Sunset, Paperclip, X, ExternalLink,
+  AlertCircle, CheckCircle2, XCircle, Loader2, Info, CreditCard,
+  Clock, Sun, Sunset, Paperclip, X,
 } from 'lucide-react';
 import { User, LeaveType, LeaveMode, HalfDayPeriod, PaymentStatus, LeaveCredits } from '../types';
 import { getLeaveCredits, submitLeaveApplication } from '../utils/sheets';
@@ -57,7 +57,6 @@ export default function LeaveApplication({ user, onBack }: Props) {
   const [creditsError, setCreditsError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [submittedDocUrl, setSubmittedDocUrl] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // ── Rules enforcement ──────────────────────────────────────────
@@ -188,7 +187,6 @@ export default function LeaveApplication({ user, onBack }: Props) {
     setResult({ type: res.success ? 'success' : 'error', message: res.message });
 
     if (res.success) {
-      setSubmittedDocUrl(res.docUrl || '');
       setStartDate('');
       setEndDate('');
       setReason('');
@@ -206,8 +204,46 @@ export default function LeaveApplication({ user, onBack }: Props) {
 
   const today = new Date().toISOString().split('T')[0];
 
+  const dismissResult = () => setResult(null);
+
   return (
     <div className="min-h-dvh flex flex-col pb-24 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+
+      {/* Processing overlay */}
+      {submitting && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-8 mx-6 text-center border border-white/20 slide-up">
+            <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
+            <h3 className="text-white font-semibold text-lg mb-1">Processing</h3>
+            <p className="text-blue-200/70 text-sm">Submitting leave application…</p>
+          </div>
+        </div>
+      )}
+
+      {/* Result modal */}
+      {result && !submitting && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 mx-2 w-full max-w-sm border border-white/10 slide-up">
+            <div className="text-center mb-5">
+              {result.type === 'success' ? (
+                <CheckCircle2 className="w-14 h-14 text-green-400 mx-auto mb-3" />
+              ) : (
+                <XCircle className="w-14 h-14 text-red-400 mx-auto mb-3" />
+              )}
+              <h3 className="text-white font-bold text-lg mb-1">
+                {result.type === 'success' ? 'Leave Submitted!' : 'Submission Failed'}
+              </h3>
+              <p className="text-blue-200/70 text-sm whitespace-pre-line">{result.message}</p>
+            </div>
+            <button
+              onClick={dismissResult}
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold py-3 rounded-xl active:scale-95 transition-transform"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-xl border-b border-white/10">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
@@ -513,46 +549,13 @@ export default function LeaveApplication({ user, onBack }: Props) {
           </div>
         )}
 
-        {/* Result */}
-        {result && (
-          <div className={`flex items-start gap-3 rounded-2xl p-4 border ${
-            result.type === 'success'
-              ? 'bg-green-500/10 border-green-400/20'
-              : 'bg-red-500/10 border-red-400/20'
-          }`}>
-            {result.type === 'success'
-              ? <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-              : <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
-            <div className="flex flex-col gap-1.5">
-              <p className={`text-sm ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
-                {result.message}
-              </p>
-              {result.type === 'success' && submittedDocUrl && (
-                <a
-                  href={submittedDocUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-blue-300 text-xs underline underline-offset-2"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  View attached document
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Submit */}
         <button
           onClick={handleSubmit}
           disabled={submitting || creditInsufficient}
           className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-bold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 text-sm"
         >
-          {submitting ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
-          ) : (
-            <><FileText className="w-4 h-4" /> Submit Leave Application</>
-          )}
+          <FileText className="w-4 h-4" /> Submit Leave Application
         </button>
 
       </div>
