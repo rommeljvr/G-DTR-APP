@@ -1285,6 +1285,8 @@ function submitLeave(data) {
   // Deduct leave credits for Paid leaves
   if (data.paymentStatus === 'Paid' && data.leaveType !== 'Emergency Leave') {
     deductLeaveCredit(data.email, data.leaveType, data.totalDays);
+    logCreditTransaction(data.email, data.employeeName || '', data.leaveType, data.totalDays, 'Deduct', id,
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"));
   }
 
   try { sheet.autoResizeColumns(1, 16); } catch (ex) {}
@@ -1322,9 +1324,13 @@ function cancelLeave(id, email) {
     return -1;
   }
 
-  var cId     = col('ID');
-  var cEmail  = col('Email');
-  var cStatus = col('Status');
+  var cId            = col('ID');
+  var cEmail         = col('Email');
+  var cStatus        = col('Status');
+  var cLeaveType     = col('Leave Type');
+  var cPayment       = col('Payment Status');
+  var cTotalDays     = col('Total Days');
+  var cEmployeeName  = col('Employee Name');
 
   if (cId === -1 || cEmail === -1 || cStatus === -1) {
     return _json({ success: false, message: 'Required columns not found in LeaveApplications sheet' });
@@ -1342,22 +1348,27 @@ function cancelLeave(id, email) {
       return _json({ success: false, message: 'Unauthorized: this application does not belong to you' });
     }
 
-    // Only Pending can be cancelled
+    // Idempotency: only Pending can be cancelled (prevents duplicate credit restoration)
     if (rowStatus !== 'Pending') {
       return _json({ success: false, message: 'Only Pending applications can be cancelled. Current status: ' + rowStatus });
     }
 
+    var leaveType     = cLeaveType    !== -1 ? String(rows[i][cLeaveType]    || '').trim() : '';
+    var paymentStatus = cPayment      !== -1 ? String(rows[i][cPayment]      || '').trim() : '';
+    var totalDays     = cTotalDays    !== -1 ? Number(rows[i][cTotalDays])   || 0 : 0;
+    var employeeName  = cEmployeeName !== -1 ? String(rows[i][cEmployeeName] || '').trim() : '';
+
     var cancelledAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
     var sheetRow = i + 1;
 
+    // 1. Update status to Cancelled
     sheet.getRange(sheetRow, cStatus + 1).setValue('Cancelled');
 
-    // Record cancellation timestamp in the column after Status if it exists
+    // 2. Record cancellation timestamp
     var cCancelledAt = col('Cancelled At');
     if (cCancelledAt !== -1) {
       sheet.getRange(sheetRow, cCancelledAt + 1).setValue(cancelledAt);
     } else {
-      // Append timestamp note to reason column if no dedicated column
       var cReason = col('Reason');
       if (cReason !== -1) {
         var existingReason = String(sheet.getRange(sheetRow, cReason + 1).getValue() || '');
@@ -1365,15 +1376,71 @@ function cancelLeave(id, email) {
       }
     }
 
+    // 3. Restore leave credits for Paid, non-Emergency credit-bearing leave types
+    var creditTypes = { 'Vacation Leave': true, 'Sick Leave': true, 'Birthday Leave': true };
+    var creditsRestored = false;
+    if (paymentStatus === 'Paid' && creditTypes[leaveType] && totalDays > 0) {
+      restoreLeaveCredit(rowEmail, leaveType, totalDays);
+      logCreditTransaction(rowEmail, employeeName, leaveType, totalDays, 'Restore', id, cancelledAt);
+      creditsRestored = true;
+    }
+
     return _json({
       success: true,
-      message: 'Leave application cancelled successfully',
+      message: 'Leave application cancelled successfully' + (creditsRestored ? '. Leave credits restored.' : ''),
       id: id,
-      cancelledAt: cancelledAt
+      cancelledAt: cancelledAt,
+      creditsRestored: creditsRestored,
+      restoredDays: creditsRestored ? totalDays : 0
     });
   }
 
   return _json({ success: false, message: 'Leave application not found with ID: ' + id });
+}
+
+function restoreLeaveCredit(email, leaveType, days) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveCredits');
+  if (!sheet) return;
+
+  var colMap = {
+    'Vacation Leave': 'Vacation Leave',
+    'Sick Leave':     'Sick Leave',
+    'Birthday Leave': 'Birthday Leave'
+  };
+
+  var creditCol = colMap[leaveType];
+  if (!creditCol) return;
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var colEmail  = findColumnIndex(headers, ['Email', 'Email Address']);
+  var colCredit = findColumnIndex(headers, [creditCol]);
+  if (colEmail === -1 || colCredit === -1) return;
+
+  var emailLower = String(email).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][colEmail] || '').trim().toLowerCase() === emailLower) {
+      var current = Number(rows[i][colCredit]) || 0;
+      sheet.getRange(i + 1, colCredit + 1).setValue(current + days);
+      return;
+    }
+  }
+}
+
+function logCreditTransaction(email, employeeName, leaveType, days, txType, leaveId, timestamp) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveCreditTransactions');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('LeaveCreditTransactions');
+    sheet.appendRow(['Timestamp', 'Employee Name', 'Email', 'Leave Type', 'Transaction Type', 'Days', 'Leave ID']);
+    var hdr = sheet.getRange(1, 1, 1, 7);
+    hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([timestamp, employeeName, email, leaveType, txType, days, leaveId]);
 }
 
 // ══════════════════════════════════════════════════════════════════
