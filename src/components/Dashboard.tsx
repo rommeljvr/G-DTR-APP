@@ -10,6 +10,7 @@ import CameraCapture from './CameraCapture';
 import AttendanceHistory from './AttendanceHistory';
 import SetupScreen from './SetupScreen';
 import LeaveApplication from './LeaveApplication';
+import LeaveReport from './LeaveReport';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -38,7 +39,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'setup';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -321,7 +322,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   if (activeTab === 'leave') {
-    return <LeaveApplication user={user} onBack={() => setActiveTab('home')} />;
+    return <LeaveApplication user={user} onBack={() => setActiveTab('home')} onViewReports={() => setActiveTab('leave-report')} />;
+  }
+
+  if (activeTab === 'leave-report') {
+    return <LeaveReport user={user} onBack={() => setActiveTab('leave')} />;
   }
 
   // ── Main render ──────────────────────────────────────────
@@ -717,6 +722,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
               { id: 'home' as Tab, icon: Clock, label: 'Home' },
               { id: 'history' as Tab, icon: History, label: 'History' },
               { id: 'leave' as Tab, icon: FileText, label: 'Leave' },
+              { id: 'leave-report' as Tab, icon: FileText, label: 'Reports' },
               { id: 'setup' as Tab, icon: Settings, label: 'Settings' },
             ] as const
           ).map(({ id, icon: Icon, label }) => (

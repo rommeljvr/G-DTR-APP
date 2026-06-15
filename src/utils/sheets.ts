@@ -220,6 +220,48 @@ export async function submitLeaveApplication(
   }
 }
 
+// ─── leave history ────────────────────────────────────────────────
+
+export interface LeaveRecord {
+  id: string;
+  employeeName: string;
+  email: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  mode: string;
+  halfDayPeriod: string;
+  entries: string;
+  totalDays: number;
+  paymentStatus: string;
+  reason: string;
+  docId: string;
+  docUrl: string;
+  status: string;
+  submittedAt: string;
+}
+
+export async function getLeaveHistory(
+  email: string
+): Promise<{ success: boolean; records: LeaveRecord[]; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, records: [], message: 'No script URL configured' };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getLeaveHistory&email=${encodeURIComponent(email)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    if (json.success) {
+      return { success: true, records: json.records || [], message: json.message || 'OK' };
+    }
+    return { success: false, records: [], message: json.message || 'Failed to fetch history' };
+  } catch (err) {
+    console.error('getLeaveHistory error:', err);
+    return { success: false, records: [], message: 'Unable to fetch leave history' };
+  }
+}
+
 // ─── fetch image as base64 from Google Drive ──────────────────────
 
 const imageCache = new Map<string, string>();
@@ -508,6 +550,7 @@ function doGet(e) {
   if (action === 'getSettings')      return getSettings();
   if (action === 'getLeaveCredits')  return getLeaveCredits(email);
   if (action === 'getDocument')      return getDocument(id);
+  if (action === 'getLeaveHistory')  return getLeaveHistory(email);
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -1224,6 +1267,94 @@ function submitLeave(data) {
     docId: docId,
     docUrl: docUrl
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LEAVE HISTORY
+//  Returns all leave applications for a given email
+// ══════════════════════════════════════════════════════════════════
+
+function getLeaveHistory(email) {
+  if (!email) return _json({ success: false, message: 'Email is required' });
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return _json({ success: true, records: [], message: 'No leave applications found' });
+  }
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var emailLower = String(email).trim().toLowerCase();
+
+  // Map header names to column indices
+  function col(names) {
+    for (var n = 0; n < names.length; n++) {
+      for (var c = 0; c < headers.length; c++) {
+        if (String(headers[c]).trim().toLowerCase() === names[n].toLowerCase()) return c;
+      }
+    }
+    return -1;
+  }
+
+  var cId     = col(['ID']);
+  var cName   = col(['Employee Name']);
+  var cEmail  = col(['Email']);
+  var cType   = col(['Leave Type']);
+  var cStart  = col(['Start Date']);
+  var cEnd    = col(['End Date']);
+  var cMode   = col(['Mode']);
+  var cHalf   = col(['Half Day Period']);
+  var cEntry  = col(['Entries (JSON)']);
+  var cDays   = col(['Total Days']);
+  var cPay    = col(['Payment Status']);
+  var cReason = col(['Reason']);
+  var cDocId  = col(['Document ID']);
+  var cDocUrl = col(['Document URL']);
+  var cStatus = col(['Status']);
+  var cFiled  = col(['Submitted At']);
+
+  var records = [];
+
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i];
+    var rowEmail = String(row[cEmail] || '').trim().toLowerCase();
+    if (rowEmail !== emailLower) continue;
+
+    var docUrlVal = cDocUrl !== -1 ? String(row[cDocUrl] || '') : '';
+    // Strip HYPERLINK formula if present
+    if (docUrlVal.indexOf('HYPERLINK') > -1) {
+      var m = docUrlVal.match(/https:\/\/[^"]+/);
+      docUrlVal = m ? m[0] : '';
+    }
+
+    records.push({
+      id:            cId     !== -1 ? String(row[cId]     || '') : '',
+      employeeName:  cName   !== -1 ? String(row[cName]   || '') : '',
+      email:         cEmail  !== -1 ? String(row[cEmail]  || '') : '',
+      leaveType:     cType   !== -1 ? String(row[cType]   || '') : '',
+      startDate:     cStart  !== -1 ? String(row[cStart]  || '') : '',
+      endDate:       cEnd    !== -1 ? String(row[cEnd]    || '') : '',
+      mode:          cMode   !== -1 ? String(row[cMode]   || '') : '',
+      halfDayPeriod: cHalf   !== -1 ? String(row[cHalf]  || '') : '',
+      entries:       cEntry  !== -1 ? String(row[cEntry]  || '[]') : '[]',
+      totalDays:     cDays   !== -1 ? Number(row[cDays]   || 0)   : 0,
+      paymentStatus: cPay    !== -1 ? String(row[cPay]   || '') : '',
+      reason:        cReason !== -1 ? String(row[cReason] || '') : '',
+      docId:         cDocId  !== -1 ? String(row[cDocId]  || '') : '',
+      docUrl:        docUrlVal,
+      status:        cStatus !== -1 ? String(row[cStatus] || 'Pending') : 'Pending',
+      submittedAt:   cFiled  !== -1 ? String(row[cFiled]  || '') : ''
+    });
+  }
+
+  // Sort newest first
+  records.sort(function(a, b) {
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+  });
+
+  return _json({ success: true, records: records });
 }
 
 // ══════════════════════════════════════════════════════════════════

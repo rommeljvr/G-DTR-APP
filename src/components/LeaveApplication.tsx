@@ -10,6 +10,7 @@ import { getLeaveCredits, submitLeaveApplication } from '../utils/sheets';
 interface Props {
   user: User;
   onBack: () => void;
+  onViewReports?: () => void;
 }
 
 const LEAVE_TYPES: LeaveType[] = ['Vacation Leave', 'Sick Leave', 'Birthday Leave', 'Emergency Leave'];
@@ -40,7 +41,7 @@ function getDatesBetween(start: string, end: string): string[] {
   return dates;
 }
 
-export default function LeaveApplication({ user, onBack }: Props) {
+export default function LeaveApplication({ user, onBack, onViewReports }: Props) {
   const emp = user.employee;
 
   const [leaveType, setLeaveType] = useState<LeaveType>('Vacation Leave');
@@ -253,10 +254,19 @@ export default function LeaveApplication({ user, onBack }: Props) {
           >
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <FileText className="w-5 h-5 text-blue-400" />
             <h1 className="text-white font-bold text-base">Leave Application</h1>
           </div>
+          {onViewReports && (
+            <button
+              onClick={onViewReports}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/15 border border-blue-400/20 text-blue-300 text-xs font-medium active:scale-90 transition-transform"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              Reports
+            </button>
+          )}
         </div>
       </div>
 
