@@ -19,7 +19,6 @@ import {
   Camera,
   History,
   Settings,
-  FileText,
   User as UserIcon,
   Loader2,
   CheckCircle2,
@@ -29,7 +28,10 @@ import {
   Building2,
   X,
   Briefcase,
-  MoreVertical,
+  Menu,
+  Smartphone,
+  ClipboardList,
+  BarChart2,
 } from 'lucide-react';
 
 interface Props {
@@ -62,8 +64,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isCountingDown, setIsCountingDown] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [shortcutNotice, setShortcutNotice] = useState(false);
+
+  const ADMIN_EMAIL = 'rommeljvr@gmail.com';
+  const isAdmin = user.email?.toLowerCase() === ADMIN_EMAIL;
 
   const nextAction: 'TIME_IN' | 'TIME_OUT' =
     lastAction?.action === 'TIME_IN' ? 'TIME_OUT' : 'TIME_IN';
@@ -318,6 +323,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   if (activeTab === 'setup') {
+    if (!isAdmin) return null;
     return <SetupScreen onBack={() => setActiveTab('home')} />;
   }
 
@@ -714,6 +720,117 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
       </div>
 
+      {/* ── Drawer overlay backdrop ───────────────────── */}
+      {showDrawer && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+          onClick={() => setShowDrawer(false)}
+        />
+      )}
+
+      {/* ── Drawer panel ─────────────────────────────── */}
+      <div
+        className={`fixed top-0 right-0 h-full w-72 max-w-[85vw] z-50 flex flex-col bg-slate-900 border-l border-white/10 shadow-2xl transition-transform duration-300 ease-in-out ${
+          showDrawer ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Drawer header – close */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-white/10 rounded-lg p-0.5">
+              <img src="/logo.png" alt="" className="w-full h-full object-contain" />
+            </div>
+            <span className="text-white/80 font-semibold text-sm">Menu</span>
+          </div>
+          <button
+            onClick={() => setShowDrawer(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform"
+          >
+            <X className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        {/* User profile */}
+        <div className="px-5 py-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center shrink-0">
+              <UserIcon className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-semibold text-sm truncate">{user.name}</p>
+              <p className="text-white/40 text-xs truncate">{user.email}</p>
+              {emp?.department && (
+                <span className="text-emerald-400/80 text-[10px] font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                  {emp.department}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Nav items */}
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('leave'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'leave' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <ClipboardList className="w-4.5 h-4.5 shrink-0" />
+            Leave Filing
+          </button>
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('leave-report'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'leave-report' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <BarChart2 className="w-4.5 h-4.5 shrink-0" />
+            Leave Reports
+          </button>
+
+          <button
+            onClick={async () => {
+              setShowDrawer(false);
+              if (installPrompt && !isInstalled) {
+                await installPrompt.prompt();
+              } else {
+                setShortcutNotice(true);
+              }
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-white/70 hover:bg-white/8 transition-colors active:scale-[0.98]"
+          >
+            <Smartphone className="w-4.5 h-4.5 shrink-0" />
+            Add Shortcut
+          </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => { setShowDrawer(false); setActiveTab('setup'); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+                activeTab === 'setup' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+              }`}
+            >
+              <Settings className="w-4.5 h-4.5 shrink-0" />
+              Settings
+              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+            </button>
+          )}
+        </nav>
+
+        {/* Drawer footer – logout */}
+        <div className="px-3 pb-6 pt-2 border-t border-white/10">
+          <button
+            onClick={() => { setShowDrawer(false); onLogout(); }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400/80 hover:bg-red-500/10 transition-colors active:scale-[0.98]"
+          >
+            <LogOutIcon className="w-4.5 h-4.5 shrink-0" />
+            Logout
+          </button>
+        </div>
+      </div>
+
       {/* ── Bottom nav ───────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10">
         <div className="flex items-end justify-around py-2 pb-3 max-w-lg mx-auto">
@@ -721,15 +838,12 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             [
               { id: 'home' as Tab, icon: Clock, label: 'Home' },
               { id: 'history' as Tab, icon: History, label: 'History' },
-              { id: 'leave' as Tab, icon: FileText, label: 'Leave' },
-              { id: 'leave-report' as Tab, icon: FileText, label: 'Reports' },
-              { id: 'setup' as Tab, icon: Settings, label: 'Settings' },
             ] as const
           ).map(({ id, icon: Icon, label }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all active:scale-90 ${
+              className={`flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition-all active:scale-90 ${
                 activeTab === id ? 'text-blue-400' : 'text-white/40'
               }`}
             >
@@ -738,40 +852,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             </button>
           ))}
 
-          {/* 3-dot menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu((prev: boolean) => !prev)}
-              className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all active:scale-90 text-white/40"
-            >
-              <MoreVertical className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Menu</span>
-            </button>
-
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute bottom-12 right-0 z-50 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
-                  <button
-                    onClick={async () => {
-                      setShowMenu(false);
-                      if (installPrompt && !isInstalled) {
-                        await installPrompt.prompt();
-                      } else {
-                        setShortcutNotice(true);
-                      }
-                    }}
-                    className="w-full text-left px-4 py-3 text-white/80 text-sm hover:bg-white/10 active:bg-white/20 transition-colors"
-                  >
-                    Add Shortcut
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Hamburger → drawer */}
+          <button
+            onClick={() => setShowDrawer(true)}
+            className={`flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition-all active:scale-90 ${
+              ['leave','leave-report','setup'].includes(activeTab) ? 'text-blue-400' : 'text-white/40'
+            }`}
+          >
+            <Menu className="w-5 h-5" />
+            <span className="text-[10px] font-medium">More</span>
+          </button>
         </div>
       </div>
     </div>

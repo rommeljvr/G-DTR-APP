@@ -459,6 +459,7 @@ export const APPS_SCRIPT_TEMPLATE = `
 //
 // ================================================================
 
+var ADMIN_EMAIL       = 'rommeljvr@gmail.com';
 var DEFAULT_FOLDER_ID = '10Qvt5AZuPe7NPuOTWBJ_q6d_0SmdKYbX';
 var DEFAULT_APP_TITLE = 'Smart DTR System';
 var DEFAULT_ORG       = 'MIlMetro';
@@ -518,7 +519,7 @@ function doPost(e) {
     if (data.action === 'validateEmployee') return validateEmployee(data.email);
     if (data.action === 'getLastAction')    return getLastAction(data.email);
     if (data.action === 'getHistory')       return getHistory(data.email);
-    if (data.action === 'getSettings')      return getSettings();
+    if (data.action === 'getSettings')      return (data.email && data.email.toLowerCase() === ADMIN_EMAIL) ? getSettings() : _json({ success: false, message: 'Unauthorized' });
     if (data.action === 'submitLeave')      return submitLeave(data.data);
 
     return _json({ success: false, message: 'Unknown action' });
@@ -547,7 +548,7 @@ function doGet(e) {
   if (action === 'getImage')         return getImage(id);
   if (action === 'getLastAction')    return getLastAction(email);
   if (action === 'getHistory')       return getHistory(email);
-  if (action === 'getSettings')      return getSettings();
+  if (action === 'getSettings')      return (email && email.toLowerCase() === ADMIN_EMAIL) ? getSettings() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'getLeaveCredits')  return getLeaveCredits(email);
   if (action === 'getDocument')      return getDocument(id);
   if (action === 'getLeaveHistory')  return getLeaveHistory(email);
