@@ -37,11 +37,12 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const data = await getNotifications(user.email);
-    setItems(data);
+    // Only show unread — read ones were already dismissed and should stay gone
+    const unreadItems = data.filter((n) => !n.isRead);
+    setItems(unreadItems);
     setLoading(false);
-    // Mark all read immediately so the badge clears
-    if (data.some((n) => !n.isRead)) {
-      await markNotificationsRead(user.email);
+    if (unreadItems.length < data.length) {
+      // Some were already read — badge should be clear
       onRead();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
