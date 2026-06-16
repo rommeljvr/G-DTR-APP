@@ -247,6 +247,97 @@ export async function cancelLeave(
   }
 }
 
+// ─── employee maintenance ─────────────────────────────────────────
+
+export interface EmployeeRecord {
+  email: string;
+  name: string;
+  wage: number;
+  role: string;
+  image: string;
+  department: string;
+  designation: string;
+  active: boolean;
+}
+
+export interface EmployeePayload {
+  email: string;
+  employee_name: string;
+  hourly_wage: number;
+  role: string;
+  department: string;
+  designation: string;
+  image?: string;
+}
+
+async function employeePost(body: object): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    return { success: !!json.success, message: json.message || (json.success ? 'OK' : 'Request failed') };
+  } catch (err) {
+    console.error('employeePost error:', err);
+    return { success: false, message: 'Network error' };
+  }
+}
+
+export async function getEmployees(): Promise<{ success: boolean; employees: EmployeeRecord[]; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, employees: [], message: 'No script URL configured' };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getEmployees`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    if (json.success) return { success: true, employees: json.employees || [], message: '' };
+    return { success: false, employees: [], message: json.message || 'Failed to load employees' };
+  } catch (err) {
+    console.error('getEmployees error:', err);
+    return { success: false, employees: [], message: 'Unable to fetch employees' };
+  }
+}
+
+export async function getDepartments(): Promise<{ success: boolean; departments: string[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, departments: [] };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getDepartments`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return { success: true, departments: json.departments || [] };
+  } catch {
+    return { success: false, departments: [] };
+  }
+}
+
+export async function getDesignations(): Promise<{ success: boolean; designations: string[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, designations: [] };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getDesignations`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return { success: true, designations: json.designations || [] };
+  } catch {
+    return { success: false, designations: [] };
+  }
+}
+
+export async function createEmployee(payload: EmployeePayload): Promise<{ success: boolean; message: string }> {
+  return employeePost({ action: 'createEmployee', ...payload });
+}
+
+export async function updateEmployee(payload: EmployeePayload): Promise<{ success: boolean; message: string }> {
+  return employeePost({ action: 'updateEmployee', ...payload });
+}
+
+export async function deactivateEmployee(email: string, active: boolean): Promise<{ success: boolean; message: string }> {
+  return employeePost({ action: 'deactivateEmployee', email, active });
+}
+
 // ─── leave history ────────────────────────────────────────────────
 
 export interface LeaveRecord {
@@ -549,6 +640,9 @@ function doPost(e) {
     if (data.action === 'getSettings')      return (data.email && data.email.toLowerCase() === ADMIN_EMAIL) ? getSettings() : _json({ success: false, message: 'Unauthorized' });
     if (data.action === 'submitLeave')      return submitLeave(data.data);
     if (data.action === 'cancelLeave')      return cancelLeave(data.id, data.email);
+    if (data.action === 'createEmployee')   return createEmployee(data);
+    if (data.action === 'updateEmployee')   return updateEmployee(data);
+    if (data.action === 'deactivateEmployee') return deactivateEmployee(data.email, data.active);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -580,6 +674,9 @@ function doGet(e) {
   if (action === 'getLeaveCredits')  return getLeaveCredits(email);
   if (action === 'getDocument')      return getDocument(id);
   if (action === 'getLeaveHistory')  return getLeaveHistory(email);
+  if (action === 'getEmployees')     return getEmployeeList();
+  if (action === 'getDepartments')   return getDepartmentList();
+  if (action === 'getDesignations')  return getDesignationList();
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -1441,6 +1538,139 @@ function logCreditTransaction(email, employeeName, leaveType, days, txType, leav
   }
 
   sheet.appendRow([timestamp, employeeName, email, leaveType, txType, days, leaveId]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  EMPLOYEE MAINTENANCE CRUD
+// ══════════════════════════════════════════════════════════════════
+
+function getEmployeeSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Employees');
+  if (!sheet) {
+    sheet = ss.insertSheet('Employees');
+    sheet.appendRow(['Email', 'Employee Name', 'Hourly Wage', 'Role', 'Image', 'Department', 'Designation', 'ACTIVE']);
+    var hdr = sheet.getRange(1, 1, 1, 8);
+    hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function rowToEmployee(row) {
+  return {
+    email:       String(row[0] || '').trim(),
+    name:        String(row[1] || '').trim(),
+    wage:        Number(row[2]) || 0,
+    role:        String(row[3] || '').trim(),
+    image:       String(row[4] || '').trim(),
+    department:  String(row[5] || '').trim(),
+    designation: String(row[6] || '').trim(),
+    active:      String(row[7]).trim().toLowerCase() !== 'false'
+  };
+}
+
+function getEmployeeList() {
+  var sheet = getEmployeeSheet();
+  var rows = sheet.getDataRange().getValues();
+  var employees = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim()) {
+      employees.push(rowToEmployee(rows[i]));
+    }
+  }
+  return _json({ success: true, employees: employees });
+}
+
+function createEmployee(data) {
+  if (!data.email)         return _json({ success: false, message: 'Email is required' });
+  if (!data.employee_name) return _json({ success: false, message: 'Employee name is required' });
+
+  var sheet = getEmployeeSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var emailLower = String(data.email).trim().toLowerCase();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === emailLower) {
+      return _json({ success: false, message: 'An employee with this email already exists' });
+    }
+  }
+
+  sheet.appendRow([
+    emailLower,
+    String(data.employee_name || '').trim(),
+    Number(data.hourly_wage)  || 0,
+    String(data.role         || 'Level 1').trim(),
+    String(data.image        || '').trim(),
+    String(data.department   || '').trim(),
+    String(data.designation  || '').trim(),
+    true
+  ]);
+
+  return _json({ success: true, message: 'Employee created successfully' });
+}
+
+function updateEmployee(data) {
+  if (!data.email) return _json({ success: false, message: 'Email is required' });
+
+  var sheet     = getEmployeeSheet();
+  var rows      = sheet.getDataRange().getValues();
+  var emailLower = String(data.email).trim().toLowerCase();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === emailLower) {
+      sheet.getRange(i + 1, 2, 1, 6).setValues([[
+        String(data.employee_name || rows[i][1]).trim(),
+        Number(data.hourly_wage)  || rows[i][2] || 0,
+        String(data.role         || rows[i][3] || '').trim(),
+        String(data.image        || rows[i][4] || '').trim(),
+        String(data.department   || rows[i][5] || '').trim(),
+        String(data.designation  || rows[i][6] || '').trim()
+      ]]);
+      return _json({ success: true, message: 'Employee updated successfully' });
+    }
+  }
+
+  return _json({ success: false, message: 'Employee not found' });
+}
+
+function deactivateEmployee(email, active) {
+  if (!email) return _json({ success: false, message: 'Email is required' });
+
+  var sheet     = getEmployeeSheet();
+  var rows      = sheet.getDataRange().getValues();
+  var emailLower = String(email).trim().toLowerCase();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === emailLower) {
+      sheet.getRange(i + 1, 8).setValue(active === true || active === 'true');
+      return _json({ success: true, message: active ? 'Employee reactivated' : 'Employee deactivated' });
+    }
+  }
+
+  return _json({ success: false, message: 'Employee not found' });
+}
+
+function getDepartmentList() {
+  var sheet = getEmployeeSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var depts = {};
+  for (var i = 1; i < rows.length; i++) {
+    var d = String(rows[i][5] || '').trim();
+    if (d) depts[d] = true;
+  }
+  return _json({ success: true, departments: Object.keys(depts).sort() });
+}
+
+function getDesignationList() {
+  var sheet = getEmployeeSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var desgs = {};
+  for (var i = 1; i < rows.length; i++) {
+    var d = String(rows[i][6] || '').trim();
+    if (d) desgs[d] = true;
+  }
+  return _json({ success: true, designations: Object.keys(desgs).sort() });
 }
 
 // ══════════════════════════════════════════════════════════════════

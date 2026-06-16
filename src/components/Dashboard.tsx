@@ -11,6 +11,7 @@ import AttendanceHistory from './AttendanceHistory';
 import SetupScreen from './SetupScreen';
 import LeaveApplication from './LeaveApplication';
 import LeaveReport from './LeaveReport';
+import EmployeeMaintenance from './EmployeeMaintenance';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -41,7 +42,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -325,6 +326,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'setup') {
     if (!isAdmin) return null;
     return <SetupScreen onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'employees') {
+    if (!isAdmin) return null;
+    return <EmployeeMaintenance onBack={() => setActiveTab('home')} />;
   }
 
   if (activeTab === 'leave') {
@@ -804,6 +810,19 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             <Smartphone className="w-4.5 h-4.5 shrink-0" />
             Add Shortcut
           </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => { setShowDrawer(false); setActiveTab('employees'); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+                activeTab === 'employees' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+              }`}
+            >
+              <Building2 className="w-4.5 h-4.5 shrink-0" />
+              Employee Maintenance
+              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+            </button>
+          )}
 
           {isAdmin && (
             <button
