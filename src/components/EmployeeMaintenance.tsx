@@ -30,6 +30,7 @@ function initials(name: string): string {
 
 function Avatar({ image, name, size = 'md' }: { image?: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
   const [err, setErr] = useState(false);
+  useEffect(() => { setErr(false); }, [image]);
   const dim = size === 'lg' ? 'w-16 h-16 text-lg' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
   if (image && !err) {
     return <img src={image} alt={name} onError={() => setErr(true)} className={`${dim} rounded-full object-cover shrink-0`} />;
