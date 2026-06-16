@@ -1035,8 +1035,9 @@ function getAttendanceMonitor() {
   var attSheet    = ss.getSheetByName('Attendance');
   var leaveSheet  = ss.getSheetByName('Leave Applications');
 
-  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy');
-  var todayAlt = new Date().toLocaleDateString('en-US');
+  var todayDate = new Date();
+  var today     = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'M/d/yyyy');
+  var todayAlt  = (todayDate.getMonth()+1) + '/' + todayDate.getDate() + '/' + todayDate.getFullYear();
 
   // ── Read all employees ──────────────────────────────────────────
   var employees = [];
@@ -1094,7 +1095,13 @@ function getAttendanceMonitor() {
   if (attSheet && attSheet.getLastRow() > 1) {
     var attRows = attSheet.getDataRange().getValues();
     for (var ai = 1; ai < attRows.length; ai++) {
-      var attDate  = String(attRows[ai][6] || '').trim();
+      var rawDate  = attRows[ai][6];
+      var attDate;
+      if (rawDate instanceof Date) {
+        attDate = (rawDate.getMonth()+1) + '/' + rawDate.getDate() + '/' + rawDate.getFullYear();
+      } else {
+        attDate = String(rawDate || '').trim();
+      }
       if (attDate !== today && attDate !== todayAlt) continue;
       var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
       var attAction = String(attRows[ai][4] || '').trim();
@@ -1130,7 +1137,17 @@ function getAttendanceMonitor() {
       if (tout) {
         status = 'Completed';
       } else {
-        var tinHour = tin.timestamp ? new Date(tin.timestamp).getHours() : lateThresholdHour;
+        var tinHour = lateThresholdHour;
+        if (tin.time) {
+          var timeParts = String(tin.time).match(/(\d+):(\d+).*?(AM|PM)/i);
+          if (timeParts) {
+            var h = parseInt(timeParts[1], 10);
+            var isPM = timeParts[3].toUpperCase() === 'PM';
+            if (isPM && h !== 12) h += 12;
+            if (!isPM && h === 12) h = 0;
+            tinHour = h;
+          }
+        }
         status = tinHour >= lateThresholdHour ? 'Late' : 'Active';
       }
     } else {
