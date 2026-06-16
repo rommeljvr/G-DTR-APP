@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   XCircle,
   CalendarOff,
-  AlertTriangle,
   Users,
   Search,
   X,
@@ -28,7 +27,7 @@ interface Props {
   onBack: () => void;
 }
 
-type StatusFilter = 'All' | 'Active' | 'Completed' | 'On Leave' | 'Absent' | 'Late';
+type StatusFilter = 'All' | 'Active' | 'Completed' | 'On Leave' | 'Absent';
 
 const STATUS_CONFIG: Record<string, {
   label: string;
@@ -41,10 +40,9 @@ const STATUS_CONFIG: Record<string, {
   Completed: { label: 'Completed', icon: CheckCircle2,  badge: 'bg-blue-400/15 text-blue-300 border border-blue-400/30',         card: 'border-blue-500/20',   dot: 'bg-blue-400'   },
   'On Leave':{ label: 'On Leave',  icon: CalendarOff,   badge: 'bg-violet-400/15 text-violet-300 border border-violet-400/30',   card: 'border-violet-500/20', dot: 'bg-violet-400' },
   Absent:    { label: 'Absent',    icon: XCircle,       badge: 'bg-red-400/15 text-red-300 border border-red-400/30',            card: 'border-red-500/20',    dot: 'bg-red-400'    },
-  Late:      { label: 'Late',      icon: AlertTriangle, badge: 'bg-amber-400/15 text-amber-300 border border-amber-400/30',       card: 'border-amber-500/20',  dot: 'bg-amber-400'  },
 };
 
-const FILTERS: StatusFilter[] = ['All', 'Active', 'Completed', 'On Leave', 'Absent', 'Late'];
+const FILTERS: StatusFilter[] = ['All', 'Active', 'Completed', 'On Leave', 'Absent'];
 
 function ProfileAvatar({ image, name, size = 'md' }: { image?: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
   const [err, setErr] = useState(false);
@@ -292,7 +290,6 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
     completed: records.filter((r: AttendanceMonitorRecord) => r.status === 'Completed').length,
     onLeave:   records.filter((r: AttendanceMonitorRecord) => r.status === 'On Leave').length,
     absent:    records.filter((r: AttendanceMonitorRecord) => r.status === 'Absent').length,
-    late:      records.filter((r: AttendanceMonitorRecord) => r.status === 'Late').length,
   }), [records]);
 
   const displayed = useMemo(() => {
@@ -315,8 +312,7 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
     { label: 'Active',    value: counts.active,     color: 'text-emerald-300',   bg: 'bg-emerald-500/10' },
     { label: 'Completed', value: counts.completed,  color: 'text-blue-300',      bg: 'bg-blue-500/10' },
     { label: 'On Leave',  value: counts.onLeave,    color: 'text-violet-300',    bg: 'bg-violet-500/10' },
-    { label: 'Absent',    value: counts.absent,     color: 'text-red-300',       bg: 'bg-red-500/10' },
-    { label: 'Late',      value: counts.late,       color: 'text-amber-300',     bg: 'bg-amber-500/10' },
+    { label: 'Absent',    value: counts.absent,     color: 'text-red-300',       bg: 'bg-red-500/10'     },
   ];
 
   return (

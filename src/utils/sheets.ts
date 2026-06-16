@@ -579,7 +579,7 @@ export interface AttendanceMonitorRecord {
   department: string;
   designation: string;
   image: string;
-  status: 'Active' | 'Completed' | 'On Leave' | 'Absent' | 'Late';
+  status: 'Active' | 'Completed' | 'On Leave' | 'Absent';
   timeIn?: string;
   timeInTimestamp?: string;
   timeInLatitude?: number;
@@ -1123,9 +1123,6 @@ function getAttendanceMonitor() {
     }
   }
 
-  // ── Determine work start time threshold for 'Late' ─────────────
-  var lateThresholdHour = 9; // 09:00 AM
-
   // ── Build result ───────────────────────────────────────────────
   var result = employees.map(function(emp) {
     var tin  = timeIns[emp.email];
@@ -1137,18 +1134,7 @@ function getAttendanceMonitor() {
       if (tout) {
         status = 'Completed';
       } else {
-        var tinHour = lateThresholdHour;
-        if (tin.time) {
-          var timeParts = String(tin.time).match(/(\d+):(\d+).*?(AM|PM)/i);
-          if (timeParts) {
-            var h = parseInt(timeParts[1], 10);
-            var isPM = timeParts[3].toUpperCase() === 'PM';
-            if (isPM && h !== 12) h += 12;
-            if (!isPM && h === 12) h = 0;
-            tinHour = h;
-          }
-        }
-        status = tinHour >= lateThresholdHour ? 'Late' : 'Active';
+        status = 'Active';
       }
     } else {
       status = 'Absent';
