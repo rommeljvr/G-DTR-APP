@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
 import { getLastAction, submitAttendance, getUnreadCount, markNotificationsRead } from '../utils/sheets';
+import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
 import { createCompositeImage } from '../utils/imageComposite';
@@ -118,9 +119,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }, []);
 
   useEffect(() => {
+    requestNotificationPermission();
     const pollUnread = async () => {
       const count = await getUnreadCount(user.email);
       setUnreadCount(count);
+      if (count > 0) await checkAndFirePushNotifications(user.email);
     };
     pollUnread();
     const poll = setInterval(pollUnread, 30000);
