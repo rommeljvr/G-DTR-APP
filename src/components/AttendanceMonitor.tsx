@@ -29,7 +29,7 @@ interface Props {
 
 function formatDisplayDate(val: string): string {
   if (!val) return '';
-  const d = new Date(val);
+  const d = new Date(val.replace(/-/g, '/'));
   if (!isNaN(d.getTime())) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
@@ -117,11 +117,16 @@ function DetailModal({
     setHistoryLoading(true);
     const res = await getLeaveHistory(record.email);
     const todayMs = new Date().setHours(0, 0, 0, 0);
+    const parseLocalDate = (s: string) => {
+      const norm = s ? s.replace(/-/g, '/') : '';
+      const d = new Date(norm);
+      return isNaN(d.getTime()) ? 0 : d.setHours(0, 0, 0, 0);
+    };
     const todayLeaves = (res.records || [])
       .filter((r: import('../utils/sheets').LeaveRecord) => {
         if (r.status !== 'Approved') return false;
-        const start = new Date(r.startDate).setHours(0, 0, 0, 0);
-        const end   = new Date(r.endDate).setHours(0, 0, 0, 0);
+        const start = parseLocalDate(r.startDate);
+        const end   = parseLocalDate(r.endDate);
         return start <= todayMs && todayMs <= end;
       })
       .map((r: import('../utils/sheets').LeaveRecord) => ({
