@@ -523,15 +523,52 @@ export default function EmployeeMaintenance({ onBack }: Props) {
 
               {/* imageUrl hidden — managed by camera upload */}
 
-              {/* Result */}
-              {saveResult && (
-                <div className={`flex items-start gap-2 px-4 py-3 rounded-xl border text-sm ${
-                  saveResult.type === 'success'
-                    ? 'bg-emerald-500/10 border-emerald-400/20 text-emerald-300'
-                    : 'bg-red-500/10 border-red-400/20 text-red-300'
-                }`}>
-                  {saveResult.type === 'success' ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                  {saveResult.message}
+              {/* Result modal — rendered inside drawer overlay */}
+              {saveResult && !saving && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center px-4">
+                  <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm border border-white/10">
+                    <div className="text-center mb-5">
+                      {saveResult.type === 'success'
+                        ? <Check className="w-14 h-14 text-emerald-400 mx-auto mb-3" />
+                        : <AlertCircle className="w-14 h-14 text-red-400 mx-auto mb-3" />}
+                      <h3 className="text-white font-bold text-lg mb-1">
+                        {saveResult.type === 'success'
+                          ? (drawerMode === 'create' ? 'Employee Created!' : 'Changes Saved!')
+                          : 'Save Failed'}
+                      </h3>
+                      <p className="text-blue-200/70 text-sm">{saveResult.message}</p>
+                    </div>
+                    {saveResult.type === 'success' ? (
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => {
+                            setSaveResult(null);
+                            if (drawerMode === 'create') {
+                              setForm(EMPTY_FORM);
+                              setFormErrors({});
+                              resetPhotoState();
+                            }
+                          }}
+                          className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold py-3 rounded-xl active:scale-95 transition-transform text-sm"
+                        >
+                          {drawerMode === 'create' ? 'Add Another Employee' : 'Continue Editing'}
+                        </button>
+                        <button
+                          onClick={closeDrawer}
+                          className="w-full py-3 rounded-xl bg-white/5 text-white/60 text-sm font-medium active:scale-95 transition-transform"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setSaveResult(null)}
+                        className="w-full bg-gradient-to-r from-red-500 to-red-700 text-white font-semibold py-3 rounded-xl active:scale-95 transition-transform text-sm"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
