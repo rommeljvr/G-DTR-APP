@@ -20,12 +20,6 @@ function formatDate(val: string): string {
   return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatTs(val: string): string {
-  if (!val) return '';
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? val : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
 const STATUS_STYLE: Record<string, string> = {
   Pending:      'bg-amber-400/15 text-amber-300 border-amber-400/30',
   Acknowledged: 'bg-blue-400/15 text-blue-300 border-blue-400/30',
@@ -33,11 +27,6 @@ const STATUS_STYLE: Record<string, string> = {
   Rejected:     'bg-red-400/15 text-red-300 border-red-400/30',
 };
 
-const ACTION_STYLE: Record<string, string> = {
-  Acknowledge: 'text-blue-300',
-  Approve:     'text-emerald-300',
-  Reject:      'text-red-300',
-};
 
 export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
   const [records, setRecords] = useState<LeaveApplication[]>([]);
@@ -48,6 +37,8 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
   const [success, setSuccess] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectTarget, setRejectTarget] = useState<LeaveApplication | null>(null);
+  const [inlineActingId, setInlineActingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,9 +71,11 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
   };
 
   const handleApprove = async (leave: LeaveApplication) => {
+    setInlineActingId(leave.id);
     setActionLoading(true);
     const res = await approveLeave(leave.id, user.email);
     setActionLoading(false);
+    setInlineActingId(null);
     if (res.success) {
       notify('Leave approved successfully.');
       setSelected(null);
@@ -96,14 +89,16 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
 
   const handleRejectSubmit = async () => {
     if (!rejectReason.trim()) { notify('Rejection reason is required.', true); return; }
-    if (!selected) return;
+    const target = rejectTarget || selected;
+    if (!target) return;
     setActionLoading(true);
-    const res = await rejectLeave(selected.id, user.email, rejectReason);
+    const res = await rejectLeave(target.id, user.email, rejectReason);
     setActionLoading(false);
     if (res.success) {
       notify('Leave rejected.');
       setShowRejectModal(false);
       setRejectReason('');
+      setRejectTarget(null);
       setSelected(null);
       load();
       await markNotificationsRead(user.email);
@@ -111,6 +106,26 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
     } else {
       notify(res.message || 'Failed to reject', true);
     }
+  };
+
+  const handleInlineAcknowledge = async (leave: LeaveApplication) => {
+    setInlineActingId(leave.id);
+    const res = await acknowledgeLeave(leave.id, user.email);
+    setInlineActingId(null);
+    if (res.success) {
+      notify('Leave acknowledged and forwarded.');
+      load();
+      await markNotificationsRead(user.email);
+      onUnreadChange?.();
+    } else {
+      notify(res.message || 'Failed to acknowledge', true);
+    }
+  };
+
+  const openInlineReject = (leave: LeaveApplication) => {
+    setRejectTarget(leave);
+    setRejectReason('');
+    setShowRejectModal(true);
   };
 
   const isTL = (leave: LeaveApplication) =>
@@ -165,37 +180,89 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
           </div>
         )}
 
-        {!loading && records.map((leave) => (
-          <button
-            key={leave.id}
-            onClick={() => setSelected(leave)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform hover:bg-white/8"
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                  <UserIcon className="w-4 h-4 text-blue-300" />
+        {!loading && records.map((leave) => {
+          const isTLCard      = isTL(leave);
+          const isApprCard    = isApprover(leave);
+          const isActingThis  = inlineActingId === leave.id;
+          return (
+            <div key={leave.id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              {/* Tap area → opens detail modal */}
+              <button
+                onClick={() => setSelected(leave)}
+                className="w-full p-4 text-left active:scale-[0.99] transition-transform hover:bg-white/8"
+              >
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                      <UserIcon className="w-4 h-4 text-blue-300" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm truncate">{leave.employeeName}</p>
+                      <p className="text-white/40 text-[11px] truncate">{leave.email}</p>
+                    </div>
+                  </div>
+                  <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLE[leave.status] || 'bg-white/10 text-white/50 border-transparent'}`}>
+                    {leave.status}
+                  </span>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-white font-semibold text-sm truncate">{leave.employeeName}</p>
-                  <p className="text-white/40 text-[11px] truncate">{leave.email}</p>
+                <div className="flex items-center gap-4 text-[11px] text-white/50">
+                  <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{leave.leaveType}</span>
+                  <span>{formatDate(leave.startDate)} → {formatDate(leave.endDate)}</span>
+                  <span>{leave.totalDays}d</span>
                 </div>
-              </div>
-              <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLE[leave.status] || 'bg-white/10 text-white/50 border-transparent'}`}>
-                {leave.status}
-              </span>
+                <div className="mt-1.5 flex items-center gap-1 text-[11px] text-white/30">
+                  <Eye className="w-3 h-3" />View full details
+                </div>
+              </button>
+
+              {/* Inline action buttons */}
+              {(isTLCard || isApprCard) && (
+                <div className="border-t border-white/8 px-4 pb-4 pt-3 flex gap-2">
+                  {isTLCard && (
+                    <>
+                      <button
+                        onClick={() => handleInlineAcknowledge(leave)}
+                        disabled={isActingThis}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        {isActingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Acknowledge
+                      </button>
+                      <button
+                        onClick={() => openInlineReject(leave)}
+                        disabled={isActingThis}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/30 text-red-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        <ThumbsDown className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  {isApprCard && (
+                    <>
+                      <button
+                        onClick={() => handleApprove(leave)}
+                        disabled={isActingThis}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        {isActingThis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => openInlineReject(leave)}
+                        disabled={isActingThis}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/30 text-red-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        <ThumbsDown className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-4 text-[11px] text-white/50 mt-1">
-              <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{leave.leaveType}</span>
-              <span>{formatDate(leave.startDate)} → {formatDate(leave.endDate)}</span>
-              <span>{leave.totalDays}d</span>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[11px] text-blue-300/70">
-              <Eye className="w-3 h-3" />
-              {isTL(leave) ? 'Tap to Acknowledge' : isApprover(leave) ? 'Tap to Approve / Reject' : 'View details'}
-            </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
 
       {/* Detail Modal */}
