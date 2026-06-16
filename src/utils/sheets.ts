@@ -1105,19 +1105,23 @@ function getAttendanceMonitor() {
       if (attDate !== today && attDate !== todayAlt) continue;
       var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
       var attAction = String(attRows[ai][4] || '').trim();
+      var rawTs     = attRows[ai][5];
+      var tsMs      = rawTs instanceof Date ? rawTs.getTime() : new Date(String(rawTs || '')).getTime();
+      if (isNaN(tsMs)) tsMs = 0;
       var attEntry  = {
         time:      String(attRows[ai][7]  || ''),
         timestamp: String(attRows[ai][5]  || ''),
+        tsMs:      tsMs,
         latitude:  Number(attRows[ai][8]  || 0),
         longitude: Number(attRows[ai][9]  || 0),
         address:   String(attRows[ai][11] || ''),
         imageUrl:  String(attRows[ai][16] || '')
       };
       if (attAction === 'TIME_IN') {
-        if (!timeIns[attEmail] || attEntry.timestamp > timeIns[attEmail].timestamp)
+        if (!timeIns[attEmail] || attEntry.tsMs > timeIns[attEmail].tsMs)
           timeIns[attEmail] = attEntry;
       } else if (attAction === 'TIME_OUT') {
-        if (!timeOuts[attEmail] || attEntry.timestamp > timeOuts[attEmail].timestamp)
+        if (!timeOuts[attEmail] || attEntry.tsMs > timeOuts[attEmail].tsMs)
           timeOuts[attEmail] = attEntry;
       }
     }
@@ -1126,16 +1130,15 @@ function getAttendanceMonitor() {
   // ── Build result ───────────────────────────────────────────────
   var result = employees.map(function(emp) {
     var tin  = timeIns[emp.email];
-    var tout = timeOuts[emp.email];
+    // Only count a TIME_OUT that occurred AFTER the latest TIME_IN
+    var toutRaw = timeOuts[emp.email];
+    var tout = (toutRaw && tin && toutRaw.tsMs > tin.tsMs) ? toutRaw : null;
     var status;
-    if (onLeaveEmails[emp.email]) {
+    if (tin) {
+      // Actual attendance overrides any leave record
+      status = tout ? 'Completed' : 'Active';
+    } else if (onLeaveEmails[emp.email]) {
       status = 'On Leave';
-    } else if (tin) {
-      if (tout) {
-        status = 'Completed';
-      } else {
-        status = 'Active';
-      }
     } else {
       status = 'Absent';
     }

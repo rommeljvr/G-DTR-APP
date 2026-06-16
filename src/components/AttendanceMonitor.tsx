@@ -27,6 +27,27 @@ interface Props {
   onBack: () => void;
 }
 
+function formatDisplayTime(val: string): string {
+  if (!val) return '';
+  const isIso = /^\d{4}-\d{2}-\d{2}T/.test(val);
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    const hrs  = isIso ? d.getUTCHours()   : d.getHours();
+    const mins = isIso ? d.getUTCMinutes() : d.getMinutes();
+    const ampm = hrs >= 12 ? 'PM' : 'AM';
+    const h    = hrs % 12 || 12;
+    return `${h}:${mins.toString().padStart(2, '0')} ${ampm}`;
+  }
+  // already a formatted time string (e.g. "8:05:00 AM") — strip seconds
+  const m = val.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/i);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const min = m[2].padStart(2, '0');
+    return `${h}:${min} ${m[3].toUpperCase()}`;
+  }
+  return val;
+}
+
 type StatusFilter = 'All' | 'Active' | 'Completed' | 'On Leave' | 'Absent';
 
 const STATUS_CONFIG: Record<string, {
@@ -148,7 +169,7 @@ function DetailModal({
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="text-white text-sm font-medium">{record.timeIn}</span>
+                <span className="text-white text-sm font-medium">{formatDisplayTime(record.timeIn)}</span>
               </div>
               {record.timeInAddress && (
                 <div className="flex items-start gap-2">
@@ -186,7 +207,7 @@ function DetailModal({
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span className="text-white text-sm font-medium">{record.timeOut}</span>
+                <span className="text-white text-sm font-medium">{formatDisplayTime(record.timeOut)}</span>
               </div>
               {record.timeOutAddress && (
                 <div className="flex items-start gap-2">
@@ -475,12 +496,12 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
                       )}
                       {rec.timeIn && (
                         <span className="flex items-center gap-0.5 text-[10px] text-white/40">
-                          <Clock className="w-2.5 h-2.5" />IN {rec.timeIn}
+                          <Clock className="w-2.5 h-2.5" />IN {formatDisplayTime(rec.timeIn)}
                         </span>
                       )}
                       {rec.timeOut && (
                         <span className="flex items-center gap-0.5 text-[10px] text-white/40">
-                          <Clock className="w-2.5 h-2.5" />OUT {rec.timeOut}
+                          <Clock className="w-2.5 h-2.5" />OUT {formatDisplayTime(rec.timeOut)}
                         </span>
                       )}
                     </div>
