@@ -5,11 +5,12 @@ import {
   ThumbsUp, ThumbsDown, Eye,
 } from 'lucide-react';
 import { User, LeaveApplication, LeaveApprovalRecord } from '../types';
-import { getPendingApprovals, acknowledgeLeave, approveLeave, rejectLeave } from '../utils/sheets';
+import { getPendingApprovals, acknowledgeLeave, approveLeave, rejectLeave, markNotificationsRead } from '../utils/sheets';
 
 interface Props {
   user: User;
   onBack: () => void;
+  onUnreadChange?: () => void;
 }
 
 function formatDate(val: string): string {
@@ -37,7 +38,7 @@ const ACTION_STYLE: Record<string, string> = {
   Reject:      'text-red-300',
 };
 
-export default function LeaveApproval({ user, onBack }: Props) {
+export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
   const [records, setRecords] = useState<LeaveApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LeaveApplication | null>(null);
@@ -70,6 +71,8 @@ export default function LeaveApproval({ user, onBack }: Props) {
       notify('Leave acknowledged and forwarded for approval.');
       setSelected(null);
       load();
+      await markNotificationsRead(user.email);
+      onUnreadChange?.();
     } else {
       notify(res.message || 'Failed to acknowledge', true);
     }
@@ -83,6 +86,8 @@ export default function LeaveApproval({ user, onBack }: Props) {
       notify('Leave approved successfully.');
       setSelected(null);
       load();
+      await markNotificationsRead(user.email);
+      onUnreadChange?.();
     } else {
       notify(res.message || 'Failed to approve', true);
     }
@@ -100,6 +105,8 @@ export default function LeaveApproval({ user, onBack }: Props) {
       setRejectReason('');
       setSelected(null);
       load();
+      await markNotificationsRead(user.email);
+      onUnreadChange?.();
     } else {
       notify(res.message || 'Failed to reject', true);
     }

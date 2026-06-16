@@ -1,7 +1,7 @@
 /// <reference path="../pwa.d.ts" />
 import { useState, useEffect, useCallback } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
-import { getLastAction, submitAttendance, getUnreadCount, markNotificationsRead } from '../utils/sheets';
+import { getLastAction, submitAttendance, getUnreadCount } from '../utils/sheets';
 import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
@@ -367,7 +367,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   if (activeTab === 'leave-approval') {
-    return <LeaveApproval user={user} onBack={() => { setActiveTab('home'); markNotificationsRead(user.email); setUnreadCount(0); }} />;
+    return <LeaveApproval user={user} onBack={() => setActiveTab('home')} onUnreadChange={() => setUnreadCount(0)} />;
   }
 
   if (activeTab === 'approver-settings') {
