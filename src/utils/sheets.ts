@@ -1,4 +1,4 @@
-import { AttendanceRecord, Employee } from '../types';
+import { AttendanceRecord, Employee, ApproverSettings, LeaveApplication, AppNotification } from '../types';
 import { getConfig } from './config';
 
 // ─── helpers ───────────────────────────────────────────────────────
@@ -612,6 +612,129 @@ export async function getAttendanceMonitor(
   }
 }
 
+// ─── Approver Settings ───────────────────────────────────────────
+
+
+export async function getApproverSettings(email: string): Promise<ApproverSettings | null> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return null;
+  try {
+    const res = await fetch(`${scriptUrl}?action=getApproverSettings&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? json.settings : null;
+  } catch { return null; }
+}
+
+export async function getAllApproverSettings(adminEmail: string): Promise<ApproverSettings[]> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return [];
+  try {
+    const res = await fetch(`${scriptUrl}?action=getAllApproverSettings&email=${encodeURIComponent(adminEmail)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? (json.settings || []) : [];
+  } catch { return []; }
+}
+
+export async function saveApproverSettings(settings: ApproverSettings): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'saveApproverSettings', data: settings }),
+    });
+    return await res.json();
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
+}
+
+// ─── Leave Approval Actions ───────────────────────────────────────
+
+export async function getPendingApprovals(approverEmail: string): Promise<LeaveApplication[]> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return [];
+  try {
+    const res = await fetch(`${scriptUrl}?action=getPendingApprovals&email=${encodeURIComponent(approverEmail)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? (json.records || []) : [];
+  } catch { return []; }
+}
+
+export async function acknowledgeLeave(leaveId: string, approverEmail: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'acknowledgeLeave', leaveId, email: approverEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function approveLeave(leaveId: string, approverEmail: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'approveLeave', leaveId, email: approverEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function rejectLeave(leaveId: string, approverEmail: string, reason: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'rejectLeave', leaveId, email: approverEmail, reason }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+// ─── Notifications ────────────────────────────────────────────────
+
+export async function getNotifications(email: string): Promise<AppNotification[]> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return [];
+  try {
+    const res = await fetch(`${scriptUrl}?action=getNotifications&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? (json.notifications || []) : [];
+  } catch { return []; }
+}
+
+export async function getUnreadCount(email: string): Promise<number> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return 0;
+  try {
+    const res = await fetch(`${scriptUrl}?action=getUnreadCount&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? (json.count || 0) : 0;
+  } catch { return 0; }
+}
+
+export async function markNotificationsRead(email: string, notificationId?: string): Promise<void> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return;
+  try {
+    await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'markNotificationsRead', email, notificationId: notificationId || null }),
+    });
+  } catch { /* silent */ }
+}
+
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
 export const APPS_SCRIPT_TEMPLATE = `
@@ -706,6 +829,11 @@ function doPost(e) {
     if (data.action === 'updateEmployee')   return updateEmployee(data);
     if (data.action === 'deactivateEmployee')   return deactivateEmployee(data.email, data.active);
     if (data.action === 'uploadEmployeePhoto')  return uploadEmployeePhoto(data);
+    if (data.action === 'saveApproverSettings') return saveApproverSettings(data.data);
+    if (data.action === 'acknowledgeLeave')     return acknowledgeLeave(data.leaveId, data.email);
+    if (data.action === 'approveLeave')         return approveLeave(data.leaveId, data.email);
+    if (data.action === 'rejectLeave')          return rejectLeave(data.leaveId, data.email, data.reason);
+    if (data.action === 'markNotificationsRead') return markNotificationsRead(data.email, data.notificationId);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -741,6 +869,11 @@ function doGet(e) {
   if (action === 'getDepartments')   return getDepartmentList();
   if (action === 'getDesignations')  return getDesignationList();
   if (action === 'getAttendanceMonitor') return email ? getAttendanceMonitor() : _json({ success: false, message: 'Email required' });
+  if (action === 'getApproverSettings')  return getApproverSettings(email);
+  if (action === 'getAllApproverSettings') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getAllApproverSettings() : _json({ success: false, message: 'Unauthorized' });
+  if (action === 'getPendingApprovals')  return email ? getPendingApprovals(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getNotifications')     return email ? getNotifications(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -935,7 +1068,6 @@ function uploadImageToDrive(data, folderId) {
   var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
 
   var file = subFolder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
   return {
     id:  file.getId(),
@@ -2057,8 +2189,7 @@ function uploadDocumentToDrive(data) {
   var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
 
   var file = subFolder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
+ 
   return {
     id:  file.getId(),
     url: 'https://drive.google.com/file/d/' + file.getId() + '/view'
@@ -2213,5 +2344,448 @@ function recoverLeaveDocumentByRow(rowNumber) {
     message: "No matching leave document found",
     row: rowNumber
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  APPROVER SETTINGS
+//  Sheet: ApproverSettings
+//  Columns: Employee Email, Employee Name, Team Lead Email, Approver Email, Workflow Type
+// ══════════════════════════════════════════════════════════════════
+
+function getApproverSettingsSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('ApproverSettings');
+  if (!sheet) {
+    sheet = ss.insertSheet('ApproverSettings');
+    sheet.appendRow(['Employee Email', 'Employee Name', 'Team Lead Email', 'Approver Email', 'Workflow Type']);
+    var hdr = sheet.getRange(1, 1, 1, 5);
+    hdr.setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function getApproverSettings(email) {
+  var sheet = getApproverSettingsSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, settings: null });
+  var rows = sheet.getDataRange().getValues();
+  var emailLower = String(email || '').trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === emailLower) {
+      return _json({ success: true, settings: {
+        employeeEmail: rows[i][0],
+        employeeName:  rows[i][1],
+        teamLeadEmail: rows[i][2],
+        approverEmail: rows[i][3],
+        workflowType:  rows[i][4] || 'DIRECT'
+      }});
+    }
+  }
+  return _json({ success: true, settings: null });
+}
+
+function getAllApproverSettings() {
+  var sheet = getApproverSettingsSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, settings: [] });
+  var rows = sheet.getDataRange().getValues();
+  var results = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    results.push({
+      employeeEmail: rows[i][0],
+      employeeName:  rows[i][1],
+      teamLeadEmail: rows[i][2],
+      approverEmail: rows[i][3],
+      workflowType:  rows[i][4] || 'DIRECT'
+    });
+  }
+  return _json({ success: true, settings: results });
+}
+
+function saveApproverSettings(data) {
+  if (!data || !data.employeeEmail) return _json({ success: false, message: 'Employee email required' });
+  var sheet = getApproverSettingsSheet();
+  var rows = sheet.getLastRow() > 1 ? sheet.getDataRange().getValues() : [[]];
+  var emailLower = String(data.employeeEmail).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === emailLower) {
+      sheet.getRange(i + 1, 1, 1, 5).setValues([[
+        data.employeeEmail, data.employeeName || '', data.teamLeadEmail || '',
+        data.approverEmail || '', data.workflowType || 'DIRECT'
+      ]]);
+      return _json({ success: true, message: 'Approver settings updated' });
+    }
+  }
+  sheet.appendRow([data.employeeEmail, data.employeeName || '', data.teamLeadEmail || '', data.approverEmail || '', data.workflowType || 'DIRECT']);
+  return _json({ success: true, message: 'Approver settings saved' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LEAVE APPROVAL HISTORY
+//  Sheet: LeaveApprovals
+//  Columns: ID, Leave ID, Approver Email, Approver Name, Action, Reason, Timestamp
+// ══════════════════════════════════════════════════════════════════
+
+function getLeaveApprovalsSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApprovals');
+  if (!sheet) {
+    sheet = ss.insertSheet('LeaveApprovals');
+    sheet.appendRow(['ID', 'Leave ID', 'Approver Email', 'Approver Name', 'Action', 'Reason', 'Timestamp']);
+    var hdr = sheet.getRange(1, 1, 1, 7);
+    hdr.setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function appendApprovalHistory(leaveId, approverEmail, approverName, action, reason) {
+  var sheet = getLeaveApprovalsSheet();
+  sheet.appendRow([
+    Utilities.getUuid(), leaveId, approverEmail, approverName,
+    action, reason || '', new Date().toISOString()
+  ]);
+}
+
+function getApprovalHistoryForLeave(leaveId) {
+  var sheet = getLeaveApprovalsSheet();
+  if (sheet.getLastRow() <= 1) return [];
+  var rows = sheet.getDataRange().getValues();
+  var results = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '') === leaveId) {
+      results.push({
+        id:            rows[i][0],
+        leaveId:       rows[i][1],
+        approverEmail: rows[i][2],
+        approverName:  rows[i][3],
+        action:        rows[i][4],
+        reason:        rows[i][5] || '',
+        timestamp:     rows[i][6]
+      });
+    }
+  }
+  return results;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  NOTIFICATIONS
+//  Sheet: Notifications
+//  Columns: ID, User ID (email), Type, Message, Leave ID, Is Read, Created At
+// ══════════════════════════════════════════════════════════════════
+
+function getNotificationsSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Notifications');
+  if (!sheet) {
+    sheet = ss.insertSheet('Notifications');
+    sheet.appendRow(['ID', 'User Email', 'Type', 'Message', 'Leave ID', 'Is Read', 'Created At']);
+    var hdr = sheet.getRange(1, 1, 1, 7);
+    hdr.setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function createNotification(userEmail, type, message, leaveId) {
+  var sheet = getNotificationsSheet();
+  sheet.appendRow([
+    Utilities.getUuid(), userEmail, type, message,
+    leaveId || '', 'false', new Date().toISOString()
+  ]);
+}
+
+function getNotifications(email) {
+  var sheet = getNotificationsSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, notifications: [] });
+  var rows = sheet.getDataRange().getValues();
+  var emailLower = String(email || '').trim().toLowerCase();
+  var results = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
+      results.push({
+        id:        rows[i][0],
+        userId:    rows[i][1],
+        type:      rows[i][2],
+        message:   rows[i][3],
+        leaveId:   rows[i][4] || '',
+        isRead:    rows[i][5] === 'true' || rows[i][5] === true,
+        createdAt: rows[i][6]
+      });
+    }
+  }
+  results.sort(function(a, b) { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); });
+  return _json({ success: true, notifications: results });
+}
+
+function getUnreadCount(email) {
+  var sheet = getNotificationsSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, count: 0 });
+  var rows = sheet.getDataRange().getValues();
+  var emailLower = String(email || '').trim().toLowerCase();
+  var count = 0;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
+      if (rows[i][5] !== 'true' && rows[i][5] !== true) count++;
+    }
+  }
+  return _json({ success: true, count: count });
+}
+
+function markNotificationsRead(email, notificationId) {
+  var sheet = getNotificationsSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true });
+  var rows = sheet.getDataRange().getValues();
+  var emailLower = String(email || '').trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    var rowEmail = String(rows[i][1] || '').trim().toLowerCase();
+    if (rowEmail !== emailLower) continue;
+    if (!notificationId || rows[i][0] === notificationId) {
+      sheet.getRange(i + 1, 6).setValue('true');
+    }
+  }
+  return _json({ success: true, message: 'Marked as read' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PENDING APPROVALS
+//  Returns leave applications where the caller is the next approver
+// ══════════════════════════════════════════════════════════════════
+
+function getPendingApprovals(approverEmail) {
+  if (!approverEmail) return _json({ success: false, message: 'Email required' });
+  var ss        = SpreadsheetApp.getActiveSpreadsheet();
+  var leaveSheet = ss.getSheetByName('LeaveApplications');
+  if (!leaveSheet || leaveSheet.getLastRow() <= 1) return _json({ success: true, records: [] });
+
+  var rows    = leaveSheet.getDataRange().getValues();
+  var headers = rows[0];
+  var approverLower = String(approverEmail).trim().toLowerCase();
+
+  function col(names) {
+    for (var n = 0; n < names.length; n++) {
+      for (var c = 0; c < headers.length; c++) {
+        if (String(headers[c]).trim().toLowerCase() === names[n].toLowerCase()) return c;
+      }
+    }
+    return -1;
+  }
+
+  var cId     = col(['ID']);
+  var cName   = col(['Employee Name']);
+  var cEmail  = col(['Email']);
+  var cType   = col(['Leave Type']);
+  var cStart  = col(['Start Date']);
+  var cEnd    = col(['End Date']);
+  var cDays   = col(['Total Days']);
+  var cReason = col(['Reason']);
+  var cStatus = col(['Status']);
+  var cFiled  = col(['Submitted At']);
+  var cTL     = col(['Team Lead Email']);
+  var cAppr   = col(['Approver Email']);
+  var cWF     = col(['Workflow Type']);
+  var cRej    = col(['Rejection Reason']);
+
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    var row    = rows[i];
+    var status = String(row[cStatus] || '').trim();
+    var tl     = cTL   !== -1 ? String(row[cTL]   || '').trim().toLowerCase() : '';
+    var appr   = cAppr !== -1 ? String(row[cAppr]  || '').trim().toLowerCase() : '';
+    var wf     = cWF   !== -1 ? String(row[cWF]    || 'DIRECT').trim() : 'DIRECT';
+
+    var isNextApprover = false;
+    if (wf === 'TWO_STEP') {
+      if (status === 'Pending' && tl === approverLower) isNextApprover = true;
+      if (status === 'Acknowledged' && appr === approverLower) isNextApprover = true;
+    } else {
+      if (status === 'Pending' && appr === approverLower) isNextApprover = true;
+    }
+    if (!isNextApprover) continue;
+
+    var leaveId = cId !== -1 ? String(row[cId] || '') : '';
+    var history = getApprovalHistoryForLeave(leaveId);
+
+    records.push({
+      id:              leaveId,
+      employeeName:    cName   !== -1 ? String(row[cName]   || '') : '',
+      email:           cEmail  !== -1 ? String(row[cEmail]  || '') : '',
+      leaveType:       cType   !== -1 ? String(row[cType]   || '') : '',
+      startDate:       cStart  !== -1 ? String(row[cStart]  || '') : '',
+      endDate:         cEnd    !== -1 ? String(row[cEnd]    || '') : '',
+      totalDays:       cDays   !== -1 ? Number(row[cDays]   || 0)  : 0,
+      reason:          cReason !== -1 ? String(row[cReason] || '') : '',
+      status:          status,
+      submittedAt:     cFiled  !== -1 ? String(row[cFiled]  || '') : '',
+      teamLeadEmail:   cTL   !== -1 ? String(row[cTL]   || '') : '',
+      approverEmail:   cAppr !== -1 ? String(row[cAppr]  || '') : '',
+      workflowType:    wf,
+      rejectionReason: cRej  !== -1 ? String(row[cRej]  || '') : '',
+      approvalHistory: history
+    });
+  }
+  return _json({ success: true, records: records });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LEAVE APPROVAL ACTIONS
+//  Helper: find leave row and update status
+// ══════════════════════════════════════════════════════════════════
+
+function findLeaveRow(leaveId) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+  if (!sheet || sheet.getLastRow() <= 1) return null;
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var cId = -1;
+  for (var c = 0; c < headers.length; c++) {
+    if (String(headers[c]).trim().toLowerCase() === 'id') { cId = c; break; }
+  }
+  if (cId === -1) return null;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][cId] || '') === leaveId) return { sheet: sheet, rowIndex: i + 1, headers: headers, row: rows[i] };
+  }
+  return null;
+}
+
+function colIdx(headers, names) {
+  for (var n = 0; n < names.length; n++) {
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim().toLowerCase() === names[n].toLowerCase()) return c;
+    }
+  }
+  return -1;
+}
+
+function getApproverName(approverEmail) {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Employee') || ss.getSheetByName('Employees');
+  if (!sheet) return approverEmail;
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var cEmail = colIdx(headers, ['Email', 'Email Address']);
+  var cName  = colIdx(headers, ['Employee Name', 'Name', 'Full Name']);
+  var emailLower = String(approverEmail).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][cEmail] || '').trim().toLowerCase() === emailLower) {
+      return String(rows[i][cName] || approverEmail);
+    }
+  }
+  return approverEmail;
+}
+
+function acknowledgeLeave(leaveId, approverEmail) {
+  if (!leaveId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findLeaveRow(leaveId);
+  if (!found) return _json({ success: false, message: 'Leave application not found' });
+
+  var headers = found.headers;
+  var cStatus = colIdx(headers, ['Status']);
+  var cTL     = colIdx(headers, ['Team Lead Email']);
+  var cAppr   = colIdx(headers, ['Approver Email']);
+  var cEmail  = colIdx(headers, ['Email']);
+
+  var currentStatus = String(found.row[cStatus] || '');
+  var tlEmail = cTL !== -1 ? String(found.row[cTL] || '').trim().toLowerCase() : '';
+  if (currentStatus !== 'Pending') return _json({ success: false, message: 'Can only acknowledge Pending requests' });
+  if (tlEmail !== String(approverEmail).trim().toLowerCase()) return _json({ success: false, message: 'You are not the assigned Team Lead' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Acknowledged');
+
+  var approverName = getApproverName(approverEmail);
+  appendApprovalHistory(leaveId, approverEmail, approverName, 'Acknowledge', '');
+
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  var nextApprover  = cAppr  !== -1 ? String(found.row[cAppr]  || '') : '';
+
+  createNotification(employeeEmail, 'LEAVE_ACKNOWLEDGED',
+    'Your leave request has been acknowledged by ' + approverName + ' and forwarded for approval.', leaveId);
+  if (nextApprover) {
+    createNotification(nextApprover, 'PENDING_APPROVAL',
+      employeeEmail + ' leave request is awaiting your approval.', leaveId);
+  }
+
+  return _json({ success: true, message: 'Leave acknowledged and forwarded' });
+}
+
+function approveLeave(leaveId, approverEmail) {
+  if (!leaveId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findLeaveRow(leaveId);
+  if (!found) return _json({ success: false, message: 'Leave application not found' });
+
+  var headers = found.headers;
+  var cStatus = colIdx(headers, ['Status']);
+  var cAppr   = colIdx(headers, ['Approver Email']);
+  var cEmail  = colIdx(headers, ['Email']);
+  var cWF     = colIdx(headers, ['Workflow Type']);
+  var cTL     = colIdx(headers, ['Team Lead Email']);
+
+  var currentStatus  = String(found.row[cStatus] || '');
+  var apprEmail = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
+  var tlEmail   = cTL   !== -1 ? String(found.row[cTL]   || '').trim().toLowerCase() : '';
+  var wf        = cWF   !== -1 ? String(found.row[cWF]   || 'DIRECT') : 'DIRECT';
+  var callerLower = String(approverEmail).trim().toLowerCase();
+
+  var canApprove = false;
+  if (wf === 'TWO_STEP') {
+    if (currentStatus === 'Acknowledged' && callerLower === apprEmail) canApprove = true;
+    if (currentStatus === 'Pending' && callerLower === tlEmail && !apprEmail) canApprove = true;
+  } else {
+    if (currentStatus === 'Pending' && callerLower === apprEmail) canApprove = true;
+  }
+  if (!canApprove) return _json({ success: false, message: 'You are not authorized to approve this request or the status is invalid' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Approved');
+
+  var approverName   = getApproverName(approverEmail);
+  appendApprovalHistory(leaveId, approverEmail, approverName, 'Approve', '');
+
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  createNotification(employeeEmail, 'LEAVE_APPROVED',
+    'Your leave request has been approved by ' + approverName + '.', leaveId);
+
+  return _json({ success: true, message: 'Leave approved successfully' });
+}
+
+function rejectLeave(leaveId, approverEmail, reason) {
+  if (!leaveId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  if (!reason || String(reason).trim() === '') return _json({ success: false, message: 'Rejection reason is required' });
+
+  var found = findLeaveRow(leaveId);
+  if (!found) return _json({ success: false, message: 'Leave application not found' });
+
+  var headers = found.headers;
+  var cStatus = colIdx(headers, ['Status']);
+  var cAppr   = colIdx(headers, ['Approver Email']);
+  var cTL     = colIdx(headers, ['Team Lead Email']);
+  var cEmail  = colIdx(headers, ['Email']);
+  var cRej    = colIdx(headers, ['Rejection Reason']);
+
+  var currentStatus = String(found.row[cStatus] || '');
+  var apprEmail = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
+  var tlEmail   = cTL   !== -1 ? String(found.row[cTL]   || '').trim().toLowerCase() : '';
+  var callerLower = String(approverEmail).trim().toLowerCase();
+
+  if (callerLower !== apprEmail && callerLower !== tlEmail) {
+    return _json({ success: false, message: 'You are not authorized to reject this request' });
+  }
+  if (currentStatus === 'Approved' || currentStatus === 'Cancelled') {
+    return _json({ success: false, message: 'Cannot reject an already ' + currentStatus + ' request' });
+  }
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Rejected');
+  if (cRej !== -1) {
+    found.sheet.getRange(found.rowIndex, cRej + 1).setValue(String(reason));
+  }
+
+  var approverName  = getApproverName(approverEmail);
+  appendApprovalHistory(leaveId, approverEmail, approverName, 'Reject', reason);
+
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  createNotification(employeeEmail, 'LEAVE_REJECTED',
+    'Your leave request was rejected by ' + approverName + '. Reason: ' + reason, leaveId);
+
+  return _json({ success: true, message: 'Leave rejected' });
 }
 `;

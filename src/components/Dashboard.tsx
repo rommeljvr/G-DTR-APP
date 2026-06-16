@@ -1,7 +1,7 @@
 /// <reference path="../pwa.d.ts" />
 import { useState, useEffect } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
-import { getLastAction, submitAttendance } from '../utils/sheets';
+import { getLastAction, submitAttendance, getUnreadCount, markNotificationsRead } from '../utils/sheets';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
 import { createCompositeImage } from '../utils/imageComposite';
@@ -13,6 +13,8 @@ import LeaveApplication from './LeaveApplication';
 import LeaveReport from './LeaveReport';
 import EmployeeMaintenance from './EmployeeMaintenance';
 import AttendanceMonitor from './AttendanceMonitor';
+import LeaveApproval from './LeaveApproval';
+import ApproverSettings from './ApproverSettings';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -35,6 +37,8 @@ import {
   ClipboardList,
   BarChart2,
   Users,
+  Bell,
+  Shield,
 } from 'lucide-react';
 
 interface Props {
@@ -44,7 +48,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -71,6 +75,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [shortcutNotice, setShortcutNotice] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const ADMIN_EMAIL = 'rommeljvr@gmail.com';
   const isAdmin = user.email?.toLowerCase() === ADMIN_EMAIL;
@@ -111,6 +116,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const pollUnread = async () => {
+      const count = await getUnreadCount(user.email);
+      setUnreadCount(count);
+    };
+    pollUnread();
+    const poll = setInterval(pollUnread, 30000);
+    return () => clearInterval(poll);
+  }, [user.email]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -339,6 +354,15 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   if (activeTab === 'attendance-monitor') {
     return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'leave-approval') {
+    return <LeaveApproval user={user} onBack={() => { setActiveTab('home'); markNotificationsRead(user.email); setUnreadCount(0); }} />;
+  }
+
+  if (activeTab === 'approver-settings') {
+    if (!isAdmin) return null;
+    return <ApproverSettings user={user} onBack={() => setActiveTab('home')} />;
   }
 
   if (activeTab === 'leave') {
@@ -833,6 +857,34 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
               Attendance Monitor
             </button>
 
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('leave-approval'); markNotificationsRead(user.email); setUnreadCount(0); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'leave-approval' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <Bell className="w-4.5 h-4.5 shrink-0" />
+            Leave Approvals
+            {unreadCount > 0 && (
+              <span className="ml-auto min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => { setShowDrawer(false); setActiveTab('approver-settings'); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+                activeTab === 'approver-settings' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+              }`}
+            >
+              <Shield className="w-4.5 h-4.5 shrink-0" />
+              Approver Settings
+              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+            </button>
+          )}
+
           {isAdmin && (
             <button
               onClick={() => { setShowDrawer(false); setActiveTab('employees'); }}
@@ -892,6 +944,22 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
               <span className="text-[10px] font-medium">{label}</span>
             </button>
           ))}
+
+          {/* Bell shortcut */}
+          <button
+            onClick={() => { setActiveTab('leave-approval'); markNotificationsRead(user.email); setUnreadCount(0); }}
+            className={`relative flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition-all active:scale-90 ${
+              activeTab === 'leave-approval' ? 'text-blue-400' : 'text-white/40'
+            }`}
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 right-3 min-w-[14px] h-[14px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+            <span className="text-[10px] font-medium">Approvals</span>
+          </button>
 
           {/* Hamburger → drawer */}
           <button

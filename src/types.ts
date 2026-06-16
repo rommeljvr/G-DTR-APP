@@ -90,6 +90,48 @@ export interface LeaveApplication {
   paymentStatus: PaymentStatus;
   reason: string;
   documentUrl?: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Acknowledged' | 'Approved' | 'Rejected' | 'Cancelled';
   submittedAt: string;
+  rejectionReason?: string;
+  teamLeadEmail?: string;
+  approverEmail?: string;
+  workflowType?: 'DIRECT' | 'TWO_STEP';
+  approvalHistory?: LeaveApprovalRecord[];
+}
+
+export type WorkflowType = 'DIRECT' | 'TWO_STEP';
+
+export interface ApproverSettings {
+  employeeEmail: string;
+  employeeName: string;
+  teamLeadEmail: string;
+  approverEmail: string;
+  workflowType: WorkflowType;
+}
+
+export interface LeaveApprovalRecord {
+  id: string;
+  leaveId: string;
+  approverEmail: string;
+  approverName: string;
+  action: 'Acknowledge' | 'Approve' | 'Reject';
+  reason?: string;
+  timestamp: string;
+}
+
+export type NotificationType =
+  | 'LEAVE_SUBMITTED'
+  | 'LEAVE_ACKNOWLEDGED'
+  | 'LEAVE_APPROVED'
+  | 'LEAVE_REJECTED'
+  | 'PENDING_APPROVAL';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  message: string;
+  leaveId?: string;
+  isRead: boolean;
+  createdAt: string;
 }
