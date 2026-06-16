@@ -273,14 +273,24 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
           actions={
             <>
               {isTL(selected) && (
-                <button
-                  onClick={() => handleAcknowledge(selected)}
-                  disabled={actionLoading}
-                  className="w-full bg-blue-500/20 border border-blue-400/30 text-blue-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
-                >
-                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Acknowledge & Forward
-                </button>
+                <>
+                  <button
+                    onClick={() => handleAcknowledge(selected)}
+                    disabled={actionLoading}
+                    className="w-full bg-blue-500/20 border border-blue-400/30 text-blue-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Acknowledge & Forward
+                  </button>
+                  <button
+                    onClick={() => { setSelected(null); openInlineReject(selected); }}
+                    disabled={actionLoading}
+                    className="w-full bg-red-500/15 border border-red-400/30 text-red-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
+                  >
+                    <ThumbsDown className="w-4 h-4" />
+                    Reject
+                  </button>
+                </>
               )}
               {isApprover(selected) && (
                 <>
