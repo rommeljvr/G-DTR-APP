@@ -120,6 +120,7 @@ export interface LeaveApprovalRecord {
 }
 
 export type NotificationType =
+  | 'LEAVE_FILED'
   | 'LEAVE_SUBMITTED'
   | 'LEAVE_ACKNOWLEDGED'
   | 'LEAVE_APPROVED'

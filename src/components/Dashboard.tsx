@@ -16,6 +16,7 @@ import EmployeeMaintenance from './EmployeeMaintenance';
 import AttendanceMonitor from './AttendanceMonitor';
 import LeaveApproval from './LeaveApproval';
 import ApproverSettings from './ApproverSettings';
+import NotificationInbox from './NotificationInbox';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -49,7 +50,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -357,6 +358,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   if (activeTab === 'attendance-monitor') {
     return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'notifications') {
+    return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={() => setUnreadCount(0)} />;
   }
 
   if (activeTab === 'leave-approval') {
@@ -861,18 +866,28 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             </button>
 
           <button
-            onClick={() => { setShowDrawer(false); setActiveTab('leave-approval'); markNotificationsRead(user.email); setUnreadCount(0); }}
+            onClick={() => { setShowDrawer(false); setActiveTab('notifications'); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
-              activeTab === 'leave-approval' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+              activeTab === 'notifications' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
             }`}
           >
             <Bell className="w-4.5 h-4.5 shrink-0" />
-            Leave Approvals
+            Notifications
             {unreadCount > 0 && (
               <span className="ml-auto min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('leave-approval'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'leave-approval' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <ClipboardList className="w-4.5 h-4.5 shrink-0" />
+            Leave Approvals
           </button>
 
           {isAdmin && (
@@ -948,11 +963,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             </button>
           ))}
 
-          {/* Bell shortcut */}
+          {/* Bell shortcut → personal notification inbox */}
           <button
-            onClick={() => { setActiveTab('leave-approval'); markNotificationsRead(user.email); setUnreadCount(0); }}
+            onClick={() => setActiveTab('notifications')}
             className={`relative flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition-all active:scale-90 ${
-              activeTab === 'leave-approval' ? 'text-blue-400' : 'text-white/40'
+              activeTab === 'notifications' ? 'text-blue-400' : 'text-white/40'
             }`}
           >
             <Bell className="w-5 h-5" />
@@ -961,7 +976,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
-            <span className="text-[10px] font-medium">Approvals</span>
+            <span className="text-[10px] font-medium">Inbox</span>
           </button>
 
           {/* Hamburger → drawer */}
