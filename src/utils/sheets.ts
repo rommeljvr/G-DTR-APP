@@ -378,6 +378,8 @@ export interface LeaveRecord {
   docUrl: string;
   status: string;
   submittedAt: string;
+  rejectionReason: string;
+  approvalHistory: { id: string; leaveId: string; approverEmail: string; approverName: string; action: string; reason: string; timestamp: string }[];
 }
 
 export async function getLeaveHistory(
@@ -2139,6 +2141,7 @@ function getLeaveHistory(email) {
   var cDocUrl = col(['Document URL']);
   var cStatus = col(['Status']);
   var cFiled  = col(['Submitted At']);
+  var cRej    = col(['Rejection Reason']);
 
   var records = [];
 
@@ -2167,10 +2170,12 @@ function getLeaveHistory(email) {
       totalDays:     cDays   !== -1 ? Number(row[cDays]   || 0)   : 0,
       paymentStatus: cPay    !== -1 ? String(row[cPay]   || '') : '',
       reason:        cReason !== -1 ? String(row[cReason] || '') : '',
-      docId:         cDocId  !== -1 ? String(row[cDocId]  || '') : '',
-      docUrl:        docUrlVal,
-      status:        cStatus !== -1 ? String(row[cStatus] || 'Pending') : 'Pending',
-      submittedAt:   cFiled  !== -1 ? String(row[cFiled]  || '') : ''
+      docId:           cDocId  !== -1 ? String(row[cDocId]  || '') : '',
+      docUrl:          docUrlVal,
+      status:          cStatus !== -1 ? String(row[cStatus] || 'Pending') : 'Pending',
+      submittedAt:     cFiled  !== -1 ? String(row[cFiled]  || '') : '',
+      rejectionReason: cRej    !== -1 ? String(row[cRej]   || '') : '',
+      approvalHistory: getApprovalHistoryForLeave(cId !== -1 ? String(row[cId] || '') : '')
     });
   }
 

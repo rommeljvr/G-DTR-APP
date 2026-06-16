@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Search, X, Filter, RefreshCw, Loader2,
   FileText, Calendar, Clock, ChevronDown, ChevronUp,
-  ExternalLink, AlertCircle, Eye, Download,
+  ExternalLink, AlertCircle, Eye, Download, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { User } from '../types';
 import { getLeaveHistory, cancelLeave, LeaveRecord } from '../utils/sheets';
@@ -253,6 +253,44 @@ export default function LeaveReport({ user, onBack }: Props) {
                 <div className="bg-white/5 rounded-2xl p-4">
                   <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-1.5">Reason</p>
                   <p className="text-white/80 text-sm leading-relaxed">{selected.reason}</p>
+                </div>
+              )}
+
+              {/* Rejection reason */}
+              {selected.rejectionReason && (
+                <div className="bg-red-500/10 border border-red-400/20 rounded-2xl p-4">
+                  <p className="text-red-300/70 text-[10px] font-semibold uppercase tracking-wider mb-1.5">Rejection Reason</p>
+                  <p className="text-red-300 text-sm leading-relaxed">{selected.rejectionReason}</p>
+                </div>
+              )}
+
+              {/* Approval history timeline */}
+              {selected.approvalHistory && selected.approvalHistory.length > 0 && (
+                <div>
+                  <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-2">Approval History</p>
+                  <div className="space-y-2">
+                    {selected.approvalHistory.map((h) => (
+                      <div key={h.id} className="flex items-start gap-3 bg-white/5 rounded-xl p-3">
+                        <div className="mt-0.5 shrink-0">
+                          {h.action === 'Approve'
+                            ? <ThumbsUp className="w-3.5 h-3.5 text-emerald-300" />
+                            : h.action === 'Reject'
+                            ? <ThumbsDown className="w-3.5 h-3.5 text-red-300" />
+                            : <Clock className="w-3.5 h-3.5 text-blue-300" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white/80 text-xs font-medium">{h.approverName}</p>
+                          <p className={`text-[11px] ${
+                            h.action === 'Approve' ? 'text-emerald-300'
+                            : h.action === 'Reject' ? 'text-red-300'
+                            : 'text-blue-300'
+                          }`}>{h.action}</p>
+                          {h.reason && <p className="text-white/50 text-[11px] mt-0.5">{h.reason}</p>}
+                        </div>
+                        <p className="text-white/30 text-[10px] shrink-0">{fmtDateTime(String(h.timestamp))}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
