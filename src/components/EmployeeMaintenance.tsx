@@ -138,6 +138,8 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const [photoStep, setPhotoStep]       = useState<PhotoStep>('idle');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError]     = useState('');
+  const [photoDebugId, setPhotoDebugId]   = useState(''); // DEBUG: Drive file ID
+  const [photoDebugUrl, setPhotoDebugUrl] = useState(''); // DEBUG: Drive URL
   const fileInputRef = useRef<HTMLInputElement>(null); // kept for programmatic reset only
 
   const load = async () => {
@@ -206,8 +208,11 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const handlePhotoCapture = async (dataUrl: string) => {
     setPhotoStep('uploading');
     setPhotoError('');
+    setPhotoDebugId('');
     const emailTarget = form.email.trim().toLowerCase() || 'employee';
     const res = await uploadEmployeePhoto(emailTarget, dataUrl);
+    setPhotoDebugId(res.id || '');
+    setPhotoDebugUrl(res.url || '');
     if (res.success && res.url) {
       setPhotoPreview(res.url);
       setField('imageUrl', res.url);
@@ -427,6 +432,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
                 </div>
               )}
               {photoError && <p className="text-red-400 text-xs text-center">{photoError}</p>}
+             
             </div>
 
             {/* Form */}
