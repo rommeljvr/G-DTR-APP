@@ -401,6 +401,16 @@ export async function getLeaveHistory(
   }
 }
 
+export async function getLeaveById(leaveId: string): Promise<import('../types').LeaveApplication | null> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return null;
+  try {
+    const res = await fetch(`${scriptUrl}?action=getLeaveById&leaveId=${encodeURIComponent(leaveId)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? json.record : null;
+  } catch { return null; }
+}
+
 // ─── fetch image as base64 from Google Drive ──────────────────────
 
 const imageCache = new Map<string, string>();
@@ -872,6 +882,7 @@ function doGet(e) {
   if (action === 'getApproverSettings')  return getApproverSettings(email);
   if (action === 'getAllApproverSettings') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getAllApproverSettings() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'getPendingApprovals')  return email ? getPendingApprovals(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getLeaveById')         return p.leaveId ? getLeaveById(p.leaveId) : _json({ success: false, message: 'leaveId required' });
   if (action === 'getNotifications')     return email ? getNotifications(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
@@ -2172,6 +2183,80 @@ function getLeaveHistory(email) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  GET LEAVE BY ID
+//  Returns a single leave application row for approver/notification view
+// ══════════════════════════════════════════════════════════════════
+
+function getLeaveById(leaveId) {
+  if (!leaveId) return _json({ success: false, message: 'leaveId required' });
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('LeaveApplications');
+  if (!sheet || sheet.getLastRow() <= 1) return _json({ success: false, message: 'No records' });
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  function col(names) {
+    for (var n = 0; n < names.length; n++)
+      for (var c = 0; c < headers.length; c++)
+        if (String(headers[c]).trim().toLowerCase() === names[n].toLowerCase()) return c;
+    return -1;
+  }
+  var cId     = col(['ID']);
+  var cName   = col(['Employee Name']);
+  var cEmail  = col(['Email']);
+  var cType   = col(['Leave Type']);
+  var cStart  = col(['Start Date']);
+  var cEnd    = col(['End Date']);
+  var cMode   = col(['Mode']);
+  var cHalf   = col(['Half Day Period']);
+  var cDays   = col(['Total Days']);
+  var cPay    = col(['Payment Status']);
+  var cReason = col(['Reason']);
+  var cDocId  = col(['Document ID']);
+  var cDocUrl = col(['Document URL']);
+  var cStatus = col(['Status']);
+  var cFiled  = col(['Submitted At']);
+  var cRej    = col(['Rejection Reason']);
+  var idLower = String(leaveId).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i];
+    if (String(row[cId] || '').trim().toLowerCase() !== idLower) continue;
+    var docUrlVal = cDocUrl !== -1 ? String(row[cDocUrl] || '') : '';
+    if (docUrlVal.indexOf('HYPERLINK') > -1) { var m = docUrlVal.match(/https:\/\/[^"]+/); docUrlVal = m ? m[0] : ''; }
+    var history = getApprovalHistoryForLeave(String(row[cId] || ''));
+    var settings = null;
+    try {
+      var empEmail = cEmail !== -1 ? String(row[cEmail] || '').trim() : '';
+      var apResult = getApproverSettings(empEmail);
+      var apJson = JSON.parse(apResult.getContent());
+      if (apJson.success && apJson.settings) settings = apJson.settings;
+    } catch(e) {}
+    return _json({ success: true, record: {
+      id:              String(row[cId]     || ''),
+      employeeName:    cName   !== -1 ? String(row[cName]   || '') : '',
+      email:           cEmail  !== -1 ? String(row[cEmail]  || '') : '',
+      leaveType:       cType   !== -1 ? String(row[cType]   || '') : '',
+      startDate:       cStart  !== -1 ? String(row[cStart]  || '') : '',
+      endDate:         cEnd    !== -1 ? String(row[cEnd]    || '') : '',
+      mode:            cMode   !== -1 ? String(row[cMode]   || '') : '',
+      halfDayPeriod:   cHalf   !== -1 ? String(row[cHalf]  || '') : '',
+      totalDays:       cDays   !== -1 ? Number(row[cDays]   || 0)  : 0,
+      paymentStatus:   cPay    !== -1 ? String(row[cPay]   || '') : '',
+      reason:          cReason !== -1 ? String(row[cReason] || '') : '',
+      docId:           cDocId  !== -1 ? String(row[cDocId]  || '') : '',
+      documentUrl:     docUrlVal,
+      status:          cStatus !== -1 ? String(row[cStatus] || 'Pending') : 'Pending',
+      submittedAt:     cFiled  !== -1 ? String(row[cFiled]  || '') : '',
+      rejectionReason: cRej    !== -1 ? String(row[cRej]   || '') : '',
+      teamLeadEmail:   settings ? String(settings.teamLeadEmail || '') : '',
+      approverEmail:   settings ? String(settings.approverEmail  || '') : '',
+      workflowType:    settings ? String(settings.workflowType   || 'DIRECT') : 'DIRECT',
+      approvalHistory: history
+    }});
+  }
+  return _json({ success: false, message: 'Leave not found' });
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  LEAVE DOCUMENT – UPLOAD & GET
 //  Mirrors uploadImageToDrive / getImage for attendance photos
 // ══════════════════════════════════════════════════════════════════
@@ -2604,6 +2689,8 @@ function getPendingApprovals(approverEmail) {
   var cEnd    = col(['End Date']);
   var cDays   = col(['Total Days']);
   var cReason = col(['Reason']);
+  var cDocId  = col(['Document ID']);
+  var cDocUrl = col(['Document URL']);
   var cStatus = col(['Status']);
   var cFiled  = col(['Submitted At']);
   var cRej    = col(['Rejection Reason']);
@@ -2661,6 +2748,8 @@ function getPendingApprovals(approverEmail) {
       endDate:         cEnd    !== -1 ? String(row[cEnd]    || '') : '',
       totalDays:       cDays   !== -1 ? Number(row[cDays]   || 0)  : 0,
       reason:          cReason !== -1 ? String(row[cReason] || '') : '',
+      docId:           cDocId  !== -1 ? String(row[cDocId]  || '') : '',
+      documentUrl:     cDocUrl !== -1 ? String(row[cDocUrl] || '') : '',
       status:          status,
       submittedAt:     cFiled  !== -1 ? String(row[cFiled]  || '') : '',
       teamLeadEmail:   cfg ? String(cfg.teamLeadEmail || '') : '',

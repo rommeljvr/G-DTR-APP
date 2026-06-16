@@ -89,6 +89,7 @@ export interface LeaveApplication {
   totalDays: number;
   paymentStatus: PaymentStatus;
   reason: string;
+  docId?: string;
   documentUrl?: string;
   status: 'Pending' | 'Acknowledged' | 'Approved' | 'Rejected' | 'Cancelled';
   submittedAt: string;

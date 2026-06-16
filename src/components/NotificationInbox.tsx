@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, Eye } from 'lucide-react';
+import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, Eye, FileText } from 'lucide-react';
 import { User, AppNotification, NotificationType } from '../types';
-import { getNotifications, markNotificationsRead, acknowledgeLeave, rejectLeave } from '../utils/sheets';
+import { getNotifications, markNotificationsRead, acknowledgeLeave, rejectLeave, getLeaveById } from '../utils/sheets';
+import LeaveDetailModal from './LeaveDetailModal';
+import { LeaveApplication } from '../types';
 
 interface Props {
   user: User;
@@ -37,6 +39,8 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
   const [rejectTarget, setRejectTarget] = useState<AppNotification | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [detailLeave, setDetailLeave]   = useState<LeaveApplication | null>(null);
+  const [detailLoading, setDetailLoading] = useState<string | null>(null);
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
@@ -64,6 +68,15 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     await markNotificationsRead(user.email);
     setItems([]);
     onRead();
+  };
+
+  const openDetail = async (n: AppNotification) => {
+    if (!n.leaveId) return;
+    setDetailLoading(n.id);
+    const leave = await getLeaveById(n.leaveId);
+    setDetailLoading(null);
+    if (leave) setDetailLeave(leave);
+    else showToast('Could not load leave details.', false);
   };
 
   const handleAcknowledge = async (n: AppNotification) => {
@@ -158,34 +171,48 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
                 </div>
               </div>
 
-              {/* Action buttons for PENDING_APPROVAL */}
-              {isPendingAction ? (
-                <div className="mt-3 flex gap-2">
+              {/* Action buttons */}
+              <div className="mt-3 flex flex-col gap-2">
+                {/* View details — available on any notification with a leaveId */}
+                {n.leaveId && (
                   <button
-                    onClick={() => handleAcknowledge(n)}
-                    disabled={isActing}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                    onClick={() => openDetail(n)}
+                    disabled={detailLoading === n.id}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/8 text-white/60 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-white/12 disabled:opacity-50"
                   >
-                    {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
-                    Acknowledge
+                    {detailLoading === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                    View Leave Details
                   </button>
+                )}
+                {/* Acknowledge + Reject for PENDING_APPROVAL */}
+                {isPendingAction ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAcknowledge(n)}
+                      disabled={isActing}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                    >
+                      {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                      Acknowledge
+                    </button>
+                    <button
+                      onClick={() => { setRejectTarget(n); setRejectReason(''); }}
+                      disabled={isActing}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/30 text-red-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      Reject
+                    </button>
+                  </div>
+                ) : (
                   <button
-                    onClick={() => { setRejectTarget(n); setRejectReason(''); }}
-                    disabled={isActing}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/30 text-red-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                    onClick={() => dismiss(n.id)}
+                    className="w-full py-2 rounded-xl bg-white/6 text-white/50 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-white/10"
                   >
-                    <ThumbsDown className="w-3.5 h-3.5" />
-                    Reject
+                    Dismiss
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => dismiss(n.id)}
-                  className="mt-3 w-full py-2 rounded-xl bg-white/6 text-white/50 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-white/10"
-                >
-                  Dismiss
-                </button>
-              )}
+                )}
+              </div>
             </div>
           );
         })}
@@ -197,6 +224,14 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
           </button>
         )}
       </div>
+
+      {/* Leave detail modal */}
+      {detailLeave && (
+        <LeaveDetailModal
+          leave={detailLeave}
+          onClose={() => setDetailLeave(null)}
+        />
+      )}
 
       {/* Reject reason modal */}
       {rejectTarget && (

@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  ChevronLeft, CheckCircle2, XCircle, Clock, Loader2,
-  AlertCircle, User as UserIcon, CalendarDays, FileText,
+  ChevronLeft, CheckCircle2, Loader2,
+  AlertCircle, User as UserIcon, CalendarDays,
   ThumbsUp, ThumbsDown, Eye,
 } from 'lucide-react';
-import { User, LeaveApplication, LeaveApprovalRecord } from '../types';
+import { User, LeaveApplication } from '../types';
 import { getPendingApprovals, acknowledgeLeave, approveLeave, rejectLeave, markNotificationsRead } from '../utils/sheets';
+import LeaveDetailModal from './LeaveDetailModal';
 
 interface Props {
   user: User;
@@ -199,138 +200,47 @@ export default function LeaveApproval({ user, onBack, onUnreadChange }: Props) {
 
       {/* Detail Modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto slide-up">
-            {/* Modal header */}
-            <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-5 py-4 flex items-center justify-between">
-              <h2 className="text-white font-bold">Leave Request Detail</h2>
-              <button onClick={() => setSelected(null)} className="w-8 h-8 bg-white/8 rounded-full flex items-center justify-center">
-                <XCircle className="w-4 h-4 text-white/60" />
-              </button>
-            </div>
-
-            <div className="px-5 py-4 space-y-4">
-              {/* Employee */}
-              <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                  <UserIcon className="w-5 h-5 text-blue-300" />
-                </div>
-                <div>
-                  <p className="text-white font-semibold text-sm">{selected.employeeName}</p>
-                  <p className="text-white/50 text-xs">{selected.email}</p>
-                </div>
-                <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLE[selected.status] || 'bg-white/10 text-white/50 border-transparent'}`}>
-                  {selected.status}
-                </span>
-              </div>
-
-              {/* Leave details */}
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="bg-white/5 rounded-xl p-3">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Leave Type</p>
-                  <p className="text-white font-medium">{selected.leaveType}</p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Duration</p>
-                  <p className="text-white font-medium">{selected.totalDays} day{selected.totalDays !== 1 ? 's' : ''}</p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">From</p>
-                  <p className="text-white font-medium">{formatDate(selected.startDate)}</p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">To</p>
-                  <p className="text-white font-medium">{formatDate(selected.endDate)}</p>
-                </div>
-              </div>
-
-              {/* Reason */}
-              {selected.reason && (
-                <div className="bg-white/5 rounded-xl p-3">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Reason</p>
-                  <p className="text-white/80 text-sm leading-relaxed">{selected.reason}</p>
-                </div>
+        <LeaveDetailModal
+          leave={selected}
+          onClose={() => setSelected(null)}
+          actions={
+            <>
+              {isTL(selected) && (
+                <button
+                  onClick={() => handleAcknowledge(selected)}
+                  disabled={actionLoading}
+                  className="w-full bg-blue-500/20 border border-blue-400/30 text-blue-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Acknowledge & Forward
+                </button>
               )}
-
-              {/* Rejection reason */}
-              {selected.rejectionReason && (
-                <div className="bg-red-500/10 border border-red-400/20 rounded-xl p-3">
-                  <p className="text-red-300/70 text-[10px] uppercase tracking-wide mb-1">Rejection Reason</p>
-                  <p className="text-red-300 text-sm">{selected.rejectionReason}</p>
-                </div>
-              )}
-
-              {/* Workflow info */}
-              <div className="bg-white/5 rounded-xl p-3 text-xs text-white/50 space-y-1">
-                <p><span className="text-white/30">Workflow:</span> {selected.workflowType === 'TWO_STEP' ? 'Two-Step (TL → Approver)' : 'Direct Approval'}</p>
-                {selected.teamLeadEmail && <p><span className="text-white/30">Team Lead:</span> {selected.teamLeadEmail}</p>}
-                {selected.approverEmail && <p><span className="text-white/30">Approver:</span> {selected.approverEmail}</p>}
-                <p><span className="text-white/30">Submitted:</span> {formatTs(selected.submittedAt)}</p>
-              </div>
-
-              {/* Approval history timeline */}
-              {selected.approvalHistory && selected.approvalHistory.length > 0 && (
-                <div>
-                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-2">Approval History</p>
-                  <div className="space-y-2">
-                    {(selected.approvalHistory as LeaveApprovalRecord[]).map((h) => (
-                      <div key={h.id} className="flex items-start gap-3 bg-white/5 rounded-xl p-3">
-                        <div className={`mt-0.5 text-xs font-bold ${ACTION_STYLE[h.action] || 'text-white/50'}`}>
-                          {h.action === 'Approve' ? <ThumbsUp className="w-3.5 h-3.5" /> :
-                           h.action === 'Reject'  ? <ThumbsDown className="w-3.5 h-3.5" /> :
-                           <Clock className="w-3.5 h-3.5 text-blue-300" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white/80 text-xs font-medium">{h.approverName}</p>
-                          <p className={`text-[11px] ${ACTION_STYLE[h.action] || 'text-white/40'}`}>{h.action}</p>
-                          {h.reason && <p className="text-white/50 text-[11px] mt-0.5">{h.reason}</p>}
-                        </div>
-                        <p className="text-white/30 text-[10px] shrink-0">{formatTs(String(h.timestamp))}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex flex-col gap-2 pt-1 pb-2">
-                {isTL(selected) && (
+              {isApprover(selected) && (
+                <>
                   <button
-                    onClick={() => handleAcknowledge(selected)}
+                    onClick={() => handleApprove(selected)}
                     disabled={actionLoading}
-                    className="w-full bg-blue-500/20 border border-blue-400/30 text-blue-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
+                    className="w-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                    Acknowledge & Forward
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                    Approve
                   </button>
-                )}
-                {isApprover(selected) && (
-                  <>
-                    <button
-                      onClick={() => handleApprove(selected)}
-                      disabled={actionLoading}
-                      className="w-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
-                    >
-                      {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => setShowRejectModal(true)}
-                      disabled={actionLoading}
-                      className="w-full bg-red-500/15 border border-red-400/30 text-red-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
-                    >
-                      <ThumbsDown className="w-4 h-4" />
-                      Reject
-                    </button>
-                  </>
-                )}
-                {!isTL(selected) && !isApprover(selected) && (
-                  <p className="text-center text-white/30 text-xs py-2">No actions available for your role on this request.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+                  <button
+                    onClick={() => setShowRejectModal(true)}
+                    disabled={actionLoading}
+                    className="w-full bg-red-500/15 border border-red-400/30 text-red-300 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60"
+                  >
+                    <ThumbsDown className="w-4 h-4" />
+                    Reject
+                  </button>
+                </>
+              )}
+              {!isTL(selected) && !isApprover(selected) && (
+                <p className="text-center text-white/30 text-xs py-2">No actions available for your role on this request.</p>
+              )}
+            </>
+          }
+        />
       )}
 
       {/* Reject reason modal */}
