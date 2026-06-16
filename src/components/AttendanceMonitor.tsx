@@ -72,7 +72,6 @@ const STATUS_CONFIG: Record<string, {
   Absent:    { label: 'Absent',    icon: XCircle,       badge: 'bg-red-400/15 text-red-300 border border-red-400/30',            card: 'border-red-500/20',    dot: 'bg-red-400'    },
 };
 
-const FILTERS: StatusFilter[] = ['All', 'Active', 'Completed', 'On Leave', 'Absent'];
 
 function ProfileAvatar({ image, name, size = 'md' }: { image?: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
   const [err, setErr] = useState(false);
@@ -426,7 +425,7 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
       </div>
 
       {/* Search + filter */}
-      <div className="px-4 py-3 space-y-2 bg-slate-900/80 border-b border-white/10 sticky top-0 z-20">
+      <div className="px-4 py-3 bg-slate-900/80 border-b border-white/10 sticky top-0 z-20">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
@@ -441,21 +440,6 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
               <X className="w-4 h-4 text-white/30" />
             </button>
           )}
-        </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors active:scale-95 ${
-                filter === f
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-400/30'
-                  : 'bg-white/5 text-white/50 border border-transparent'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
         </div>
       </div>
 
