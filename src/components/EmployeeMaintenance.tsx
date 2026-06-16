@@ -137,6 +137,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const [photoStep, setPhotoStep]       = useState<PhotoStep>('idle');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError]     = useState('');
+  const [photoDebugId, setPhotoDebugId] = useState(''); // DEBUG: Drive file ID
   const fileInputRef = useRef<HTMLInputElement>(null); // kept for programmatic reset only
 
   const load = async () => {
@@ -205,8 +206,10 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const handlePhotoCapture = async (dataUrl: string) => {
     setPhotoStep('uploading');
     setPhotoError('');
+    setPhotoDebugId('');
     const emailTarget = form.email.trim().toLowerCase() || 'employee';
     const res = await uploadEmployeePhoto(emailTarget, dataUrl);
+    setPhotoDebugId(res.id || '');
     if (res.success && res.url) {
       setPhotoPreview(res.url);
       setField('imageUrl', res.url);
@@ -353,100 +356,84 @@ export default function EmployeeMaintenance({ onBack }: Props) {
               </div>
             )}
 
-            {/* Photo section */}
-            <div className="flex flex-col items-center pt-6 pb-2 gap-3 px-5">
-              {(photoPreview || form.imageUrl) ? (
-                /* ── Photo uploaded: full preview card ── */
-                <div className="w-full max-w-xs flex flex-col gap-2">
-                  <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-black/30" style={{ aspectRatio: '1/1' }}>
-                    <img
-                      src={photoPreview || form.imageUrl}
-                      alt="Employee photo"
-                      className="w-full h-full object-cover"
+            {/* Avatar + photo controls */}
+            <div className="flex flex-col items-center pt-6 pb-2 gap-3">
+              <div className="relative">
+                <Avatar image={photoPreview || form.imageUrl || undefined} name={form.name || '?'} size="lg" />
+                {photoStep === 'uploading' && (
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {/* Photo upload area — same pattern as LeaveApplication document upload */}
+              {photoPreview || form.imageUrl ? (
+                /* Photo already set — show name + actions */
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 w-full max-w-xs">
+                  <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-white/70 text-xs truncate flex-1">Photo uploaded ✓</span>
+                  <label className="cursor-pointer text-blue-400 hover:text-blue-300 transition-colors text-xs font-semibold shrink-0">
+                    Change
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
                     />
-                    {photoStep === 'uploading' && (
-                      <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="w-8 h-8 text-white animate-spin" />
-                        <span className="text-white/80 text-xs">Uploading…</span>
-                      </div>
-                    )}
-                    {/* overlay badge */}
-                    {photoStep !== 'uploading' && (
-                      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1">
-                        <Check className="w-3 h-3 text-green-400" />
-                        <span className="text-green-300 text-[11px] font-semibold">Uploaded</span>
-                      </div>
-                    )}
-                  </div>
-                  {/* action row below image */}
-                  <div className="flex gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 rounded-xl py-2 cursor-pointer hover:bg-white/10 transition-colors text-blue-300 text-xs font-semibold">
-                      <Upload className="w-3.5 h-3.5" />
-                      Change
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setPhotoStep('camera')}
-                      disabled={photoStep === 'uploading'}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 rounded-xl py-2 text-white/50 text-xs hover:text-blue-300 transition-colors disabled:opacity-40"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      Camera
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPhotoPreview(null); setField('imageUrl', ''); }}
-                      className="flex items-center justify-center bg-red-500/10 border border-red-400/20 rounded-xl px-3 text-red-400 hover:text-red-300 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  </label>
+                  <span className="text-white/20">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoStep('camera')}
+                    className="text-white/40 hover:text-blue-300 transition-colors text-xs shrink-0"
+                  >
+                    Camera
+                  </button>
+                  <span className="text-white/20">·</span>
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoPreview(null); setField('imageUrl', ''); }}
+                    className="text-red-400/60 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ) : (
-                /* ── No photo: avatar + upload controls ── */
-                <>
-                  <div className="relative">
-                    <Avatar image={undefined} name={form.name || '?'} size="lg" />
-                    {photoStep === 'uploading' && (
-                      <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
-                        <Loader2 className="w-6 h-6 text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-center gap-2 w-full max-w-xs">
-                    <label className={`flex items-center gap-2 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3 w-full cursor-pointer hover:bg-white/10 transition-colors ${
-                      photoStep === 'uploading' ? 'pointer-events-none opacity-40' : ''
-                    }`}>
-                      <Upload className="w-4 h-4 text-blue-400/60 shrink-0" />
-                      <span className="text-white/40 text-sm">Tap to upload a photo</span>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setPhotoStep('camera')}
-                      disabled={photoStep === 'uploading'}
-                      className="flex items-center gap-1.5 text-white/35 hover:text-blue-300 text-xs transition-colors disabled:opacity-40"
-                    >
-                      <Camera className="w-3 h-3" />
-                      or use camera
-                    </button>
-                  </div>
-                </>
+                /* No photo yet — dashed tap area (primary) + camera link */
+                <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                  <label className={`flex items-center gap-2 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3 w-full cursor-pointer hover:bg-white/8 transition-colors ${
+                    photoStep === 'uploading' ? 'pointer-events-none opacity-40' : ''
+                  }`}>
+                    <Upload className="w-4 h-4 text-blue-400/60 shrink-0" />
+                    <span className="text-white/40 text-sm">Tap to upload a photo</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoStep('camera')}
+                    disabled={photoStep === 'uploading'}
+                    className="flex items-center gap-1.5 text-white/35 hover:text-blue-300 text-xs transition-colors disabled:opacity-40"
+                  >
+                    <Camera className="w-3 h-3" />
+                    or use camera
+                  </button>
+                </div>
               )}
               {photoError && <p className="text-red-400 text-xs text-center">{photoError}</p>}
+              {/* DEBUG: show Drive file ID after upload */}
+              {photoDebugId && (
+                <p className="text-yellow-400/70 text-[10px] text-center font-mono break-all max-w-xs">
+                  [DEBUG] fileId: {photoDebugId}
+                </p>
+              )}
             </div>
 
             {/* Form */}
