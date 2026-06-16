@@ -1568,9 +1568,9 @@ function logCreditTransaction(email, employeeName, leaveType, days, txType, leav
 
 function getEmployeeSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Employees');
+  var sheet = ss.getSheetByName('Employee');
   if (!sheet) {
-    sheet = ss.insertSheet('Employees');
+    sheet = ss.insertSheet('Employee');
     sheet.appendRow(['Email', 'Employee Name', 'Hourly Wage', 'Role', 'Image', 'Department', 'Designation', 'ACTIVE']);
     var hdr = sheet.getRange(1, 1, 1, 8);
     hdr.setFontWeight('bold').setBackground('#1e40af').setFontColor('#ffffff');
