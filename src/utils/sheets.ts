@@ -2606,22 +2606,43 @@ function getPendingApprovals(approverEmail) {
   var cReason = col(['Reason']);
   var cStatus = col(['Status']);
   var cFiled  = col(['Submitted At']);
-  var cTL     = col(['Team Lead Email']);
-  var cAppr   = col(['Approver Email']);
-  var cWF     = col(['Workflow Type']);
   var cRej    = col(['Rejection Reason']);
+
+  // Pre-load all approver settings into a map keyed by employee email
+  var settingsMap = {};
+  try {
+    var apSheet = getApproverSettingsSheet();
+    if (apSheet && apSheet.getLastRow() > 1) {
+      var apRows = apSheet.getDataRange().getValues();
+      for (var a = 1; a < apRows.length; a++) {
+        var empKey = String(apRows[a][0] || '').trim().toLowerCase();
+        if (empKey) {
+          settingsMap[empKey] = {
+            teamLeadEmail: String(apRows[a][2] || '').trim().toLowerCase(),
+            approverEmail:  String(apRows[a][3] || '').trim().toLowerCase(),
+            workflowType:   String(apRows[a][4] || 'DIRECT').trim()
+          };
+        }
+      }
+    }
+  } catch (se) { Logger.log('getPendingApprovals: settings load error: ' + se); }
 
   var records = [];
   for (var i = 1; i < rows.length; i++) {
     var row    = rows[i];
     var status = String(row[cStatus] || '').trim();
-    var tl     = cTL   !== -1 ? String(row[cTL]   || '').trim().toLowerCase() : '';
-    var appr   = cAppr !== -1 ? String(row[cAppr]  || '').trim().toLowerCase() : '';
-    var wf     = cWF   !== -1 ? String(row[cWF]    || 'DIRECT').trim() : 'DIRECT';
+    if (status !== 'Pending' && status !== 'Acknowledged') continue;
+
+    var empEmail = cEmail !== -1 ? String(row[cEmail] || '').trim().toLowerCase() : '';
+    var cfg = settingsMap[empEmail] || null;
+
+    var tl   = cfg ? cfg.teamLeadEmail : '';
+    var appr = cfg ? cfg.approverEmail  : '';
+    var wf   = cfg ? cfg.workflowType   : 'DIRECT';
 
     var isNextApprover = false;
     if (wf === 'TWO_STEP') {
-      if (status === 'Pending' && tl === approverLower) isNextApprover = true;
+      if (status === 'Pending'      && tl   === approverLower) isNextApprover = true;
       if (status === 'Acknowledged' && appr === approverLower) isNextApprover = true;
     } else {
       if (status === 'Pending' && appr === approverLower) isNextApprover = true;
@@ -2642,10 +2663,10 @@ function getPendingApprovals(approverEmail) {
       reason:          cReason !== -1 ? String(row[cReason] || '') : '',
       status:          status,
       submittedAt:     cFiled  !== -1 ? String(row[cFiled]  || '') : '',
-      teamLeadEmail:   cTL   !== -1 ? String(row[cTL]   || '') : '',
-      approverEmail:   cAppr !== -1 ? String(row[cAppr]  || '') : '',
+      teamLeadEmail:   cfg ? String(cfg.teamLeadEmail || '') : '',
+      approverEmail:   cfg ? String(cfg.approverEmail  || '') : '',
       workflowType:    wf,
-      rejectionReason: cRej  !== -1 ? String(row[cRej]  || '') : '',
+      rejectionReason: cRej !== -1 ? String(row[cRej] || '') : '',
       approvalHistory: history
     });
   }
@@ -2700,6 +2721,25 @@ function getApproverName(approverEmail) {
   return approverEmail;
 }
 
+function getSettingsForEmployee(employeeEmail) {
+  try {
+    var apSheet = getApproverSettingsSheet();
+    if (!apSheet || apSheet.getLastRow() <= 1) return null;
+    var apRows = apSheet.getDataRange().getValues();
+    var empLower = String(employeeEmail || '').trim().toLowerCase();
+    for (var a = 1; a < apRows.length; a++) {
+      if (String(apRows[a][0] || '').trim().toLowerCase() === empLower) {
+        return {
+          teamLeadEmail: String(apRows[a][2] || '').trim().toLowerCase(),
+          approverEmail:  String(apRows[a][3] || '').trim().toLowerCase(),
+          workflowType:   String(apRows[a][4] || 'DIRECT').trim()
+        };
+      }
+    }
+  } catch (e) { Logger.log('getSettingsForEmployee error: ' + e); }
+  return null;
+}
+
 function acknowledgeLeave(leaveId, approverEmail) {
   if (!leaveId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
   var found = findLeaveRow(leaveId);
@@ -2707,13 +2747,16 @@ function acknowledgeLeave(leaveId, approverEmail) {
 
   var headers = found.headers;
   var cStatus = colIdx(headers, ['Status']);
-  var cTL     = colIdx(headers, ['Team Lead Email']);
-  var cAppr   = colIdx(headers, ['Approver Email']);
   var cEmail  = colIdx(headers, ['Email']);
 
   var currentStatus = String(found.row[cStatus] || '');
-  var tlEmail = cTL !== -1 ? String(found.row[cTL] || '').trim().toLowerCase() : '';
   if (currentStatus !== 'Pending') return _json({ success: false, message: 'Can only acknowledge Pending requests' });
+
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  var cfg = getSettingsForEmployee(employeeEmail);
+  var tlEmail      = cfg ? cfg.teamLeadEmail : '';
+  var nextApprover = cfg ? cfg.approverEmail  : '';
+
   if (tlEmail !== String(approverEmail).trim().toLowerCase()) return _json({ success: false, message: 'You are not the assigned Team Lead' });
 
   found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Acknowledged');
@@ -2721,14 +2764,11 @@ function acknowledgeLeave(leaveId, approverEmail) {
   var approverName = getApproverName(approverEmail);
   appendApprovalHistory(leaveId, approverEmail, approverName, 'Acknowledge', '');
 
-  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
-  var nextApprover  = cAppr  !== -1 ? String(found.row[cAppr]  || '') : '';
-
   createNotification(employeeEmail, 'LEAVE_ACKNOWLEDGED',
     'Your leave request has been acknowledged by ' + approverName + ' and forwarded for approval.', leaveId);
   if (nextApprover) {
     createNotification(nextApprover, 'PENDING_APPROVAL',
-      employeeEmail + ' leave request is awaiting your approval.', leaveId);
+      (employeeEmail + ' leave request is awaiting your approval.'), leaveId);
   }
 
   return _json({ success: true, message: 'Leave acknowledged and forwarded' });
@@ -2741,15 +2781,14 @@ function approveLeave(leaveId, approverEmail) {
 
   var headers = found.headers;
   var cStatus = colIdx(headers, ['Status']);
-  var cAppr   = colIdx(headers, ['Approver Email']);
   var cEmail  = colIdx(headers, ['Email']);
-  var cWF     = colIdx(headers, ['Workflow Type']);
-  var cTL     = colIdx(headers, ['Team Lead Email']);
 
-  var currentStatus  = String(found.row[cStatus] || '');
-  var apprEmail = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
-  var tlEmail   = cTL   !== -1 ? String(found.row[cTL]   || '').trim().toLowerCase() : '';
-  var wf        = cWF   !== -1 ? String(found.row[cWF]   || 'DIRECT') : 'DIRECT';
+  var currentStatus = String(found.row[cStatus] || '');
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  var cfg = getSettingsForEmployee(employeeEmail);
+  var apprEmail   = cfg ? cfg.approverEmail  : '';
+  var tlEmail     = cfg ? cfg.teamLeadEmail  : '';
+  var wf          = cfg ? cfg.workflowType   : 'DIRECT';
   var callerLower = String(approverEmail).trim().toLowerCase();
 
   var canApprove = false;
@@ -2763,10 +2802,9 @@ function approveLeave(leaveId, approverEmail) {
 
   found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Approved');
 
-  var approverName   = getApproverName(approverEmail);
+  var approverName = getApproverName(approverEmail);
   appendApprovalHistory(leaveId, approverEmail, approverName, 'Approve', '');
 
-  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
   createNotification(employeeEmail, 'LEAVE_APPROVED',
     'Your leave request has been approved by ' + approverName + '.', leaveId);
 
@@ -2782,14 +2820,14 @@ function rejectLeave(leaveId, approverEmail, reason) {
 
   var headers = found.headers;
   var cStatus = colIdx(headers, ['Status']);
-  var cAppr   = colIdx(headers, ['Approver Email']);
-  var cTL     = colIdx(headers, ['Team Lead Email']);
   var cEmail  = colIdx(headers, ['Email']);
   var cRej    = colIdx(headers, ['Rejection Reason']);
 
   var currentStatus = String(found.row[cStatus] || '');
-  var apprEmail = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
-  var tlEmail   = cTL   !== -1 ? String(found.row[cTL]   || '').trim().toLowerCase() : '';
+  var employeeEmail = cEmail !== -1 ? String(found.row[cEmail] || '') : '';
+  var cfg = getSettingsForEmployee(employeeEmail);
+  var apprEmail   = cfg ? cfg.approverEmail  : '';
+  var tlEmail     = cfg ? cfg.teamLeadEmail  : '';
   var callerLower = String(approverEmail).trim().toLowerCase();
 
   if (callerLower !== apprEmail && callerLower !== tlEmail) {
