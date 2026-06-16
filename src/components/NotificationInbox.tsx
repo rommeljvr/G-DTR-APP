@@ -39,16 +39,25 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     const data = await getNotifications(user.email);
     setItems(data);
     setLoading(false);
-    await markNotificationsRead(user.email);
-    onRead();
+    // Mark all read immediately so the badge clears
+    if (data.some((n) => !n.isRead)) {
+      await markNotificationsRead(user.email);
+      onRead();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.email]);
 
   useEffect(() => { load(); }, [load]);
 
-  const markOne = async (id: string) => {
+  const dismiss = async (id: string) => {
     await markNotificationsRead(user.email, id);
-    setItems((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
+    setItems((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const dismissAll = async () => {
+    await markNotificationsRead(user.email);
+    setItems([]);
+    onRead();
   };
 
   const unread = items.filter((n) => !n.isRead).length;
@@ -92,50 +101,50 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
             <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center">
               <Bell className="w-7 h-7 text-white/20" />
             </div>
-            <p className="text-white/40 text-sm">No notifications yet</p>
+            <p className="text-white/40 text-sm">All caught up!</p>
           </div>
         )}
 
         {!loading && items.map((n) => {
           const meta = TYPE_META[n.type] ?? { label: n.type, icon: '🔔', color: 'bg-white/10 border-white/10 text-white/60' };
+          const isUnread = !n.isRead;
           return (
-            <button
+            <div
               key={n.id}
-              onClick={() => markOne(n.id)}
-              className={`w-full text-left rounded-2xl border p-4 transition-all active:scale-[0.98] ${
-                n.isRead ? 'bg-white/3 border-white/8 opacity-60' : 'bg-white/6 border-white/12'
+              className={`relative rounded-2xl border p-4 transition-all ${
+                isUnread ? 'bg-white/6 border-white/12' : 'bg-white/3 border-white/8'
               }`}
             >
+              {isUnread && (
+                <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+              )}
               <div className="flex items-start gap-3">
                 <span className="text-xl mt-0.5 shrink-0">{meta.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${meta.color}`}>
-                      {meta.label}
-                    </span>
-                    {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                    )}
-                  </div>
-                  <p className="text-white/80 text-sm leading-relaxed">{n.message}</p>
+                <div className="flex-1 min-w-0 pr-4">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${meta.color}`}>
+                    {meta.label}
+                  </span>
+                  <p className="text-white/80 text-sm leading-relaxed mt-1.5">{n.message}</p>
                   <p className="text-white/30 text-[11px] mt-1.5">{timeAgo(n.createdAt)}</p>
                 </div>
               </div>
-            </button>
+              <button
+                onClick={() => dismiss(n.id)}
+                className="mt-3 w-full py-2 rounded-xl bg-white/6 text-white/50 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-white/10"
+              >
+                Dismiss
+              </button>
+            </div>
           );
         })}
 
-        {!loading && items.length > 0 && items.some((n) => !n.isRead) && (
+        {!loading && items.length > 0 && (
           <button
-            onClick={async () => {
-              await markNotificationsRead(user.email);
-              setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
-              onRead();
-            }}
+            onClick={dismissAll}
             className="w-full flex items-center justify-center gap-2 py-3 text-white/40 text-sm hover:text-white/60 transition-colors"
           >
             <CheckCheck className="w-4 h-4" />
-            Mark all as read
+            Dismiss all
           </button>
         )}
       </div>
