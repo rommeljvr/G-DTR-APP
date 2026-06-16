@@ -1721,8 +1721,7 @@ function uploadEmployeePhoto(data) {
     var folder     = folderIter.hasNext() ? folderIter.next() : parent.createFolder(folderName);
 
     var file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
+    
     var url = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w400';
 
     // Write URL back to the employee sheet immediately
