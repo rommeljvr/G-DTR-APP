@@ -338,6 +338,27 @@ export async function deactivateEmployee(email: string, active: boolean): Promis
   return employeePost({ action: 'deactivateEmployee', email, active });
 }
 
+export async function uploadEmployeePhoto(
+  email: string,
+  photoDataUrl: string
+): Promise<{ success: boolean; url?: string; id?: string; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'uploadEmployeePhoto', email, photo: photoDataUrl }),
+    });
+    const json = await res.json();
+    return { success: !!json.success, url: json.url, id: json.id, message: json.message || '' };
+  } catch (err) {
+    console.error('uploadEmployeePhoto error:', err);
+    return { success: false, message: 'Network error during photo upload' };
+  }
+}
+
 // ─── leave history ────────────────────────────────────────────────
 
 export interface LeaveRecord {
@@ -642,7 +663,8 @@ function doPost(e) {
     if (data.action === 'cancelLeave')      return cancelLeave(data.id, data.email);
     if (data.action === 'createEmployee')   return createEmployee(data);
     if (data.action === 'updateEmployee')   return updateEmployee(data);
-    if (data.action === 'deactivateEmployee') return deactivateEmployee(data.email, data.active);
+    if (data.action === 'deactivateEmployee')   return deactivateEmployee(data.email, data.active);
+    if (data.action === 'uploadEmployeePhoto')  return uploadEmployeePhoto(data);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1671,6 +1693,43 @@ function getDesignationList() {
     if (d) desgs[d] = true;
   }
   return _json({ success: true, designations: Object.keys(desgs).sort() });
+}
+
+function uploadEmployeePhoto(data) {
+  if (!data.email) return _json({ success: false, message: 'Email is required' });
+  if (!data.photo || String(data.photo).indexOf('base64,') === -1) {
+    return _json({ success: false, message: 'Invalid photo data' });
+  }
+
+  try {
+    var parts  = String(data.photo).split('base64,');
+    var base64 = parts[1];
+    var decoded = Utilities.base64Decode(base64);
+    var ts      = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+    var safeName = String(data.email).replace(/[^a-zA-Z0-9]/g, '_');
+    var fileName = 'EMP_' + safeName + '_' + ts + '.jpg';
+    var blob    = Utilities.newBlob(decoded, 'image/jpeg', fileName);
+
+    var ss         = SpreadsheetApp.getActiveSpreadsheet();
+    var parentId   = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+    var parent;
+    try { parent = DriveApp.getFolderById(parentId); }
+    catch (e) { parent = DriveApp.getRootFolder(); }
+
+    var folderName = 'Employees_Images';
+    var folderIter = parent.getFoldersByName(folderName);
+    var folder     = folderIter.hasNext() ? folderIter.next() : parent.createFolder(folderName);
+
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+
+    return _json({ success: true, url: url, id: file.getId(), message: 'Photo uploaded' });
+  } catch (err) {
+    Logger.log('uploadEmployeePhoto error: ' + err.toString());
+    return _json({ success: false, message: 'Upload failed: ' + err.toString().substring(0, 100) });
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════

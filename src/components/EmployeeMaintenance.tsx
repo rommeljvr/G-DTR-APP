@@ -2,18 +2,20 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, Search, X, RefreshCw, Loader2, Plus, Edit2,
   UserX, UserCheck, AlertCircle, Check, ChevronDown, User as UserIcon,
-  Upload, Briefcase, Building2, DollarSign, Mail, ShieldCheck,
+  Camera, Briefcase, Building2, DollarSign, Mail, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
   getEmployees, createEmployee, updateEmployee, deactivateEmployee,
-  getDepartments, getDesignations, EmployeeRecord,
+  getDepartments, getDesignations, uploadEmployeePhoto, EmployeeRecord,
 } from '../utils/sheets';
+import CameraCapture from './CameraCapture';
 
 interface Props {
   onBack: () => void;
 }
 
 type DrawerMode = 'create' | 'edit' | null;
+type PhotoStep = 'idle' | 'camera' | 'uploading';
 
 const ROLES = ['Admin', 'Level 1', 'Level 2'];
 
@@ -132,6 +134,9 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const [confirmDeactivate, setConfirmDeactivate] = useState<EmployeeRecord | null>(null);
   const [departments, setDepartments]   = useState<string[]>([]);
   const [designations, setDesignations] = useState<string[]>([]);
+  const [photoStep, setPhotoStep]       = useState<PhotoStep>('idle');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoError, setPhotoError]     = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -164,11 +169,14 @@ export default function EmployeeMaintenance({ onBack }: Props) {
     return r;
   }, [employees, search, filterStatus]);
 
+  const resetPhotoState = () => { setPhotoStep('idle'); setPhotoPreview(null); setPhotoError(''); };
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setFormErrors({});
     setSaveResult(null);
     setSelected(null);
+    resetPhotoState();
     setDrawerMode('create');
   };
 
@@ -185,10 +193,28 @@ export default function EmployeeMaintenance({ onBack }: Props) {
     setFormErrors({});
     setSaveResult(null);
     setSelected(emp);
+    setPhotoPreview(emp.image || null);
+    setPhotoStep('idle');
+    setPhotoError('');
     setDrawerMode('edit');
   };
 
-  const closeDrawer = () => { setDrawerMode(null); setSelected(null); setSaveResult(null); };
+  const closeDrawer = () => { setDrawerMode(null); setSelected(null); setSaveResult(null); resetPhotoState(); };
+
+  const handlePhotoCapture = async (dataUrl: string) => {
+    setPhotoStep('uploading');
+    setPhotoError('');
+    const emailTarget = form.email.trim().toLowerCase() || 'employee';
+    const res = await uploadEmployeePhoto(emailTarget, dataUrl);
+    if (res.success && res.url) {
+      setPhotoPreview(res.url);
+      setField('imageUrl', res.url);
+      setPhotoStep('idle');
+    } else {
+      setPhotoError(res.message || 'Upload failed');
+      setPhotoStep('idle');
+    }
+  };
 
   const validateForm = (): boolean => {
     const e: Record<string, string> = {};
@@ -303,9 +329,47 @@ export default function EmployeeMaintenance({ onBack }: Props) {
               </button>
             </div>
 
-            {/* Avatar preview */}
-            <div className="flex justify-center pt-6 pb-2">
-              <Avatar image={form.imageUrl || undefined} name={form.name || '?'} size="lg" />
+            {/* Camera capture overlay */}
+            {photoStep === 'camera' && (
+              <div className="fixed inset-0 z-[70]">
+                <CameraCapture
+                  onCapture={handlePhotoCapture}
+                  onCancel={() => setPhotoStep('idle')}
+                />
+              </div>
+            )}
+
+            {/* Avatar + camera button */}
+            <div className="flex flex-col items-center pt-6 pb-2 gap-3">
+              <div className="relative">
+                <Avatar image={photoPreview || form.imageUrl || undefined} name={form.name || '?'} size="lg" />
+                {photoStep === 'uploading' && (
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPhotoStep('camera')}
+                  disabled={photoStep === 'uploading'}
+                  className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  {photoPreview || form.imageUrl ? 'Retake Photo' : 'Take Photo'}
+                </button>
+                {(photoPreview || form.imageUrl) && (
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoPreview(null); setField('imageUrl', ''); }}
+                    className="flex items-center gap-1 bg-red-500/10 border border-red-400/20 text-red-400 text-xs px-2.5 py-1.5 rounded-xl active:scale-95 transition-transform"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {photoError && <p className="text-red-400 text-xs text-center">{photoError}</p>}
             </div>
 
             {/* Form */}
@@ -384,21 +448,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
               {/* Designation */}
               <CreatableSelect label="Designation" value={form.designation} onChange={v => setField('designation', v)} options={designations} />
 
-              {/* Image URL */}
-              <div>
-                <label className="text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-1.5 block">Photo URL (Google Drive)</label>
-                <div className="relative">
-                  <Upload className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-                  <input
-                    type="url"
-                    value={form.imageUrl}
-                    onChange={e => setField('imageUrl', e.target.value)}
-                    placeholder="https://drive.google.com/…"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-white/25 focus:outline-none focus:border-blue-400/50"
-                  />
-                </div>
-                <p className="text-white/30 text-[11px] mt-1">Paste a direct Google Drive image link</p>
-              </div>
+              {/* imageUrl hidden — managed by camera upload */}
 
               {/* Result */}
               {saveResult && (
