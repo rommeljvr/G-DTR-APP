@@ -43,6 +43,7 @@ function getDatesBetween(start: string, end: string): string[] {
 
 export default function LeaveApplication({ user, onBack, onViewReports }: Props) {
   const emp = user.employee;
+  const profileImage = (emp?.image && emp.image.startsWith('http')) ? emp.image : null;
   const hideOnError = (e: { target: EventTarget | null }) => { if (e.target) (e.target as HTMLImageElement).style.display = 'none'; };
 
   const [leaveType, setLeaveType] = useState<LeaveType>('Vacation Leave');
@@ -290,8 +291,8 @@ export default function LeaveApplication({ user, onBack, onViewReports }: Props)
         <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center shrink-0">
-              {emp?.image
-                ? <img src={emp.image} alt={emp.name || user.name} className="w-full h-full object-cover" onError={hideOnError} />
+              {profileImage
+                ? <img src={profileImage} alt={emp?.name || user.name} className="w-full h-full object-cover" onError={hideOnError} />
                 : <UserIcon className="w-5 h-5 text-white" />}
             </div>
             <div>

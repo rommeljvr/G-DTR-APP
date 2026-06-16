@@ -48,6 +48,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const config = getConfig();
   const emp = user.employee;
+  const profileImage = (emp?.image && emp.image.startsWith('http')) ? emp.image : null;
   const hideOnError = (e: { target: EventTarget | null }) => { if (e.target) (e.target as HTMLImageElement).style.display = 'none'; };
 
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -513,8 +514,8 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-              {emp?.image
-                ? <img src={emp.image} alt={user.name} className="w-full h-full object-cover" onError={hideOnError} />
+              {profileImage
+                ? <img src={profileImage} alt={user.name} className="w-full h-full object-cover" onError={hideOnError} />
                 : <UserIcon className="w-6 h-6 text-white" />}
             </div>
             <div className="flex-1 min-w-0">
@@ -763,8 +764,8 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
         <div className="px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center">
-              {emp?.image
-                ? <img src={emp.image} alt={user.name} className="w-full h-full object-cover" onError={hideOnError} />
+              {profileImage
+                ? <img src={profileImage} alt={user.name} className="w-full h-full object-cover" onError={hideOnError} />
                 : <UserIcon className="w-5 h-5 text-white" />}
             </div>
             <div className="min-w-0">
