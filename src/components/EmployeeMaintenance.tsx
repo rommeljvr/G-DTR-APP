@@ -137,7 +137,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const [photoStep, setPhotoStep]       = useState<PhotoStep>('idle');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError]     = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // kept for programmatic reset only
 
   const load = async () => {
     setLoading(true);
@@ -226,7 +226,8 @@ export default function EmployeeMaintenance({ onBack }: Props) {
       await handlePhotoCapture(dataUrl);
     };
     reader.readAsDataURL(file);
-    e.target.value = '';
+    // reset so same file can be re-selected
+    setTimeout(() => { if (fileInputRef.current) fileInputRef.current.value = ''; }, 200);
   };
 
   const validateForm = (): boolean => {
@@ -363,49 +364,66 @@ export default function EmployeeMaintenance({ onBack }: Props) {
                 )}
               </div>
 
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-
-              <div className="flex gap-2">
-                {/* Primary: upload from gallery */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={photoStep === 'uploading'}
-                  className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  {photoPreview || form.imageUrl ? 'Change Photo' : 'Upload Photo'}
-                </button>
-
-                {/* Secondary: capture via camera */}
-                <button
-                  type="button"
-                  onClick={() => setPhotoStep('camera')}
-                  disabled={photoStep === 'uploading'}
-                  className="flex items-center gap-1.5 bg-white/5 border border-white/15 text-white/50 text-xs px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  Camera
-                </button>
-
-                {/* Remove photo */}
-                {(photoPreview || form.imageUrl) && (
+              {/* Photo upload area — same pattern as LeaveApplication document upload */}
+              {photoPreview || form.imageUrl ? (
+                /* Photo already set — show name + actions */
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 w-full max-w-xs">
+                  <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-white/70 text-xs truncate flex-1">Photo uploaded ✓</span>
+                  <label className="cursor-pointer text-blue-400 hover:text-blue-300 transition-colors text-xs font-semibold shrink-0">
+                    Change
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </label>
+                  <span className="text-white/20">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoStep('camera')}
+                    className="text-white/40 hover:text-blue-300 transition-colors text-xs shrink-0"
+                  >
+                    Camera
+                  </button>
+                  <span className="text-white/20">·</span>
                   <button
                     type="button"
                     onClick={() => { setPhotoPreview(null); setField('imageUrl', ''); }}
-                    className="flex items-center gap-1 bg-red-500/10 border border-red-400/20 text-red-400 text-xs px-2.5 py-1.5 rounded-xl active:scale-95 transition-transform"
+                    className="text-red-400/60 hover:text-red-400 transition-colors shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                )}
-              </div>
+                </div>
+              ) : (
+                /* No photo yet — dashed tap area (primary) + camera link */
+                <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                  <label className={`flex items-center gap-2 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3 w-full cursor-pointer hover:bg-white/8 transition-colors ${
+                    photoStep === 'uploading' ? 'pointer-events-none opacity-40' : ''
+                  }`}>
+                    <Upload className="w-4 h-4 text-blue-400/60 shrink-0" />
+                    <span className="text-white/40 text-sm">Tap to upload a photo</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoStep('camera')}
+                    disabled={photoStep === 'uploading'}
+                    className="flex items-center gap-1.5 text-white/35 hover:text-blue-300 text-xs transition-colors disabled:opacity-40"
+                  >
+                    <Camera className="w-3 h-3" />
+                    or use camera
+                  </button>
+                </div>
+              )}
               {photoError && <p className="text-red-400 text-xs text-center">{photoError}</p>}
             </div>
 
