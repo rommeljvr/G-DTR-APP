@@ -33,6 +33,17 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
     );
     if (!response.ok) throw new Error('Geocoding failed');
     const data = await response.json();
+    if (data.address) {
+      const a = data.address;
+      const parts = [
+        a.road || a.pedestrian || a.footway || a.path,
+        a.suburb || a.neighbourhood || a.village || a.hamlet,
+        a.city || a.town || a.municipality || a.county,
+        a.state,
+        a.country,
+      ].filter(Boolean);
+      if (parts.length >= 2) return parts.join(', ');
+    }
     return data.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
   } catch {
     return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;

@@ -174,7 +174,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
       setLocationValidated(true);
       setNotification({
         type: 'success',
-        message: `Location validated! Accuracy: ±${loc.accuracy.toFixed(1)}m`,
+        message: `Location validated! ±${loc.accuracy.toFixed(1)}m · ${loc.address}`,
       });
       
       // Start 30-second countdown after success message
