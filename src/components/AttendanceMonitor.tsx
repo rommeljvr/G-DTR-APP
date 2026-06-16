@@ -109,7 +109,7 @@ function DetailModal({
 
   const viewLocation = (lat?: number, lng?: number) => {
     if (!lat || !lng) return;
-    window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
   };
 
   const loadHistory = async () => {
