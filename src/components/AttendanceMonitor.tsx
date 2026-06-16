@@ -116,8 +116,15 @@ function DetailModal({
     if (showHistory) { setShowHistory(false); return; }
     setHistoryLoading(true);
     const res = await getLeaveHistory(record.email);
-    setHistoryRecords(
-      (res.records || []).slice(0, 10).map((r: import('../utils/sheets').LeaveRecord) => ({
+    const todayMs = new Date().setHours(0, 0, 0, 0);
+    const todayLeaves = (res.records || [])
+      .filter((r: import('../utils/sheets').LeaveRecord) => {
+        if (r.status !== 'Approved') return false;
+        const start = new Date(r.startDate).setHours(0, 0, 0, 0);
+        const end   = new Date(r.endDate).setHours(0, 0, 0, 0);
+        return start <= todayMs && todayMs <= end;
+      })
+      .map((r: import('../utils/sheets').LeaveRecord) => ({
         id: r.id,
         action: r.leaveType,
         date: r.startDate === r.endDate
@@ -125,8 +132,8 @@ function DetailModal({
           : `${formatDisplayDate(r.startDate)} – ${formatDisplayDate(r.endDate)}`,
         days: `${r.totalDays}d`,
         status: r.status,
-      }))
-    );
+      }));
+    setHistoryRecords(todayLeaves);
     setHistoryLoading(false);
     setShowHistory(true);
   };
