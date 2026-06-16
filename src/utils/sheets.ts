@@ -1723,7 +1723,7 @@ function uploadEmployeePhoto(data) {
     var file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+    var url = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w400';
 
     // Write URL back to the employee sheet immediately
     var empSheet  = getEmployeeSheet();
