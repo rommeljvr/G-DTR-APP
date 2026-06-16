@@ -12,6 +12,7 @@ import SetupScreen from './SetupScreen';
 import LeaveApplication from './LeaveApplication';
 import LeaveReport from './LeaveReport';
 import EmployeeMaintenance from './EmployeeMaintenance';
+import AttendanceMonitor from './AttendanceMonitor';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -33,6 +34,7 @@ import {
   Smartphone,
   ClipboardList,
   BarChart2,
+  Users,
 } from 'lucide-react';
 
 interface Props {
@@ -42,7 +44,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -333,6 +335,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'employees') {
     if (!isAdmin) return null;
     return <EmployeeMaintenance onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'attendance-monitor') {
+    if (!isAdmin) return null;
+    return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
   }
 
   if (activeTab === 'leave') {
@@ -816,6 +823,19 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             <Smartphone className="w-4.5 h-4.5 shrink-0" />
             Add Shortcut
           </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => { setShowDrawer(false); setActiveTab('attendance-monitor'); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+                activeTab === 'attendance-monitor' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+              }`}
+            >
+              <Users className="w-4.5 h-4.5 shrink-0" />
+              Attendance Monitor
+              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+            </button>
+          )}
 
           {isAdmin && (
             <button

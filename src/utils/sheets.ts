@@ -571,6 +571,47 @@ export async function getTodayRecords(userEmail: string): Promise<AttendanceReco
   return records.filter((r) => r.userEmail === userEmail && r.date === today);
 }
 
+// ─── Attendance Monitor ──────────────────────────────────────────
+
+export interface AttendanceMonitorRecord {
+  email: string;
+  name: string;
+  department: string;
+  designation: string;
+  image: string;
+  status: 'Active' | 'Completed' | 'On Leave' | 'Absent' | 'Late';
+  timeIn?: string;
+  timeInTimestamp?: string;
+  timeInLatitude?: number;
+  timeInLongitude?: number;
+  timeInAddress?: string;
+  timeOut?: string;
+  timeOutTimestamp?: string;
+  timeOutLatitude?: number;
+  timeOutLongitude?: number;
+  timeOutAddress?: string;
+  imageUrl?: string;
+}
+
+export async function getAttendanceMonitor(
+  adminEmail: string
+): Promise<{ success: boolean; date: string; records: AttendanceMonitorRecord[]; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, date: '', records: [], message: 'No script URL configured' };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getAttendanceMonitor&email=${encodeURIComponent(adminEmail)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    if (json.success) return { success: true, date: json.date || '', records: json.records || [], message: '' };
+    return { success: false, date: '', records: [], message: json.message || 'Failed to load monitor data' };
+  } catch (err) {
+    console.error('getAttendanceMonitor error:', err);
+    return { success: false, date: '', records: [], message: 'Unable to fetch attendance monitor' };
+  }
+}
+
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
 export const APPS_SCRIPT_TEMPLATE = `
@@ -699,6 +740,7 @@ function doGet(e) {
   if (action === 'getEmployees')     return getEmployeeList();
   if (action === 'getDepartments')   return getDepartmentList();
   if (action === 'getDesignations')  return getDesignationList();
+  if (action === 'getAttendanceMonitor') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getAttendanceMonitor() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -985,6 +1027,142 @@ function getHistory(email) {
     }
   }
   return _json({ success: true, records: records.reverse() });
+}
+
+function getAttendanceMonitor() {
+  var ss          = SpreadsheetApp.getActiveSpreadsheet();
+  var empSheet    = ss.getSheetByName('Employee');
+  var attSheet    = ss.getSheetByName('Attendance');
+  var leaveSheet  = ss.getSheetByName('Leave Applications');
+
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy');
+  var todayAlt = new Date().toLocaleDateString('en-US');
+
+  // ── Read all employees ──────────────────────────────────────────
+  var employees = [];
+  if (empSheet) {
+    var empRows    = empSheet.getDataRange().getValues();
+    var empHeaders = empRows[0];
+    var cName  = findColumnIndex(empHeaders, ['Employee Name', 'Name', 'Full Name']);
+    var cEmail = findColumnIndex(empHeaders, ['Email', 'Email Address']);
+    var cRole  = findColumnIndex(empHeaders, ['Role', 'Access Role', 'User Role']);
+    var cImg   = findColumnIndex(empHeaders, ['Image', 'Photo', 'Picture']);
+    var cDept  = findColumnIndex(empHeaders, ['DEPARTMENT', 'Department', 'Dept']);
+    var cDesig = findColumnIndex(empHeaders, ['DESIGNATION', 'Designation', 'Position', 'Title']);
+    var cActive = findColumnIndex(empHeaders, ['Active', 'Status', 'Is Active']);
+    for (var i = 1; i < empRows.length; i++) {
+      var rowEmail = String(empRows[i][cEmail] || '').trim();
+      if (!rowEmail) continue;
+      var activeVal = cActive !== -1 ? empRows[i][cActive] : true;
+      if (activeVal === false || String(activeVal).toLowerCase() === 'false' || String(activeVal).toLowerCase() === 'inactive') continue;
+      employees.push({
+        email:       rowEmail.toLowerCase(),
+        name:        cName  !== -1 ? String(empRows[i][cName]  || '').trim() : rowEmail,
+        department:  cDept  !== -1 ? String(empRows[i][cDept]  || '').trim() : '',
+        designation: cDesig !== -1 ? String(empRows[i][cDesig] || '').trim() : '',
+        image:       cImg   !== -1 ? String(empRows[i][cImg]   || '').trim() : ''
+      });
+    }
+  }
+
+  // ── Read today's approved leaves ───────────────────────────────
+  var onLeaveEmails = {};
+  if (leaveSheet) {
+    var leaveRows    = leaveSheet.getDataRange().getValues();
+    var leaveHeaders = leaveRows[0];
+    var lEmail  = findColumnIndex(leaveHeaders, ['Email', 'Email Address']);
+    var lStart  = findColumnIndex(leaveHeaders, ['Start Date', 'StartDate']);
+    var lEnd    = findColumnIndex(leaveHeaders, ['End Date', 'EndDate']);
+    var lStatus = findColumnIndex(leaveHeaders, ['Status']);
+    var todayMs = new Date().setHours(0, 0, 0, 0);
+    for (var li = 1; li < leaveRows.length; li++) {
+      var lStat = lStatus !== -1 ? String(leaveRows[li][lStatus] || '').trim() : '';
+      if (lStat !== 'Approved') continue;
+      var leaveEmail = lEmail !== -1 ? String(leaveRows[li][lEmail] || '').trim().toLowerCase() : '';
+      if (!leaveEmail) continue;
+      var startMs = lStart !== -1 ? new Date(leaveRows[li][lStart]).setHours(0,0,0,0) : 0;
+      var endMs   = lEnd   !== -1 ? new Date(leaveRows[li][lEnd]).setHours(0,0,0,0)   : 0;
+      if (startMs <= todayMs && todayMs <= endMs) onLeaveEmails[leaveEmail] = true;
+    }
+  }
+
+  // ── Read today's attendance rows ───────────────────────────────
+  // cols: 0=id,1=userId,2=userName,3=email,4=action,5=timestamp,6=date,7=time,
+  //       8=lat,9=lng,10=accuracy,11=address,12=device,13=dept,14=desig,15=imgId,16=imgUrl
+  var timeIns  = {};
+  var timeOuts = {};
+  if (attSheet && attSheet.getLastRow() > 1) {
+    var attRows = attSheet.getDataRange().getValues();
+    for (var ai = 1; ai < attRows.length; ai++) {
+      var attDate  = String(attRows[ai][6] || '').trim();
+      if (attDate !== today && attDate !== todayAlt) continue;
+      var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
+      var attAction = String(attRows[ai][4] || '').trim();
+      var attEntry  = {
+        time:      String(attRows[ai][7]  || ''),
+        timestamp: String(attRows[ai][5]  || ''),
+        latitude:  Number(attRows[ai][8]  || 0),
+        longitude: Number(attRows[ai][9]  || 0),
+        address:   String(attRows[ai][11] || ''),
+        imageUrl:  String(attRows[ai][16] || '')
+      };
+      if (attAction === 'TIME_IN') {
+        if (!timeIns[attEmail] || attEntry.timestamp > timeIns[attEmail].timestamp)
+          timeIns[attEmail] = attEntry;
+      } else if (attAction === 'TIME_OUT') {
+        if (!timeOuts[attEmail] || attEntry.timestamp > timeOuts[attEmail].timestamp)
+          timeOuts[attEmail] = attEntry;
+      }
+    }
+  }
+
+  // ── Determine work start time threshold for 'Late' ─────────────
+  var lateThresholdHour = 9; // 09:00 AM
+
+  // ── Build result ───────────────────────────────────────────────
+  var result = employees.map(function(emp) {
+    var tin  = timeIns[emp.email];
+    var tout = timeOuts[emp.email];
+    var status;
+    if (onLeaveEmails[emp.email]) {
+      status = 'On Leave';
+    } else if (tin) {
+      if (tout) {
+        status = 'Completed';
+      } else {
+        var tinHour = tin.timestamp ? new Date(tin.timestamp).getHours() : lateThresholdHour;
+        status = tinHour >= lateThresholdHour ? 'Late' : 'Active';
+      }
+    } else {
+      status = 'Absent';
+    }
+    var rec = {
+      email:       emp.email,
+      name:        emp.name,
+      department:  emp.department,
+      designation: emp.designation,
+      image:       emp.image,
+      status:      status
+    };
+    if (tin) {
+      rec.timeIn          = tin.time;
+      rec.timeInTimestamp = tin.timestamp;
+      rec.timeInLatitude  = tin.latitude;
+      rec.timeInLongitude = tin.longitude;
+      rec.timeInAddress   = tin.address;
+      rec.imageUrl        = tin.imageUrl;
+    }
+    if (tout) {
+      rec.timeOut          = tout.time;
+      rec.timeOutTimestamp = tout.timestamp;
+      rec.timeOutLatitude  = tout.latitude;
+      rec.timeOutLongitude = tout.longitude;
+      rec.timeOutAddress   = tout.address;
+    }
+    return rec;
+  });
+
+  return _json({ success: true, date: today, records: result });
 }
 
 function getSettings() {
