@@ -162,13 +162,6 @@ export default function LeaveApplication({ user, onBack, onViewReports }: Props)
       e.endDate = 'Birthday Leave must be a single-day application (start and end date must be the same)';
     }
 
-    // Sick Leave: dates must not be in the future
-    if (leaveType === 'Sick Leave') {
-      const today = new Date().toISOString().split('T')[0];
-      if (startDate && startDate > today) e.startDate = 'Sick Leave start date cannot be a future date';
-      if (endDate && endDate > today) e.endDate = 'Sick Leave end date cannot be a future date';
-    }
-
     if (!reason.trim()) e.reason = 'Reason is required';
     if (creditInsufficient) e.credits = `Insufficient credits. Available: ${creditAvailable}, Needed: ${totalDays}`;
     setErrors(e);
@@ -385,7 +378,7 @@ export default function LeaveApplication({ user, onBack, onViewReports }: Props)
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 pointer-events-none" />
                 <input
                   type="date"
-                  min={today}
+                  min={leaveType === 'Sick Leave' ? undefined : today}
                   value={startDate}
                   onChange={(e) => {
                     setStartDate(e.target.value);
