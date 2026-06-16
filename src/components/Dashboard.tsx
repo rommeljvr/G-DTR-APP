@@ -338,7 +338,6 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   if (activeTab === 'attendance-monitor') {
-    if (!isAdmin) return null;
     return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
   }
 
@@ -824,8 +823,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             Add Shortcut
           </button>
 
-          {isAdmin && (
-            <button
+          <button
               onClick={() => { setShowDrawer(false); setActiveTab('attendance-monitor'); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
                 activeTab === 'attendance-monitor' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
@@ -833,9 +831,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             >
               <Users className="w-4.5 h-4.5 shrink-0" />
               Attendance Monitor
-              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
             </button>
-          )}
 
           {isAdmin && (
             <button

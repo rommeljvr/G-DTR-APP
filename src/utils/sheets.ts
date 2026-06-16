@@ -740,7 +740,7 @@ function doGet(e) {
   if (action === 'getEmployees')     return getEmployeeList();
   if (action === 'getDepartments')   return getDepartmentList();
   if (action === 'getDesignations')  return getDesignationList();
-  if (action === 'getAttendanceMonitor') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getAttendanceMonitor() : _json({ success: false, message: 'Unauthorized' });
+  if (action === 'getAttendanceMonitor') return email ? getAttendanceMonitor() : _json({ success: false, message: 'Email required' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
