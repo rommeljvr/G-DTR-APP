@@ -217,6 +217,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
       setPhotoPreview(res.url);
       setField('imageUrl', res.url);
       setPhotoStep('idle');
+      load(); // refresh list so avatar updates without needing Save
     } else {
       setPhotoError(res.message || 'Upload failed');
       setPhotoStep('idle');

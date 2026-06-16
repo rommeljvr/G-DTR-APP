@@ -1725,6 +1725,17 @@ function uploadEmployeePhoto(data) {
 
     var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
 
+    // Write URL back to the employee sheet immediately
+    var empSheet  = getEmployeeSheet();
+    var empRows   = empSheet.getDataRange().getValues();
+    var emailLower = String(data.email).trim().toLowerCase();
+    for (var i = 1; i < empRows.length; i++) {
+      if (String(empRows[i][0] || '').trim().toLowerCase() === emailLower) {
+        empSheet.getRange(i + 1, 5).setValue(url); // col 5 = image
+        break;
+      }
+    }
+
     return _json({ success: true, url: url, id: file.getId(), message: 'Photo uploaded' });
   } catch (err) {
     Logger.log('uploadEmployeePhoto error: ' + err.toString());
