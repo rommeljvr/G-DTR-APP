@@ -1033,7 +1033,7 @@ function getAttendanceMonitor() {
   var ss          = SpreadsheetApp.getActiveSpreadsheet();
   var empSheet    = ss.getSheetByName('Employee');
   var attSheet    = ss.getSheetByName('Attendance');
-  var leaveSheet  = ss.getSheetByName('Leave Applications');
+  var leaveSheet  = ss.getSheetByName('LeaveApplications');
 
   var todayDate = new Date();
   var today     = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'M/d/yyyy');
