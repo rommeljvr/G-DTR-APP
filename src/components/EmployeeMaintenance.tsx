@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, Search, X, RefreshCw, Loader2, Plus, Edit2,
   UserX, UserCheck, AlertCircle, Check, ChevronDown, User as UserIcon,
-  Camera, Briefcase, Building2, DollarSign, Mail, ShieldCheck, Trash2,
+  Camera, Upload, Briefcase, Building2, DollarSign, Mail, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
   getEmployees, createEmployee, updateEmployee, deactivateEmployee,
@@ -137,6 +137,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
   const [photoStep, setPhotoStep]       = useState<PhotoStep>('idle');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError]     = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -214,6 +215,18 @@ export default function EmployeeMaintenance({ onBack }: Props) {
       setPhotoError(res.message || 'Upload failed');
       setPhotoStep('idle');
     }
+  };
+
+  const handleFileSelect = (e: { target: HTMLInputElement & EventTarget }) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      await handlePhotoCapture(dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const validateForm = (): boolean => {
@@ -339,7 +352,7 @@ export default function EmployeeMaintenance({ onBack }: Props) {
               </div>
             )}
 
-            {/* Avatar + camera button */}
+            {/* Avatar + photo controls */}
             <div className="flex flex-col items-center pt-6 pb-2 gap-3">
               <div className="relative">
                 <Avatar image={photoPreview || form.imageUrl || undefined} name={form.name || '?'} size="lg" />
@@ -349,16 +362,40 @@ export default function EmployeeMaintenance({ onBack }: Props) {
                   </div>
                 )}
               </div>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
               <div className="flex gap-2">
+                {/* Primary: upload from gallery */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={photoStep === 'uploading'}
+                  className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {photoPreview || form.imageUrl ? 'Change Photo' : 'Upload Photo'}
+                </button>
+
+                {/* Secondary: capture via camera */}
                 <button
                   type="button"
                   onClick={() => setPhotoStep('camera')}
                   disabled={photoStep === 'uploading'}
-                  className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
+                  className="flex items-center gap-1.5 bg-white/5 border border-white/15 text-white/50 text-xs px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-40"
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  {photoPreview || form.imageUrl ? 'Retake Photo' : 'Take Photo'}
+                  Camera
                 </button>
+
+                {/* Remove photo */}
                 {(photoPreview || form.imageUrl) && (
                   <button
                     type="button"
