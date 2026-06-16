@@ -48,6 +48,19 @@ function EmployeeSelect({
         onClick={() => setOpen((v) => !v)}
         className={`w-full flex items-center gap-2 bg-white/5 border rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${open ? 'border-blue-400/50' : 'border-white/10'}`}
       >
+        {selected ? (
+          selected.image && selected.image.startsWith('http') ? (
+            <img src={selected.image} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" onError={(e: any) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+              <UserIcon className="w-4 h-4 text-blue-300" />
+            </div>
+          )
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-white/8 flex items-center justify-center shrink-0">
+            <UserIcon className="w-4 h-4 text-white/30" />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           {selected ? (
             <>
@@ -89,11 +102,20 @@ function EmployeeSelect({
               <button
                 key={emp.email}
                 onClick={() => { onChange(emp.email, emp.name); setOpen(false); setQuery(''); }}
-                className={`w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors ${emp.email.toLowerCase() === value.toLowerCase() ? 'bg-blue-500/15' : ''}`}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2 hover:bg-white/8 transition-colors ${emp.email.toLowerCase() === value.toLowerCase() ? 'bg-blue-500/15' : ''}`}
               >
-                <p className="text-white text-sm font-medium truncate">{emp.name}</p>
-                <p className="text-white/40 text-[11px] truncate">{emp.email}</p>
-                {emp.department && <p className="text-blue-300/50 text-[10px]">{emp.department}</p>}
+                {emp.image && emp.image.startsWith('http') ? (
+                  <img src={emp.image} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" onError={(e: any) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <UserIcon className="w-4 h-4 text-blue-300" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-sm font-medium truncate">{emp.name}</p>
+                  <p className="text-white/40 text-[11px] truncate">{emp.email}</p>
+                  {emp.department && <p className="text-blue-300/50 text-[10px]">{emp.department}</p>}
+                </div>
               </button>
             ))}
           </div>
@@ -207,9 +229,13 @@ export default function ApproverSettings({ user, onBack }: Props) {
             className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform hover:bg-white/8"
           >
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                <UserIcon className="w-4 h-4 text-blue-300" />
-              </div>
+              {(() => { const emp = employees.find((e) => e.email.toLowerCase() === s.employeeEmail.toLowerCase()); return emp?.image && emp.image.startsWith('http') ? (
+                <img src={emp.image} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" onError={(e: any) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <UserIcon className="w-4 h-4 text-blue-300" />
+                </div>
+              ); })()}
               <div className="min-w-0 flex-1">
                 <p className="text-white font-semibold text-sm truncate">{s.employeeName || nameFor(s.employeeEmail)}</p>
                 <p className="text-white/40 text-[11px] truncate">{s.employeeEmail}</p>
