@@ -124,7 +124,6 @@ function DetailModal({
     };
     const todayLeaves = (res.records || [])
       .filter((r: import('../utils/sheets').LeaveRecord) => {
-        if (r.status !== 'Approved') return false;
         const start = parseLocalDate(r.startDate);
         const end   = parseLocalDate(r.endDate);
         return start <= todayMs && todayMs <= end;
