@@ -1,5 +1,5 @@
 /// <reference path="../pwa.d.ts" />
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
 import { getLastAction, submitAttendance, getUnreadCount, markNotificationsRead } from '../utils/sheets';
 import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
@@ -360,8 +360,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
   }
 
+  const handleNotifRead = useCallback(() => setUnreadCount(0), []);
+
   if (activeTab === 'notifications') {
-    return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={() => setUnreadCount(0)} />;
+    return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={handleNotifRead} />;
   }
 
   if (activeTab === 'leave-approval') {

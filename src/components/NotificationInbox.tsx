@@ -11,6 +11,7 @@ interface Props {
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
   LEAVE_FILED:        { label: 'Leave Filed',        icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  LEAVE_SUBMITTED:    { label: 'Leave Submitted',    icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
   PENDING_APPROVAL:   { label: 'Approval Required',  icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
   LEAVE_ACKNOWLEDGED: { label: 'Acknowledged',       icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
   LEAVE_APPROVED:     { label: 'Approved',           icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
@@ -40,7 +41,8 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     setLoading(false);
     await markNotificationsRead(user.email);
     onRead();
-  }, [user.email, onRead]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.email]);
 
   useEffect(() => { load(); }, [load]);
 
