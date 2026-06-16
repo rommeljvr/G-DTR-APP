@@ -408,18 +408,18 @@ export default function AttendanceMonitor({ user, onBack }: Props) {
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="grid grid-cols-5 gap-1.5 mt-4">
           {summaryCards.map((c) => (
             <button
               key={c.label}
               onClick={() => setFilter(c.label === 'Total' ? 'All' : c.label as StatusFilter)}
-              className={`${c.bg} rounded-xl px-3 py-2.5 text-center active:scale-95 transition-transform border ${
+              className={`${c.bg} rounded-xl px-1.5 py-2.5 text-center active:scale-95 transition-transform border ${
                 (filter === c.label || (c.label === 'Total' && filter === 'All'))
                   ? 'border-white/20' : 'border-transparent'
               }`}
             >
-              <p className={`text-xl font-bold leading-none ${c.color}`}>{c.value}</p>
-              <p className="text-white/50 text-[10px] font-medium mt-0.5">{c.label}</p>
+              <p className={`text-lg font-bold leading-none ${c.color}`}>{c.value}</p>
+              <p className="text-white/50 text-[9px] font-medium mt-0.5 leading-tight">{c.label}</p>
             </button>
           ))}
         </div>
