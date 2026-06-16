@@ -27,6 +27,15 @@ interface Props {
   onBack: () => void;
 }
 
+function formatDisplayDate(val: string): string {
+  if (!val) return '';
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  return val;
+}
+
 function formatDisplayTime(val: string): string {
   if (!val) return '';
   const isIso = /^\d{4}-\d{2}-\d{2}T/.test(val);
@@ -89,7 +98,7 @@ function DetailModal({
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyRecords, setHistoryRecords] = useState<{ id: string; action: string; date: string; time: string; address: string }[]>([]);
+  const [historyRecords, setHistoryRecords] = useState<{ id: string; action: string; date: string; days: string; status: string }[]>([]);
 
   const cfg = STATUS_CONFIG[record.status] || STATUS_CONFIG['Absent'];
 
@@ -111,9 +120,11 @@ function DetailModal({
       (res.records || []).slice(0, 10).map((r: import('../utils/sheets').LeaveRecord) => ({
         id: r.id,
         action: r.leaveType,
-        date: r.startDate,
-        time: '',
-        address: `${r.totalDays}d — ${r.status}`,
+        date: r.startDate === r.endDate
+          ? formatDisplayDate(r.startDate)
+          : `${formatDisplayDate(r.startDate)} – ${formatDisplayDate(r.endDate)}`,
+        days: `${r.totalDays}d`,
+        status: r.status,
       }))
     );
     setHistoryLoading(false);
@@ -262,13 +273,19 @@ function DetailModal({
             <div className="space-y-2">
               {historyRecords.length === 0 ? (
                 <p className="text-white/30 text-xs text-center py-3">No leave records found</p>
-              ) : historyRecords.map((h: { id: string; action: string; date: string; time: string; address: string }) => (
-                <div key={h.id} className="bg-white/5 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                  <div>
+              ) : historyRecords.map((h: { id: string; action: string; date: string; days: string; status: string }) => (
+                <div key={h.id} className="bg-white/5 rounded-xl px-4 py-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
                     <p className="text-white/80 text-xs font-medium">{h.action}</p>
                     <p className="text-white/40 text-[11px]">{h.date}</p>
                   </div>
-                  <span className="text-white/50 text-[11px]">{h.address}</span>
+                  <div className="shrink-0 text-right">
+                    <p className="text-white/50 text-[11px]">{h.days}</p>
+                    <p className={`text-[10px] font-semibold ${
+                      h.status === 'Approved' ? 'text-emerald-400' :
+                      h.status === 'Pending'  ? 'text-amber-400'   : 'text-red-400'
+                    }`}>{h.status}</p>
+                  </div>
                 </div>
               ))}
             </div>
