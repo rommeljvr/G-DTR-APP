@@ -1726,6 +1726,31 @@ function submitLeave(data) {
 
   try { sheet.autoResizeColumns(1, 16); } catch (ex) {}
 
+  // ── Notifications ──────────────────────────────────────────────
+  try {
+    var empName = data.employeeName || data.email;
+    // Confirm to the employee
+    createNotification(data.email, 'LEAVE_FILED',
+      'Your leave application (' + data.leaveType + ', ' + data.startDate + ' – ' + data.endDate + ') has been submitted and is pending approval.', id);
+
+    // Notify the first approver based on workflow
+    var settings = null;
+    try {
+      var apResult = getApproverSettings(data.email);
+      var apJson = JSON.parse(apResult.getContent());
+      if (apJson.success && apJson.settings) settings = apJson.settings;
+    } catch (ae) { Logger.log('submitLeave: getApproverSettings error: ' + ae); }
+
+    if (settings) {
+      var firstApprover = (settings.workflowType === 'TWO_STEP' && settings.teamLeadEmail)
+        ? settings.teamLeadEmail : settings.approverEmail;
+      if (firstApprover) {
+        createNotification(firstApprover, 'PENDING_APPROVAL',
+          empName + ' has filed a leave request (' + data.leaveType + ', ' + data.startDate + ' – ' + data.endDate + ') awaiting your action.', id);
+      }
+    }
+  } catch (ne) { Logger.log('submitLeave: notification error: ' + ne); }
+
   return _json({
     success: true,
     message: 'Leave application submitted successfully',
