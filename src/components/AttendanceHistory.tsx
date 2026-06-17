@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { User, AttendanceRecord } from '../types';
-import { getLocalRecords } from '../utils/sheets';
+import { getAttendanceHistory } from '../utils/sheets';
 import { getConfig } from '../utils/config';
 import DriveImage from './DriveImage';
 import {
@@ -12,6 +12,8 @@ import {
   Filter,
   X,
   Building2,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Props {
@@ -23,10 +25,17 @@ export default function AttendanceHistory({ user, onBack }: Props) {
   const config = getConfig();
   const [filter, setFilter] = useState<'all' | 'TIME_IN' | 'TIME_OUT'>('all');
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const allRecords = useMemo(() => {
-    return getLocalRecords().filter((r) => r.userEmail === user.email);
-  }, [user.email]);
+  const load = async () => {
+    setLoading(true);
+    const records = await getAttendanceHistory(user.email);
+    setAllRecords(records);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [user.email]);
 
   const filteredRecords = useMemo(() => {
     if (filter === 'all') return allRecords;
@@ -80,10 +89,17 @@ export default function AttendanceHistory({ user, onBack }: Props) {
               </span>
               <span className="text-white/20 text-[10px] mx-0.5">•</span>
               <span className="text-blue-200/40 text-[10px]">
-                {allRecords.length} records
+                {loading ? 'Loading…' : `${allRecords.length} records`}
               </span>
             </div>
           </div>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Filters */}
@@ -111,7 +127,13 @@ export default function AttendanceHistory({ user, onBack }: Props) {
 
       {/* Records */}
       <div className="flex-1 px-4 mt-4 space-y-4">
-        {Object.keys(groupedRecords).length === 0 && (
+        {loading && (
+          <div className="text-center py-12">
+            <Loader2 className="w-10 h-10 text-blue-400/50 mx-auto mb-3 animate-spin" />
+            <p className="text-white/40 text-sm">Loading records…</p>
+          </div>
+        )}
+        {!loading && Object.keys(groupedRecords).length === 0 && (
           <div className="text-center py-12">
             <Calendar className="w-12 h-12 text-white/20 mx-auto mb-3" />
             <p className="text-white/40 text-sm">No attendance records found</p>

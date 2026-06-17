@@ -557,6 +557,25 @@ export async function getLastAction(userEmail: string): Promise<AttendanceRecord
   return userRecords.length > 0 ? userRecords[0] : null;
 }
 
+export async function getAttendanceHistory(userEmail: string): Promise<AttendanceRecord[]> {
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    try {
+      const res = await fetch(
+        `${scriptUrl}?action=getHistory&email=${encodeURIComponent(userEmail)}`,
+        { method: 'GET', redirect: 'follow' }
+      );
+      const json = await res.json();
+      if (json.success && json.records && json.records.length > 0) {
+        return json.records as AttendanceRecord[];
+      }
+    } catch (err) {
+      console.log('getAttendanceHistory server fetch failed, falling back to local:', err);
+    }
+  }
+  return getLocalRecords().filter((r) => r.userEmail === userEmail);
+}
+
 export async function getTodayRecords(userEmail: string): Promise<AttendanceRecord[]> {
   const scriptUrl = getScriptUrl();
   
