@@ -1158,6 +1158,7 @@ function getLastAction(email) {
       return _json({
         success: true,
         lastAction: {
+          id:          rows[i][0],
           action:      rows[i][4],
           timestamp:   rows[i][5],
           date:        fmtDate,
