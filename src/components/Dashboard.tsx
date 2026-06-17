@@ -54,6 +54,7 @@ type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees'
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isMobile = /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent);
   const config = getConfig();
   const emp = user.employee;
   const profileImage = (emp?.image && emp.image.startsWith('http')) ? emp.image : null;
@@ -167,7 +168,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
       let loc = await getLocationData();
       
       // Validate location accuracy (reject if > 100m accuracy)
-      if (loc.accuracy > 100) {
+      if (isMobile && loc.accuracy > 100) {
         setNotification({
           type: 'error',
           message: `GPS accuracy too low (±${loc.accuracy.toFixed(0)}m). Please move to an open area and try again.`,
