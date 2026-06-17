@@ -31,16 +31,8 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: facing,
-          // Request highest possible resolution
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          // Advanced camera settings for quality
-          advanced: [
-            { focusMode: 'continuous' },
-            { brightness: { ideal: 128 } },
-            { exposureMode: 'continuous' },
-            { whiteBalanceMode: 'continuous' },
-          ],
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         } as MediaTrackConstraints,
         audio: false,
       };
