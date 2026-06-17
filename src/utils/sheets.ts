@@ -1153,7 +1153,7 @@ function getLastAction(email) {
         ? Utilities.formatDate(rawDate, 'Asia/Manila', 'M/d/yyyy')
         : String(rawDate || '');
       var fmtTime = rawTime instanceof Date
-        ? Utilities.formatDate(rawTime, 'Asia/Manila', 'hh:mm:ss a')
+        ? Utilities.formatDate(rawTime, 'GMT', 'hh:mm:ss a')  // Use GMT to preserve literal time, avoid TZ shift
         : String(rawTime || '');
       return _json({
         success: true,
@@ -1189,7 +1189,7 @@ function getHistory(email) {
         ? Utilities.formatDate(rDate, 'Asia/Manila', 'M/d/yyyy')
         : String(rDate || '');
       var tStr = rTime instanceof Date
-        ? Utilities.formatDate(rTime, 'Asia/Manila', 'hh:mm:ss a')
+        ? Utilities.formatDate(rTime, 'GMT', 'hh:mm:ss a')  // Use GMT to preserve literal time, avoid TZ shift
         : String(rTime || '');
       records.push({
         id:          rows[i][0],
