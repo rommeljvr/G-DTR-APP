@@ -45,9 +45,6 @@ export async function createCompositeImage(
       ctx.fillText(config.APP_TITLE, canvas.width * 0.97, bannerH * 0.65);
       ctx.shadowBlur = 0;
 
-      // ── Logo watermark (top-right corner) ──────────────────
-      await drawLogoWatermark(ctx, canvas.width, bannerH);
-
       // ── Action badge (TIME IN / TIME OUT) ──────────────────
       const isTimeIn = action === 'TIME_IN';
       const badgeLabel = isTimeIn ? '▶  TIME IN' : '◼  TIME OUT';
@@ -57,8 +54,11 @@ export async function createCompositeImage(
       const badgePadY = badgeFontSize * 0.55;
       const badgeW = ctx.measureText(badgeLabel).width + badgePadX * 2;
       const badgeH = badgeFontSize + badgePadY * 2;
-      const badgeX = canvas.width - badgeW - canvas.width * 0.03;
+      const badgeX = canvas.width * 0.03;  // Left aligned
       const badgeY = bannerH + canvas.height * 0.025;
+
+      // ── Logo watermark (top-right corner, beside badge) ───────
+      await drawLogoWatermark(ctx, canvas.width, bannerH, badgeX + badgeW + canvas.width * 0.02);
       const badgeBg = isTimeIn ? 'rgba(16,185,129,0.92)' : 'rgba(239,68,68,0.92)';
       const badgeRadius = badgeH * 0.35;
 
@@ -297,16 +297,17 @@ async function drawLogoWatermark(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
   bannerHeight: number,
+  startX?: number,
 ): Promise<void> {
   return new Promise((resolve) => {
     const logo = new Image();
     logo.crossOrigin = 'anonymous';
-    
+
     logo.onload = () => {
-      // Calculate logo size (40px or 8% of canvas width, whichever is smaller)
-      const logoSize = Math.min(40, canvasWidth * 0.08);
+      // Calculate logo size (50px or 10% of canvas width, whichever is smaller) - 2% bigger
+      const logoSize = Math.min(50, canvasWidth * 0.10);
       const padding = canvasWidth * 0.02;
-      const x = canvasWidth - logoSize - padding;
+      const x = startX ?? (canvasWidth - logoSize - padding);
       const y = bannerHeight + padding;
       
       // Save context state
