@@ -131,6 +131,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const loadRecords = async () => {
     const last = await getLastAction(user.email);
     console.log('[Dashboard] getLastAction returned:', last);
+    console.log('[Dashboard] Record ID:', last?.id, '| Time:', last?.time, '| Date:', last?.date);
     setLastAction(last);
   };
 
