@@ -21,6 +21,31 @@ interface Props {
   onBack: () => void;
 }
 
+const PH_TZ = 'Asia/Manila';
+
+function normalizeRecord(r: AttendanceRecord): AttendanceRecord {
+  let date = r.date || '';
+  let time = r.time || '';
+
+  // If date looks like an ISO string, convert to M/d/yyyy in PST
+  if (/^\d{4}-\d{2}-\d{2}T/.test(date) || /Z$/.test(date)) {
+    const d = new Date(date);
+    if (!isNaN(d.getTime())) {
+      date = d.toLocaleDateString('en-US', { timeZone: PH_TZ, month: 'numeric', day: 'numeric', year: 'numeric' });
+    }
+  }
+
+  // If time looks like an ISO string, convert to hh:mm:ss AM/PM in PST
+  if (/^\d{4}-\d{2}-\d{2}T/.test(time) || /Z$/.test(time) || /^1899/.test(time)) {
+    const d = new Date(time);
+    if (!isNaN(d.getTime())) {
+      time = d.toLocaleTimeString('en-US', { timeZone: PH_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    }
+  }
+
+  return { ...r, date, time };
+}
+
 export default function AttendanceHistory({ user, onBack }: Props) {
   const config = getConfig();
   const [filter, setFilter] = useState<'all' | 'TIME_IN' | 'TIME_OUT'>('all');
@@ -31,7 +56,7 @@ export default function AttendanceHistory({ user, onBack }: Props) {
   const load = async () => {
     setLoading(true);
     const records = await getAttendanceHistory(user.email);
-    setAllRecords(records);
+    setAllRecords(records.map(normalizeRecord));
     setLoading(false);
   };
 
