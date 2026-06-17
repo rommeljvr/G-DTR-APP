@@ -245,6 +245,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
       const deviceInfo = getDeviceString();
       const now = new Date();
+      const PH_TZ = 'Asia/Manila';
       const compositePhoto = await createCompositeImage(photoDataUrl, loc, deviceInfo);
       setCompositePreview(compositePhoto);
 
@@ -253,9 +254,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
         userName: user.name,
         userEmail: user.email,
         action: nextAction,
-        timestamp: now.toISOString(),
-        date: now.toLocaleDateString('en-US'),
+        timestamp: now.toLocaleString('sv-SE', { timeZone: PH_TZ }).replace(' ', 'T') + '+08:00',
+        date: now.toLocaleDateString('en-US', { timeZone: PH_TZ }),
         time: now.toLocaleTimeString('en-US', {
+          timeZone: PH_TZ,
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',

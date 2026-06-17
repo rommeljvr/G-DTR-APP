@@ -2577,7 +2577,7 @@ function appendApprovalHistory(leaveId, approverEmail, approverName, action, rea
   var sheet = getLeaveApprovalsSheet();
   sheet.appendRow([
     Utilities.getUuid(), leaveId, approverEmail, approverName,
-    action, reason || '', new Date().toISOString()
+    action, reason || '', Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
   ]);
 }
 
@@ -2625,7 +2625,7 @@ function createNotification(userEmail, type, message, leaveId) {
   var sheet = getNotificationsSheet();
   sheet.appendRow([
     Utilities.getUuid(), userEmail, type, message,
-    leaveId || '', 'false', new Date().toISOString()
+    leaveId || '', 'false', Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
   ]);
 }
 
