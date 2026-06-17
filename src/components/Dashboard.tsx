@@ -86,33 +86,9 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const nextAction: 'TIME_IN' | 'TIME_OUT' =
     lastAction?.action === 'TIME_IN' ? 'TIME_OUT' : 'TIME_IN';
 
-  const formatDisplayDate = (val: string): string => {
-    if (!val) return '';
-    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (isoMatch) {
-      const d = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
-      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    }
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    }
-    return val;
-  };
+  const formatDisplayDate = (val: string): string => val || '';
 
-  const formatDisplayTime = (val: string): string => {
-    if (!val) return '';
-    const isIsoString = /^\d{4}-\d{2}-\d{2}T/.test(val);
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      const hrs = isIsoString ? d.getUTCHours() : d.getHours();
-      const mins = isIsoString ? d.getUTCMinutes() : d.getMinutes();
-      const ampm = hrs >= 12 ? 'PM' : 'AM';
-      const h = hrs % 12 || 12;
-      return `${h}:${mins.toString().padStart(2, '0')} ${ampm}`;
-    }
-    return val;
-  };
+  const formatDisplayTime = (val: string): string => val || '';
 
   useEffect(() => {
     loadRecords();
@@ -589,6 +565,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
         <div className="text-center">
           <p className="text-blue-200/60 text-xs mb-1">
             {currentTime.toLocaleDateString('en-US', {
+              timeZone: 'Asia/Manila',
               weekday: 'long',
               month: 'long',
               day: 'numeric',
@@ -597,6 +574,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           </p>
           <p className="text-white text-4xl font-bold tracking-wider tabular-nums">
             {currentTime.toLocaleTimeString('en-US', {
+              timeZone: 'Asia/Manila',
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
