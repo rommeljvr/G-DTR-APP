@@ -45,6 +45,13 @@ export async function createCompositeImage(
       ctx.fillText(config.APP_TITLE, canvas.width * 0.97, bannerH * 0.65);
       ctx.shadowBlur = 0;
 
+      // ── Logo watermark (top-left, first) ─────────────────────
+      const logoSize = Math.min(60, canvas.width * 0.12);  // 20% bigger (was 50/10%)
+      const logoPadding = canvas.width * 0.03;
+      const logoX = logoPadding;
+      const logoY = bannerH + canvas.height * 0.02;
+      await drawLogoWatermarkAt(ctx, logoX, logoY, logoSize);
+
       // ── Action badge (TIME IN / TIME OUT) ──────────────────
       const isTimeIn = action === 'TIME_IN';
       const badgeLabel = isTimeIn ? '▶  TIME IN' : '◼  TIME OUT';
@@ -54,11 +61,8 @@ export async function createCompositeImage(
       const badgePadY = badgeFontSize * 0.55;
       const badgeW = ctx.measureText(badgeLabel).width + badgePadX * 2;
       const badgeH = badgeFontSize + badgePadY * 2;
-      const badgeX = canvas.width * 0.03;  // Left aligned
-      const badgeY = bannerH + canvas.height * 0.025;
-
-      // ── Logo watermark (top-right corner, beside badge) ───────
-      await drawLogoWatermark(ctx, canvas.width, bannerH, badgeX + badgeW + canvas.width * 0.02);
+      const badgeX = logoX + logoSize + canvas.width * 0.025;  // Right of logo
+      const badgeY = logoY + (logoSize - badgeH) / 2;          // Center aligned with logo
       const badgeBg = isTimeIn ? 'rgba(16,185,129,0.92)' : 'rgba(239,68,68,0.92)';
       const badgeRadius = badgeH * 0.35;
 
@@ -292,49 +296,43 @@ function roundedRect(
   ctx.closePath();
 }
 
-// helper – draw logo watermark
-async function drawLogoWatermark(
+// helper – draw logo watermark at specific position
+async function drawLogoWatermarkAt(
   ctx: CanvasRenderingContext2D,
-  canvasWidth: number,
-  bannerHeight: number,
-  startX?: number,
+  x: number,
+  y: number,
+  logoSize: number,
 ): Promise<void> {
   return new Promise((resolve) => {
     const logo = new Image();
     logo.crossOrigin = 'anonymous';
 
     logo.onload = () => {
-      // Calculate logo size (50px or 10% of canvas width, whichever is smaller) - 2% bigger
-      const logoSize = Math.min(50, canvasWidth * 0.10);
-      const padding = canvasWidth * 0.02;
-      const x = startX ?? (canvasWidth - logoSize - padding);
-      const y = bannerHeight + padding;
-      
       // Save context state
       ctx.save();
-      
+
       // Draw semi-transparent logo
       ctx.globalAlpha = 0.85;
-      
+
       // Draw circular background
       ctx.beginPath();
       ctx.arc(x + logoSize / 2, y + logoSize / 2, logoSize / 2 + 2, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.fill();
-      
+
       // Draw logo
       ctx.drawImage(logo, x, y, logoSize, logoSize);
-      
+
       // Restore context
       ctx.restore();
       resolve();
     };
-    
+
     logo.onerror = () => {
       // Silently fail if logo can't load
       resolve();
     };
-    
+
     logo.src = '/logo.png';
   });
 }
