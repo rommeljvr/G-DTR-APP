@@ -4,7 +4,8 @@ import { getConfig } from './config';
 export async function createCompositeImage(
   photoDataUrl: string,
   location: LocationData,
-  deviceInfo: string
+  deviceInfo: string,
+  action: 'TIME_IN' | 'TIME_OUT' = 'TIME_IN'
 ): Promise<string> {
   const config = getConfig();
 
@@ -46,6 +47,40 @@ export async function createCompositeImage(
 
       // ── Logo watermark (top-right corner) ──────────────────
       await drawLogoWatermark(ctx, canvas.width, bannerH);
+
+      // ── Action badge (TIME IN / TIME OUT) ──────────────────
+      const isTimeIn = action === 'TIME_IN';
+      const badgeLabel = isTimeIn ? '▶  TIME IN' : '◼  TIME OUT';
+      const badgeFontSize = Math.max(14, Math.floor(canvas.width / 22));
+      ctx.font = `900 ${badgeFontSize}px 'Inter', Arial, sans-serif`;
+      const badgePadX = badgeFontSize * 1.1;
+      const badgePadY = badgeFontSize * 0.55;
+      const badgeW = ctx.measureText(badgeLabel).width + badgePadX * 2;
+      const badgeH = badgeFontSize + badgePadY * 2;
+      const badgeX = canvas.width - badgeW - canvas.width * 0.03;
+      const badgeY = bannerH + canvas.height * 0.025;
+      const badgeBg = isTimeIn ? 'rgba(16,185,129,0.92)' : 'rgba(239,68,68,0.92)';
+      const badgeRadius = badgeH * 0.35;
+
+      // Shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = badgeBg;
+      ctx.beginPath();
+      roundedRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius);
+      ctx.fill();
+      ctx.restore();
+
+      // Badge text
+      ctx.font = `900 ${badgeFontSize}px 'Inter', Arial, sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 3;
+      ctx.fillText(badgeLabel, badgeX + badgeW / 2, badgeY + badgeH * 0.68);
+      ctx.shadowBlur = 0;
 
       // ── Bottom overlay gradient ─────────────────────────────
       const overlayHeight = canvas.height * 0.32;

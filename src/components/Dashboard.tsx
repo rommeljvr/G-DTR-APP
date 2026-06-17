@@ -246,7 +246,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
       const deviceInfo = getDeviceString();
       const now = new Date();
       const PH_TZ = 'Asia/Manila';
-      const compositePhoto = await createCompositeImage(photoDataUrl, loc, deviceInfo);
+      const compositePhoto = await createCompositeImage(photoDataUrl, loc, deviceInfo, nextAction);
       setCompositePreview(compositePhoto);
 
       const record: Omit<AttendanceRecord, 'id'> = {
