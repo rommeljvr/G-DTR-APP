@@ -332,6 +332,8 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     setCompositePreview(null);
   };
 
+  const handleNotifRead = useCallback(() => setUnreadCount(0), []);
+
   // ── Sub-screens ──────────────────────────────────────────
 
   if (showCamera) {
@@ -360,8 +362,6 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'attendance-monitor') {
     return <AttendanceMonitor user={user} onBack={() => setActiveTab('home')} />;
   }
-
-  const handleNotifRead = useCallback(() => setUnreadCount(0), []);
 
   if (activeTab === 'notifications') {
     return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={handleNotifRead} />;
