@@ -1147,13 +1147,21 @@ function getLastAction(email) {
   var rows = sheet.getDataRange().getValues();
   for (var i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][3]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
+      var rawDate = rows[i][6];
+      var rawTime = rows[i][7];
+      var fmtDate = rawDate instanceof Date
+        ? Utilities.formatDate(rawDate, 'Asia/Manila', 'M/d/yyyy')
+        : String(rawDate || '');
+      var fmtTime = rawTime instanceof Date
+        ? Utilities.formatDate(rawTime, 'Asia/Manila', 'hh:mm:ss a')
+        : String(rawTime || '');
       return _json({
         success: true,
         lastAction: {
           action:      rows[i][4],
           timestamp:   rows[i][5],
-          date:        rows[i][6],
-          time:        rows[i][7],
+          date:        fmtDate,
+          time:        fmtTime,
           department:  rows[i][13] || '',
           designation: rows[i][14] || '',
           imageId:     rows[i][15] || '',
@@ -1174,12 +1182,20 @@ function getHistory(email) {
   var records = [];
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][3]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
+      var rDate = rows[i][6];
+      var rTime = rows[i][7];
+      var dStr = rDate instanceof Date
+        ? Utilities.formatDate(rDate, 'Asia/Manila', 'M/d/yyyy')
+        : String(rDate || '');
+      var tStr = rTime instanceof Date
+        ? Utilities.formatDate(rTime, 'Asia/Manila', 'hh:mm:ss a')
+        : String(rTime || '');
       records.push({
         id:          rows[i][0],
         action:      rows[i][4],
         timestamp:   rows[i][5],
-        date:        rows[i][6],
-        time:        rows[i][7],
+        date:        dStr,
+        time:        tStr,
         latitude:    rows[i][8],
         longitude:   rows[i][9],
         address:     rows[i][11],
