@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, ReactElement } from 'react';
 import {
   ChevronLeft, Clock, Calendar, FileText, CheckCircle2,
-  AlertCircle, Loader2, XCircle, ExternalLink, RotateCcw,
+  AlertCircle, Loader2, XCircle, ExternalLink, RotateCcw, Search, X,
 } from 'lucide-react';
 import { User, TimeCorrectionFiling } from '../types';
 import { getTimeCorrectionHistory, cancelTimeCorrection } from '../utils/sheets';
@@ -45,6 +45,7 @@ export default function TimeCorrectionReport({ user, onBack }: Props) {
   const [cancelling, setCancelling]   = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [filter, setFilter]           = useState<'All' | 'Pending' | 'Approved' | 'Rejected' | 'Cancelled'>('All');
+  const [search, setSearch]           = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,7 +74,15 @@ export default function TimeCorrectionReport({ user, onBack }: Props) {
     }
   };
 
-  const filtered = filter === 'All' ? records : records.filter((r: TimeCorrectionFiling) => r.status === filter);
+  const q = search.trim().toLowerCase();
+  const filtered = records
+    .filter((r: TimeCorrectionFiling) => filter === 'All' || r.status === filter)
+    .filter((r: TimeCorrectionFiling) => !q ||
+      r.attendanceDate.toLowerCase().includes(q) ||
+      r.reason.toLowerCase().includes(q) ||
+      (r.correctedTimeIn || '').toLowerCase().includes(q) ||
+      (r.correctedTimeOut || '').toLowerCase().includes(q)
+    );
 
   return (
     <div className="min-h-dvh bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col">
@@ -173,7 +182,7 @@ export default function TimeCorrectionReport({ user, onBack }: Props) {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto pb-8">
-          {/* Filter chips */}
+          {/* Filter chips + Search */}
           <div className="px-4 pt-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar">
             {(['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)}
@@ -182,6 +191,21 @@ export default function TimeCorrectionReport({ user, onBack }: Props) {
                 {f}
               </button>
             ))}
+          </div>
+          <div className="px-4 pb-2 relative">
+            <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by date, reason, time…"
+              value={search}
+              onChange={(e: { target: HTMLInputElement }) => setSearch(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm placeholder-white/30 focus:outline-none focus:border-blue-400/40"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-7 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {loading ? (

@@ -3155,7 +3155,7 @@ function submitTimeCorrection(data, documentData) {
       var safeName   = (data.employeeName || data.email || 'user').replace(/[^a-zA-Z0-9]/g, '_');
       var blob       = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, 'TC_' + safeName + '_' + ts + '.' + ext);
       var file       = subFolder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      
       docId  = file.getId();
       docUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
     } catch (e2) { Logger.log('TC doc upload error: ' + e2.toString()); }
@@ -3202,10 +3202,10 @@ function getTimeCorrectionHistory(email) {
       designation:       String(rows[i][findColumnIndex(headers,['Designation'])]           || ''),
       attendanceDate:    String(rows[i][findColumnIndex(headers,['Attendance Date'])]       || ''),
       attendanceRecordId:String(rows[i][findColumnIndex(headers,['Attendance Record ID'])]  || ''),
-      originalTimeIn:    String(rows[i][findColumnIndex(headers,['Original Time In'])]      || ''),
-      originalTimeOut:   String(rows[i][findColumnIndex(headers,['Original Time Out'])]     || ''),
-      correctedTimeIn:   String(rows[i][findColumnIndex(headers,['Corrected Time In'])]     || ''),
-      correctedTimeOut:  String(rows[i][findColumnIndex(headers,['Corrected Time Out'])]    || ''),
+      originalTimeIn:    formatTimeValue(rows[i][findColumnIndex(headers,['Original Time In'])]),
+      originalTimeOut:   formatTimeValue(rows[i][findColumnIndex(headers,['Original Time Out'])]),
+      correctedTimeIn:   formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time In'])]),
+      correctedTimeOut:  formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time Out'])]),
       reason:            String(rows[i][findColumnIndex(headers,['Reason'])]                || ''),
       docId:             String(rows[i][findColumnIndex(headers,['Document ID'])]           || ''),
       documentUrl:       String(rows[i][findColumnIndex(headers,['Document URL'])]          || ''),

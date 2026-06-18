@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft, Clock, Calendar, FileText, Paperclip,
-  AlertCircle, CheckCircle2, Loader2, X, Info, ZoomIn,
+  AlertCircle, CheckCircle2, Loader2, X, Info, ZoomIn, Search,
 } from 'lucide-react';
 import { User, AttendanceRecord, TimeCorrectionFiling as TCFiling } from '../types';
 import { getAttendanceHistory, submitTimeCorrection, getTimeCorrectionHistory, getApproverSettings } from '../utils/sheets';
@@ -75,6 +75,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   const [documentData, setDocumentData]         = useState<string>('');
 
   const [previewSrc, setPreviewSrc]   = useState<string | null>(null);
+  const [search, setSearch]           = useState('');
   const [submitting, setSubmitting]   = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [errors, setErrors]           = useState<Record<string, string>>({});
@@ -198,9 +199,18 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     }
   };
 
-  // Group records by date for display
+  // Filter + group records by date
+  const q = search.trim().toLowerCase();
+  const filteredRecords = q
+    ? records.filter((r: AttendanceRecord) =>
+        r.date.toLowerCase().includes(q) ||
+        r.time.toLowerCase().includes(q) ||
+        (r.action === 'TIME_IN' ? 'time in' : 'time out').includes(q)
+      )
+    : records;
+
   const recordsByDate: Record<string, AttendanceRecord[]> = {};
-  for (const r of records) {
+  for (const r of filteredRecords) {
     if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
     recordsByDate[r.date].push(r);
   }
@@ -261,6 +271,23 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
             <div className="bg-blue-500/10 border border-blue-400/20 rounded-xl p-3 flex gap-2 text-blue-200/80 text-xs">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
               <span>Only attendance records within the last <strong>30 days</strong> are eligible for correction. Records with an active or approved request cannot be refiled.</span>
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search by date, time or type…"
+                value={search}
+                onChange={(e: { target: HTMLInputElement }) => setSearch(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-white/30 focus:outline-none focus:border-blue-400/40"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {loadingRecords ? (

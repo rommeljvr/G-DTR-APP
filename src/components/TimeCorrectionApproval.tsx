@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft, Clock, Calendar, FileText, CheckCircle2,
   AlertCircle, Loader2, XCircle, ThumbsUp, ThumbsDown,
-  ExternalLink, RotateCcw, User as UserIcon,
+  ExternalLink, RotateCcw, User as UserIcon, Search, X,
 } from 'lucide-react';
 import { User, TimeCorrectionFiling } from '../types';
 import { getPendingTimeCorrectionApprovals, approveTimeCorrection, rejectTimeCorrection } from '../utils/sheets';
@@ -43,6 +43,7 @@ export default function TimeCorrectionApproval({ user, onBack }: Props) {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason]       = useState('');
   const [rejectTarget, setRejectTarget]       = useState<TimeCorrectionFiling | null>(null);
+  const [search, setSearch]             = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -227,6 +228,23 @@ export default function TimeCorrectionApproval({ user, onBack }: Props) {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-5 pb-8">
+          {/* Search */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by name, date, department…"
+              value={search}
+              onChange={(e: { target: HTMLInputElement }) => setSearch(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm placeholder-white/30 focus:outline-none focus:border-blue-400/40"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
@@ -236,9 +254,20 @@ export default function TimeCorrectionApproval({ user, onBack }: Props) {
               <CheckCircle2 className="w-12 h-12 text-emerald-400/40" />
               <p className="text-blue-200/40 text-sm">No pending Time Correction requests</p>
             </div>
-          ) : (
+          ) : (() => {
+            const sq = search.trim().toLowerCase();
+            const visible = sq
+              ? records.filter((r: TimeCorrectionFiling) =>
+                  r.employeeName.toLowerCase().includes(sq) ||
+                  r.attendanceDate.toLowerCase().includes(sq) ||
+                  (r.department || '').toLowerCase().includes(sq)
+                )
+              : records;
+            return visible.length === 0 ? (
+              <div className="text-center py-20 text-blue-200/40 text-sm">No results for "{search}"</div>
+            ) : (
             <div className="space-y-3">
-              {records.map((rec: TimeCorrectionFiling) => (
+              {visible.map((rec: TimeCorrectionFiling) => (
                 <button key={rec.id} onClick={() => setSelected(rec)}
                   className="w-full text-left bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-blue-400/30 transition-all">
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -266,7 +295,7 @@ export default function TimeCorrectionApproval({ user, onBack }: Props) {
                 </button>
               ))}
             </div>
-          )}
+            );})()}
         </div>
       )}
     </div>
