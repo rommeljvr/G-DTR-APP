@@ -278,7 +278,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search by date, time or type…"
+                placeholder="Search by date (MM/DD/YYYY), time or type…"
                 value={search}
                 onChange={(e: { target: HTMLInputElement }) => setSearch(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-white/30 focus:outline-none focus:border-blue-400/40"
