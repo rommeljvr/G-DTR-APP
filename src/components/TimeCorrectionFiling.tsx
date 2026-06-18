@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft, Clock, Calendar, FileText, Paperclip,
-  AlertCircle, CheckCircle2, Loader2, X, Info,
+  AlertCircle, CheckCircle2, Loader2, X, Info, ZoomIn,
 } from 'lucide-react';
 import { User, AttendanceRecord, TimeCorrectionFiling as TCFiling } from '../types';
-import { getAttendanceHistory, submitTimeCorrection, getTimeCorrectionHistory, getApproverSettings, fetchImageBase64 } from '../utils/sheets';
+import { getAttendanceHistory, submitTimeCorrection, getTimeCorrectionHistory, getApproverSettings } from '../utils/sheets';
+import DriveImage from './DriveImage';
 
 interface Props {
   user: User;
@@ -72,8 +73,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   const [reason, setReason]                     = useState('');
   const [documentFile, setDocumentFile]         = useState<File | null>(null);
 
-  const [photoSrc, setPhotoSrc]       = useState<string | null>(null);
-  const [photoLoading, setPhotoLoading] = useState(false);
+  const [previewSrc, setPreviewSrc]   = useState<string | null>(null);
   const [submitting, setSubmitting]   = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [errors, setErrors]           = useState<Record<string, string>>({});
@@ -108,7 +108,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   };
 
   const getActiveFilingForRecord = (recordId: string) =>
-    filings.find(f => f.attendanceRecordId === recordId && (f.status === 'Pending' || f.status === 'Approved'));
+    filings.find((f: TCFiling) => f.attendanceRecordId === recordId && (f.status === 'Pending' || f.status === 'Approved'));
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -138,31 +138,16 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     return Object.keys(e).length === 0;
   };
 
-  const resolvePhoto = useCallback(async (rec: AttendanceRecord) => {
-    setPhotoSrc(null);
-    if (!rec.imageUrl && !rec.imageId) return;
-    if (rec.imageUrl && rec.imageUrl.startsWith('http')) {
-      setPhotoSrc(rec.imageUrl);
-      return;
-    }
-    if (rec.imageId) {
-      setPhotoLoading(true);
-      const b64 = await fetchImageBase64(rec.imageId);
-      setPhotoLoading(false);
-      if (b64) setPhotoSrc(b64);
-    }
-  }, []);
-
-  const handleSelectRecord = (rec: AttendanceRecord) => {
+  const handleSelectRecord = useCallback((rec: AttendanceRecord) => {
     setSelectedRecord(rec);
     setCorrectedTimeIn('');
     setCorrectedTimeOut('');
     setReason('');
     setDocumentFile(null);
     setErrors({});
-    resolvePhoto(rec);
+    setPreviewSrc(null);
     setStep('form');
-  };
+  }, []);
 
   const handleFileChange = (e: { target: HTMLInputElement }) => {
     const f = (e.target.files?.[0]) ?? null;
@@ -219,8 +204,24 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   }
   const sortedDates = Object.keys(recordsByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
+  const hasImage = (rec: AttendanceRecord) => !!(rec.photo || rec.imageId);
+
   return (
     <div className="min-h-dvh bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col">
+      {/* Full-screen photo preview */}
+      {previewSrc && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center px-4"
+          onClick={() => setPreviewSrc(null)}>
+          <button
+            onClick={() => setPreviewSrc(null)}
+            className="absolute top-4 right-4 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white z-10">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="w-full max-w-lg" onClick={(e: { stopPropagation: () => void }) => e.stopPropagation()}>
+            <img src={previewSrc} alt="Attendance photo" className="w-full rounded-xl" />
+          </div>
+        </div>
+      )}
       {/* Notification */}
       {notification && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 text-sm font-medium
@@ -321,33 +322,35 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
         {step === 'form' && selectedRecord && (
           <>
             {/* Original record summary */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
-              <p className="text-blue-200/60 text-xs font-semibold uppercase tracking-wider">Original Record</p>
-              <div className="flex items-start gap-3">
-                {photoLoading && (
-                  <div className="w-16 h-16 rounded-lg border border-white/10 shrink-0 bg-white/5 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                  </div>
-                )}
-                {!photoLoading && photoSrc && (
-                  <img
-                    src={photoSrc}
-                    alt="Attendance photo"
-                    className="w-16 h-16 rounded-lg object-cover border border-white/10 shrink-0"
-                    onError={(e: { target: EventTarget | null }) => { if (e.target) (e.target as HTMLImageElement).style.display = 'none'; }}
+            <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+              {hasImage(selectedRecord) && (
+                <div className="relative">
+                  <DriveImage
+                    photo={selectedRecord.photo}
+                    imageId={selectedRecord.imageId}
+                    className="w-full h-44"
+                    onClick={(src) => setPreviewSrc(src)}
                   />
-                )}
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-300 shrink-0" />
-                    <span className="text-white text-sm">{formatDate(selectedRecord.date)}</span>
+                  <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-sm rounded-full p-1.5 pointer-events-none">
+                    <ZoomIn className="w-3.5 h-3.5 text-white/70" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-300 shrink-0" />
-                    <span className={`text-sm font-medium ${selectedRecord.action === 'TIME_IN' ? 'text-emerald-300' : 'text-red-300'}`}>
-                      {selectedRecord.action === 'TIME_IN' ? 'Time In' : 'Time Out'}: {selectedRecord.time}
-                    </span>
+                  <div className={`absolute top-2 left-2 px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm pointer-events-none
+                    ${selectedRecord.action === 'TIME_IN' ? 'bg-emerald-500/80 text-white' : 'bg-red-500/80 text-white'}`}>
+                    {selectedRecord.action === 'TIME_IN' ? '▶ TIME IN' : '◼ TIME OUT'}
                   </div>
+                </div>
+              )}
+              <div className="p-4 space-y-2">
+                <p className="text-blue-200/60 text-xs font-semibold uppercase tracking-wider">Original Record</p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-blue-300 shrink-0" />
+                  <span className="text-white text-sm">{formatDate(selectedRecord.date)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-300 shrink-0" />
+                  <span className={`text-sm font-medium ${selectedRecord.action === 'TIME_IN' ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {selectedRecord.action === 'TIME_IN' ? 'Time In' : 'Time Out'}: {selectedRecord.time}
+                  </span>
                 </div>
               </div>
             </div>
