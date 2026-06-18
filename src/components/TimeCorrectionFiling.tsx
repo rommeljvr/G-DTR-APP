@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft, Clock, Calendar, FileText, Paperclip,
   AlertCircle, CheckCircle2, Loader2, X, Info,
 } from 'lucide-react';
 import { User, AttendanceRecord, TimeCorrectionFiling as TCFiling } from '../types';
-import { getAttendanceHistory, submitTimeCorrection, getTimeCorrectionHistory, getApproverSettings } from '../utils/sheets';
+import { getAttendanceHistory, submitTimeCorrection, getTimeCorrectionHistory, getApproverSettings, fetchImageBase64 } from '../utils/sheets';
 
 interface Props {
   user: User;
@@ -72,6 +72,8 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   const [reason, setReason]                     = useState('');
   const [documentFile, setDocumentFile]         = useState<File | null>(null);
 
+  const [photoSrc, setPhotoSrc]       = useState<string | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [errors, setErrors]           = useState<Record<string, string>>({});
@@ -136,6 +138,21 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     return Object.keys(e).length === 0;
   };
 
+  const resolvePhoto = useCallback(async (rec: AttendanceRecord) => {
+    setPhotoSrc(null);
+    if (!rec.imageUrl && !rec.imageId) return;
+    if (rec.imageUrl && rec.imageUrl.startsWith('http')) {
+      setPhotoSrc(rec.imageUrl);
+      return;
+    }
+    if (rec.imageId) {
+      setPhotoLoading(true);
+      const b64 = await fetchImageBase64(rec.imageId);
+      setPhotoLoading(false);
+      if (b64) setPhotoSrc(b64);
+    }
+  }, []);
+
   const handleSelectRecord = (rec: AttendanceRecord) => {
     setSelectedRecord(rec);
     setCorrectedTimeIn('');
@@ -143,6 +160,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     setReason('');
     setDocumentFile(null);
     setErrors({});
+    resolvePhoto(rec);
     setStep('form');
   };
 
@@ -306,9 +324,14 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
               <p className="text-blue-200/60 text-xs font-semibold uppercase tracking-wider">Original Record</p>
               <div className="flex items-start gap-3">
-                {(selectedRecord.imageUrl || selectedRecord.photo) && (
+                {photoLoading && (
+                  <div className="w-16 h-16 rounded-lg border border-white/10 shrink-0 bg-white/5 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  </div>
+                )}
+                {!photoLoading && photoSrc && (
                   <img
-                    src={selectedRecord.imageUrl || selectedRecord.photo}
+                    src={photoSrc}
                     alt="Attendance photo"
                     className="w-16 h-16 rounded-lg object-cover border border-white/10 shrink-0"
                     onError={(e: { target: EventTarget | null }) => { if (e.target) (e.target as HTMLImageElement).style.display = 'none'; }}
