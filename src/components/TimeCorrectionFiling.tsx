@@ -110,15 +110,19 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!correctedTimeIn && !correctedTimeOut)
-      e.time = 'At least one corrected time (In or Out) is required';
-    if (correctedTimeIn && selectedRecord) {
-      if (to24(correctedTimeIn) === to24(selectedRecord.time) && selectedRecord.action === 'TIME_IN')
+    if (!selectedRecord) return false;
+    const isIn = selectedRecord.action === 'TIME_IN';
+    if (isIn && !correctedTimeIn)
+      e.correctedTimeIn = 'Corrected Time In is required';
+    if (!isIn && !correctedTimeOut)
+      e.correctedTimeOut = 'Corrected Time Out is required';
+    if (isIn && correctedTimeIn) {
+      if (to24(correctedTimeIn) === to24(selectedRecord.time))
         e.correctedTimeIn = 'Corrected Time In must differ from original';
     }
-    if (correctedTimeIn && correctedTimeOut) {
-      if (to24(correctedTimeOut) <= to24(correctedTimeIn))
-        e.correctedTimeOut = 'Time Out must be later than Time In';
+    if (!isIn && correctedTimeOut) {
+      if (to24(correctedTimeOut) === to24(selectedRecord.time))
+        e.correctedTimeOut = 'Corrected Time Out must differ from original';
     }
     if (!reason.trim() || reason.trim().length < MIN_REASON_LEN)
       e.reason = `Reason must be at least ${MIN_REASON_LEN} characters`;
@@ -299,44 +303,58 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
         {step === 'form' && selectedRecord && (
           <>
             {/* Original record summary */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
               <p className="text-blue-200/60 text-xs font-semibold uppercase tracking-wider">Original Record</p>
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-blue-300" />
-                <span className="text-white text-sm">{formatDate(selectedRecord.date)}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Clock className="w-4 h-4 text-blue-300" />
-                <span className={`text-sm font-medium ${selectedRecord.action === 'TIME_IN' ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {selectedRecord.action === 'TIME_IN' ? 'Time In' : 'Time Out'}: {selectedRecord.time}
-                </span>
+              <div className="flex items-start gap-3">
+                {(selectedRecord.imageUrl || selectedRecord.photo) && (
+                  <img
+                    src={selectedRecord.imageUrl || selectedRecord.photo}
+                    alt="Attendance photo"
+                    className="w-16 h-16 rounded-lg object-cover border border-white/10 shrink-0"
+                    onError={(e: { target: EventTarget | null }) => { if (e.target) (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-blue-300 shrink-0" />
+                    <span className="text-white text-sm">{formatDate(selectedRecord.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-300 shrink-0" />
+                    <span className={`text-sm font-medium ${selectedRecord.action === 'TIME_IN' ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {selectedRecord.action === 'TIME_IN' ? 'Time In' : 'Time Out'}: {selectedRecord.time}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Corrected times */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+            {/* Corrected time — only the field matching the record's action */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
               <p className="text-blue-200/60 text-xs font-semibold uppercase tracking-wider">Corrected Time</p>
-              <div>
-                <label className="text-white/70 text-xs mb-1 block">Corrected Time In</label>
-                <input
-                  type="time"
-                  value={correctedTimeIn}
-                  onChange={(e: { target: HTMLInputElement }) => setCorrectedTimeIn(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400/50"
-                />
-              </div>
-              <div>
-                <label className="text-white/70 text-xs mb-1 block">Corrected Time Out</label>
-                <input
-                  type="time"
-                  value={correctedTimeOut}
-                  onChange={(e: { target: HTMLInputElement }) => setCorrectedTimeOut(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400/50"
-                />
-              </div>
-              {errors.time && <p className="text-red-400 text-xs">{errors.time}</p>}
-              {errors.correctedTimeIn && <p className="text-red-400 text-xs">{errors.correctedTimeIn}</p>}
-              {errors.correctedTimeOut && <p className="text-red-400 text-xs">{errors.correctedTimeOut}</p>}
+              {selectedRecord.action === 'TIME_IN' ? (
+                <div>
+                  <label className="text-white/70 text-xs mb-1 block">Corrected Time In <span className="text-red-400">*</span></label>
+                  <input
+                    type="time"
+                    value={correctedTimeIn}
+                    onChange={(e: { target: HTMLInputElement }) => setCorrectedTimeIn(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-400/50"
+                  />
+                  {errors.correctedTimeIn && <p className="text-red-400 text-xs mt-1">{errors.correctedTimeIn}</p>}
+                </div>
+              ) : (
+                <div>
+                  <label className="text-white/70 text-xs mb-1 block">Corrected Time Out <span className="text-red-400">*</span></label>
+                  <input
+                    type="time"
+                    value={correctedTimeOut}
+                    onChange={(e: { target: HTMLInputElement }) => setCorrectedTimeOut(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-400/50"
+                  />
+                  {errors.correctedTimeOut && <p className="text-red-400 text-xs mt-1">{errors.correctedTimeOut}</p>}
+                </div>
+              )}
             </div>
 
             {/* Reason */}
