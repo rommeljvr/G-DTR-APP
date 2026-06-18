@@ -72,6 +72,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   const [correctedTimeOut, setCorrectedTimeOut] = useState('');
   const [reason, setReason]                     = useState('');
   const [documentFile, setDocumentFile]         = useState<File | null>(null);
+  const [documentData, setDocumentData]         = useState<string>('');
 
   const [previewSrc, setPreviewSrc]   = useState<string | null>(null);
   const [submitting, setSubmitting]   = useState(false);
@@ -144,6 +145,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     setCorrectedTimeOut('');
     setReason('');
     setDocumentFile(null);
+    setDocumentData('');
     setErrors({});
     setPreviewSrc(null);
     setStep('form');
@@ -152,6 +154,13 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
   const handleFileChange = (e: { target: HTMLInputElement }) => {
     const f = (e.target.files?.[0]) ?? null;
     setDocumentFile(f);
+    if (f) {
+      const reader = new FileReader();
+      reader.onload = () => setDocumentData(reader.result as string);
+      reader.readAsDataURL(f);
+    } else {
+      setDocumentData('');
+    }
   };
 
   const handleSubmit = async () => {
@@ -159,14 +168,6 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
     if (!validate()) return;
 
     setSubmitting(true);
-    let documentData: string | undefined;
-    if (documentFile) {
-      documentData = await new Promise<string>((res) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => res(ev.target?.result as string);
-        reader.readAsDataURL(documentFile);
-      });
-    }
 
     const result = await submitTimeCorrection({
       employeeName:       user.name,
@@ -181,13 +182,14 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
       correctedTimeOut:   correctedTimeOut ? to12(correctedTimeOut) : '',
       reason:             reason.trim(),
       approverEmail,
-    }, documentData);
+    }, documentData || undefined);
 
     setSubmitting(false);
     if (result.success) {
       notify('success', 'Time Correction filed successfully!');
       setStep('select');
       setSelectedRecord(null);
+      setDocumentData('');
       // Refresh filings
       const tcRes = await getTimeCorrectionHistory(user.email);
       setFilings(tcRes.records || []);
@@ -415,7 +417,7 @@ export default function TimeCorrectionFiling({ user, onBack, onViewReports }: Pr
                     <span className="text-white/80 text-xs truncate max-w-[200px]">{documentFile.name}</span>
                     <span className="text-white/40 text-xs">({(documentFile.size / 1024 / 1024).toFixed(2)}MB)</span>
                   </div>
-                  <button onClick={() => setDocumentFile(null)} className="text-red-400 hover:text-red-300">
+                  <button onClick={() => { setDocumentFile(null); setDocumentData(''); }} className="text-red-400 hover:text-red-300">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

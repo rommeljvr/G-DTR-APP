@@ -3099,8 +3099,8 @@ function submitTimeCorrection(data, documentData) {
   if (!data.attendanceRecordId) return _json({ success: false, message: 'Attendance record ID is required' });
   if (!data.reason || String(data.reason).trim().length < 10)
     return _json({ success: false, message: 'Reason must be at least 10 characters' });
-  if (!data.correctedTimeIn && !data.correctedTimeOut)
-    return _json({ success: false, message: 'At least one corrected time (In or Out) is required' });
+  if (!String(data.correctedTimeIn || '').trim() && !String(data.correctedTimeOut || '').trim())
+    return _json({ success: false, message: 'A corrected time is required' });
 
   var attDate  = new Date(data.attendanceDate);
   var today    = new Date();
@@ -3138,18 +3138,27 @@ function submitTimeCorrection(data, documentData) {
   }
 
   var docId = '', docUrl = '';
-  if (documentData) {
+  if (documentData && String(documentData).indexOf('base64,') > -1) {
     try {
-      var folder = getOrCreateFolder('DTR Documents');
-      var parts  = documentData.split(',');
-      var mime   = parts[0].match(/:(.*?);/)[1];
-      var ext    = mime.split('/')[1] || 'bin';
-      var blob   = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, 'TC_' + data.email + '_' + Date.now() + '.' + ext);
-      var file   = folder.createFile(blob);
+      var folderId = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+      var tcFolder;
+      try { tcFolder = DriveApp.getFolderById(folderId); }
+      catch (fe) { tcFolder = DriveApp.getRootFolder(); }
+      var monthKey   = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+      var subName    = 'TC_DOCS_' + monthKey;
+      var subIter    = tcFolder.getFoldersByName(subName);
+      var subFolder  = subIter.hasNext() ? subIter.next() : tcFolder.createFolder(subName);
+      var parts      = documentData.split(',');
+      var mime       = parts[0].match(/:(.*?);/)[1];
+      var ext        = mime.split('/')[1] || 'bin';
+      var ts         = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+      var safeName   = (data.employeeName || data.email || 'user').replace(/[^a-zA-Z0-9]/g, '_');
+      var blob       = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, 'TC_' + safeName + '_' + ts + '.' + ext);
+      var file       = subFolder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       docId  = file.getId();
-      docUrl = file.getUrl();
-    } catch (e2) { /* silent */ }
+      docUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+    } catch (e2) { Logger.log('TC doc upload error: ' + e2.toString()); }
   }
 
   var id  = Utilities.getUuid();
@@ -3234,10 +3243,10 @@ function getPendingTimeCorrectionApprovals(approverEmail) {
       designation:       String(rows[i][findColumnIndex(headers,['Designation'])]           || ''),
       attendanceDate:    String(rows[i][findColumnIndex(headers,['Attendance Date'])]       || ''),
       attendanceRecordId:String(rows[i][findColumnIndex(headers,['Attendance Record ID'])]  || ''),
-      originalTimeIn:    String(rows[i][findColumnIndex(headers,['Original Time In'])]      || ''),
-      originalTimeOut:   String(rows[i][findColumnIndex(headers,['Original Time Out'])]     || ''),
-      correctedTimeIn:   String(rows[i][findColumnIndex(headers,['Corrected Time In'])]     || ''),
-      correctedTimeOut:  String(rows[i][findColumnIndex(headers,['Corrected Time Out'])]    || ''),
+      originalTimeIn:    formatTimeValue(rows[i][findColumnIndex(headers,['Original Time In'])]),
+      originalTimeOut:   formatTimeValue(rows[i][findColumnIndex(headers,['Original Time Out'])]),
+      correctedTimeIn:   formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time In'])]),
+      correctedTimeOut:  formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time Out'])]),
       reason:            String(rows[i][findColumnIndex(headers,['Reason'])]                || ''),
       docId:             String(rows[i][findColumnIndex(headers,['Document ID'])]           || ''),
       documentUrl:       String(rows[i][findColumnIndex(headers,['Document URL'])]          || ''),
@@ -3248,6 +3257,21 @@ function getPendingTimeCorrectionApprovals(approverEmail) {
     });
   }
   return _json({ success: true, records: records });
+}
+
+function formatTimeValue(value) {
+  if (!value) return '';
+
+  // If value is a Date object
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value)) {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      'h:mm:ss a'
+    );
+  }
+
+  return String(value);
 }
 
 function findTimeCorrectionRow(id) {
