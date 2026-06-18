@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, Eye, FileText } from 'lucide-react';
+import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, Eye, FileText, ClipboardList } from 'lucide-react';
 import { User, AppNotification, NotificationType } from '../types';
-import { getNotifications, markNotificationsRead, acknowledgeLeave, rejectLeave, getLeaveById } from '../utils/sheets';
+import { getNotifications, markNotificationsRead, acknowledgeLeave, rejectLeave, getLeaveById, getTimeCorrectionById } from '../utils/sheets';
 import LeaveDetailModal from './LeaveDetailModal';
-import { LeaveApplication } from '../types';
+import { LeaveApplication, TimeCorrectionFiling } from '../types';
 
 interface Props {
   user: User;
@@ -12,12 +12,16 @@ interface Props {
 }
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
-  LEAVE_FILED:        { label: 'Leave Filed',        icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
-  LEAVE_SUBMITTED:    { label: 'Leave Submitted',    icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
-  PENDING_APPROVAL:   { label: 'Approval Required',  icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
-  LEAVE_ACKNOWLEDGED: { label: 'Acknowledged',       icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
-  LEAVE_APPROVED:     { label: 'Approved',           icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
-  LEAVE_REJECTED:     { label: 'Rejected',           icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  LEAVE_FILED:        { label: 'Leave Filed',            icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  LEAVE_SUBMITTED:    { label: 'Leave Submitted',        icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  PENDING_APPROVAL:   { label: 'Approval Required',      icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  LEAVE_ACKNOWLEDGED: { label: 'Acknowledged',           icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
+  LEAVE_APPROVED:     { label: 'Approved',               icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  LEAVE_REJECTED:     { label: 'Rejected',               icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  TC_FILED:           { label: 'TC Request Filed',       icon: '🕐', color: 'bg-cyan-500/15 border-cyan-400/20 text-cyan-300' },
+  TC_APPROVED:        { label: 'TC Approved',            icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  TC_REJECTED:        { label: 'TC Rejected',            icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  TC_CANCELLED:       { label: 'TC Cancelled',           icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
 };
 
 function timeAgo(iso: string): string {
@@ -39,7 +43,8 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
   const [rejectTarget, setRejectTarget] = useState<AppNotification | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-  const [detailLeave, setDetailLeave]   = useState<LeaveApplication | null>(null);
+  const [detailLeave, setDetailLeave]     = useState<LeaveApplication | null>(null);
+  const [detailTC, setDetailTC]           = useState<TimeCorrectionFiling | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
 
   const showToast = (msg: string, ok: boolean) => {
@@ -77,6 +82,15 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     setDetailLoading(null);
     if (leave) setDetailLeave(leave);
     else showToast('Could not load leave details.', false);
+  };
+
+  const openTCDetail = async (n: AppNotification) => {
+    if (!n.timeCorrectionId) return;
+    setDetailLoading(n.id);
+    const tc = await getTimeCorrectionById(n.timeCorrectionId);
+    setDetailLoading(null);
+    if (tc) setDetailTC(tc);
+    else showToast('Could not load Time Correction details.', false);
   };
 
   const handleAcknowledge = async (n: AppNotification) => {
@@ -173,7 +187,7 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
 
               {/* Action buttons */}
               <div className="mt-3 flex flex-col gap-2">
-                {/* View details — available on any notification with a leaveId */}
+                {/* View Leave Details — only for non-TC notifications */}
                 {n.leaveId && (
                   <button
                     onClick={() => openDetail(n)}
@@ -182,6 +196,17 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
                   >
                     {detailLoading === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                     View Leave Details
+                  </button>
+                )}
+                {/* View TC Details — only for TC_ notifications */}
+                {n.timeCorrectionId && (
+                  <button
+                    onClick={() => openTCDetail(n)}
+                    disabled={detailLoading === n.id}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-400/20 text-cyan-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-cyan-500/15 disabled:opacity-50"
+                  >
+                    {detailLoading === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
+                    View TC Details
                   </button>
                 )}
                 {/* Acknowledge + Reject for PENDING_APPROVAL */}
@@ -231,6 +256,76 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
           leave={detailLeave}
           onClose={() => setDetailLeave(null)}
         />
+      )}
+
+      {/* TC detail modal */}
+      {detailTC && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-5 py-4 flex items-center justify-between z-10">
+              <h2 className="text-white font-bold">Time Correction Detail</h2>
+              <button onClick={() => setDetailTC(null)} className="w-8 h-8 bg-white/8 rounded-full flex items-center justify-center active:scale-90">
+                <span className="text-white/60 text-lg leading-none">✕</span>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-semibold text-sm">{detailTC.employeeName}</p>
+                  <p className="text-white/50 text-xs">{detailTC.department} · {detailTC.designation}</p>
+                  <p className="text-white/40 text-xs truncate">{detailTC.email}</p>
+                </div>
+                <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border
+                  ${detailTC.status === 'Approved'  ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
+                  : detailTC.status === 'Rejected'  ? 'bg-red-400/15 text-red-300 border-red-400/30'
+                  : detailTC.status === 'Cancelled' ? 'bg-slate-400/15 text-slate-300 border-slate-400/30'
+                  : 'bg-amber-400/15 text-amber-300 border-amber-400/30'}`}>
+                  {detailTC.status}
+                </span>
+              </div>
+              <div className="bg-white/5 rounded-xl p-3 space-y-2">
+                <p className="text-white/40 text-[10px] uppercase tracking-wide">Attendance Date</p>
+                <p className="text-white text-sm font-medium">{detailTC.attendanceDate}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Original Time In</p>
+                  <p className="text-white text-sm">{detailTC.originalTimeIn || '—'}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Original Time Out</p>
+                  <p className="text-white text-sm">{detailTC.originalTimeOut || '—'}</p>
+                </div>
+                <div className="bg-emerald-500/10 rounded-xl p-3">
+                  <p className="text-emerald-300/60 text-[10px] uppercase tracking-wide mb-1">Corrected Time In</p>
+                  <p className="text-emerald-300 text-sm font-semibold">{detailTC.correctedTimeIn || '—'}</p>
+                </div>
+                <div className="bg-emerald-500/10 rounded-xl p-3">
+                  <p className="text-emerald-300/60 text-[10px] uppercase tracking-wide mb-1">Corrected Time Out</p>
+                  <p className="text-emerald-300 text-sm font-semibold">{detailTC.correctedTimeOut || '—'}</p>
+                </div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-3">
+                <p className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Reason</p>
+                <p className="text-white/80 text-sm leading-relaxed">{detailTC.reason}</p>
+              </div>
+              {detailTC.rejectionReason && (
+                <div className="bg-red-500/10 border border-red-400/20 rounded-xl p-3">
+                  <p className="text-red-300/60 text-[10px] uppercase tracking-wide mb-1">Rejection Reason</p>
+                  <p className="text-red-200/80 text-sm">{detailTC.rejectionReason}</p>
+                </div>
+              )}
+              {detailTC.documentUrl && (
+                <a href={detailTC.documentUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-blue-500/10 border border-blue-400/20 rounded-xl p-3 text-blue-300 text-sm hover:bg-blue-500/20 transition-colors">
+                  <FileText className="w-4 h-4" />
+                  View Supporting Document
+                </a>
+              )}
+              <p className="text-white/30 text-xs px-1">Submitted: {new Date(detailTC.submittedAt).toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Reject reason modal */}

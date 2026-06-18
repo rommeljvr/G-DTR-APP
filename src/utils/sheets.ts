@@ -413,6 +413,16 @@ export async function getLeaveById(leaveId: string): Promise<import('../types').
   } catch { return null; }
 }
 
+export async function getTimeCorrectionById(tcId: string): Promise<import('../types').TimeCorrectionFiling | null> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return null;
+  try {
+    const res = await fetch(`${scriptUrl}?action=getTimeCorrectionById&tcId=${encodeURIComponent(tcId)}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return json.success ? json.record : null;
+  } catch { return null; }
+}
+
 // ─── fetch image as base64 from Google Drive ──────────────────────
 
 const imageCache = new Map<string, string>();
@@ -1004,6 +1014,7 @@ function doGet(e) {
   if (action === 'getAllApproverSettings') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getAllApproverSettings() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'getPendingApprovals')  return email ? getPendingApprovals(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getLeaveById')         return p.leaveId ? getLeaveById(p.leaveId) : _json({ success: false, message: 'leaveId required' });
+  if (action === 'getTimeCorrectionById') return p.tcId ? getTimeCorrectionById(p.tcId) : _json({ success: false, message: 'tcId required' });
   if (action === 'getNotifications')     return email ? getNotifications(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getTimeCorrectionHistory')          return email ? getTimeCorrectionHistory(email) : _json({ success: false, message: 'Email required' });
@@ -2760,14 +2771,17 @@ function getNotifications(email) {
   var results = [];
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
+      var nType = String(rows[i][2] || '');
+      var refId  = rows[i][4] || '';
       results.push({
-        id:        rows[i][0],
-        userId:    rows[i][1],
-        type:      rows[i][2],
-        message:   rows[i][3],
-        leaveId:   rows[i][4] || '',
-        isRead:    rows[i][5] === 'true' || rows[i][5] === true,
-        createdAt: rows[i][6]
+        id:                 rows[i][0],
+        userId:             rows[i][1],
+        type:               nType,
+        message:            rows[i][3],
+        leaveId:            nType.indexOf('TC_') === 0 ? '' : refId,
+        timeCorrectionId:   nType.indexOf('TC_') === 0 ? refId : '',
+        isRead:             rows[i][5] === 'true' || rows[i][5] === true,
+        createdAt:          rows[i][6]
       });
     }
   }
@@ -3180,6 +3194,40 @@ function submitTimeCorrection(data, documentData) {
   }
 
   return _json({ success: true, message: 'Time Correction filed successfully', id: id, docId: docId, docUrl: docUrl });
+}
+
+function getTimeCorrectionById(tcId) {
+  if (!tcId) return _json({ success: false, message: 'tcId required' });
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionFilings');
+  if (!sheet || sheet.getLastRow() <= 1) return _json({ success: false, message: 'No records' });
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var idLower = String(tcId).trim().toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][findColumnIndex(headers,['ID'])] || '').trim().toLowerCase() !== idLower) continue;
+    return _json({ success: true, record: {
+      id:                String(rows[i][findColumnIndex(headers,['ID'])]                    || ''),
+      employeeName:      String(rows[i][findColumnIndex(headers,['Employee Name'])]         || ''),
+      email:             String(rows[i][findColumnIndex(headers,['Email'])]                 || ''),
+      department:        String(rows[i][findColumnIndex(headers,['Department'])]            || ''),
+      designation:       String(rows[i][findColumnIndex(headers,['Designation'])]           || ''),
+      attendanceDate:    String(rows[i][findColumnIndex(headers,['Attendance Date'])]       || ''),
+      attendanceRecordId:String(rows[i][findColumnIndex(headers,['Attendance Record ID'])]  || ''),
+      originalTimeIn:    formatTimeValue(rows[i][findColumnIndex(headers,['Original Time In'])]),
+      originalTimeOut:   formatTimeValue(rows[i][findColumnIndex(headers,['Original Time Out'])]),
+      correctedTimeIn:   formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time In'])]),
+      correctedTimeOut:  formatTimeValue(rows[i][findColumnIndex(headers,['Corrected Time Out'])]),
+      reason:            String(rows[i][findColumnIndex(headers,['Reason'])]                || ''),
+      docId:             String(rows[i][findColumnIndex(headers,['Document ID'])]           || ''),
+      documentUrl:       String(rows[i][findColumnIndex(headers,['Document URL'])]          || ''),
+      status:            String(rows[i][findColumnIndex(headers,['Status'])]                || 'Pending'),
+      submittedAt:       String(rows[i][findColumnIndex(headers,['Submitted At'])]          || ''),
+      approverEmail:     String(rows[i][findColumnIndex(headers,['Approver Email'])]        || ''),
+      rejectionReason:   String(rows[i][findColumnIndex(headers,['Rejection Reason'])]      || '')
+    }});
+  }
+  return _json({ success: false, message: 'Not found' });
 }
 
 function getTimeCorrectionHistory(email) {
