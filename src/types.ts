@@ -126,7 +126,11 @@ export type NotificationType =
   | 'LEAVE_ACKNOWLEDGED'
   | 'LEAVE_APPROVED'
   | 'LEAVE_REJECTED'
-  | 'PENDING_APPROVAL';
+  | 'PENDING_APPROVAL'
+  | 'TC_FILED'
+  | 'TC_APPROVED'
+  | 'TC_REJECTED'
+  | 'TC_CANCELLED';
 
 export interface AppNotification {
   id: string;
@@ -134,6 +138,43 @@ export interface AppNotification {
   type: NotificationType;
   message: string;
   leaveId?: string;
+  timeCorrectionId?: string;
   isRead: boolean;
   createdAt: string;
+}
+
+// ── Time Correction Filing ─────────────────────────────────────────
+
+export type TimeCorrectionStatus = 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+
+export interface TimeCorrectionFiling {
+  id: string;
+  employeeName: string;
+  email: string;
+  department: string;
+  designation: string;
+  attendanceDate: string;
+  attendanceRecordId: string;
+  originalTimeIn: string;
+  originalTimeOut: string;
+  correctedTimeIn: string;
+  correctedTimeOut: string;
+  reason: string;
+  docId?: string;
+  documentUrl?: string;
+  status: TimeCorrectionStatus;
+  submittedAt: string;
+  approverEmail?: string;
+  rejectionReason?: string;
+  approvalHistory?: TimeCorrectionApprovalRecord[];
+}
+
+export interface TimeCorrectionApprovalRecord {
+  id: string;
+  timeCorrectionId: string;
+  approverEmail: string;
+  approverName: string;
+  action: 'Approve' | 'Reject' | 'Cancel';
+  reason?: string;
+  timestamp: string;
 }

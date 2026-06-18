@@ -766,6 +766,102 @@ export async function markNotificationsRead(email: string, notificationId?: stri
   } catch { /* silent */ }
 }
 
+// ─── Time Correction Filing ────────────────────────────────────────
+
+export async function submitTimeCorrection(
+  data: Omit<import('../types').TimeCorrectionFiling, 'id' | 'submittedAt' | 'status' | 'approvalHistory'>,
+  documentData?: string
+): Promise<{ success: boolean; message: string; id?: string; docId?: string; docUrl?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'submitTimeCorrection', data, documentData: documentData || null }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getTimeCorrectionHistory(
+  email: string
+): Promise<{ success: boolean; records: import('../types').TimeCorrectionFiling[]; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, records: [], message: 'No script URL configured' };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getTimeCorrectionHistory&email=${encodeURIComponent(email)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    if (json.success) return { success: true, records: json.records || [], message: '' };
+    return { success: false, records: [], message: json.message || 'Failed' };
+  } catch (err) {
+    return { success: false, records: [], message: String(err) };
+  }
+}
+
+export async function getPendingTimeCorrectionApprovals(
+  approverEmail: string
+): Promise<{ success: boolean; records: import('../types').TimeCorrectionFiling[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, records: [] };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getPendingTimeCorrectionApprovals&email=${encodeURIComponent(approverEmail)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    const json = await res.json();
+    return { success: json.success, records: json.records || [] };
+  } catch { return { success: false, records: [] }; }
+}
+
+export async function approveTimeCorrection(
+  id: string, approverEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'approveTimeCorrection', id, email: approverEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function rejectTimeCorrection(
+  id: string, approverEmail: string, reason: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'rejectTimeCorrection', id, email: approverEmail, reason }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function cancelTimeCorrection(
+  id: string, email: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cancelTimeCorrection', id, email }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
 export const APPS_SCRIPT_TEMPLATE = `
@@ -865,6 +961,10 @@ function doPost(e) {
     if (data.action === 'approveLeave')         return approveLeave(data.leaveId, data.email);
     if (data.action === 'rejectLeave')          return rejectLeave(data.leaveId, data.email, data.reason);
     if (data.action === 'markNotificationsRead') return markNotificationsRead(data.email, data.notificationId);
+    if (data.action === 'submitTimeCorrection')    return submitTimeCorrection(data.data, data.documentData);
+    if (data.action === 'approveTimeCorrection')   return approveTimeCorrection(data.id, data.email);
+    if (data.action === 'rejectTimeCorrection')    return rejectTimeCorrection(data.id, data.email, data.reason);
+    if (data.action === 'cancelTimeCorrection')    return cancelTimeCorrection(data.id, data.email);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -906,6 +1006,8 @@ function doGet(e) {
   if (action === 'getLeaveById')         return p.leaveId ? getLeaveById(p.leaveId) : _json({ success: false, message: 'leaveId required' });
   if (action === 'getNotifications')     return email ? getNotifications(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getTimeCorrectionHistory')          return email ? getTimeCorrectionHistory(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getPendingTimeCorrectionApprovals') return email ? getPendingTimeCorrectionApprovals(email) : _json({ success: false, message: 'Email required' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -1142,25 +1244,28 @@ function getImage(fileId) {
 function getLastAction(email) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Attendance');
-  if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, lastAction: null });
+
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return _json({ success: true, lastAction: null });
+  }
 
   var rows = sheet.getDataRange().getValues();
+
   for (var i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][3]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
-      var rawDate = rows[i][6];
-      var rawTime = rows[i][7];
-      var fmtDate = rawDate instanceof Date
-        ? Utilities.formatDate(rawDate, 'Asia/Manila', 'M/d/yyyy')
-        : String(rawDate || '');
-      var fmtTime = rawTime instanceof Date
-        ? Utilities.formatDate(rawTime, 'GMT', 'hh:mm:ss a')  // Use GMT to preserve literal time, avoid TZ shift
-        : String(rawTime || '');
+
+      var timestamp = rows[i][5];
+      var dateObj = new Date(timestamp);
+
+      var fmtDate = Utilities.formatDate(dateObj, 'Asia/Manila', 'M/d/yyyy');
+      var fmtTime = Utilities.formatDate(dateObj, 'Asia/Manila', 'hh:mm:ss a');
+
       return _json({
         success: true,
         lastAction: {
           id:          rows[i][0],
           action:      rows[i][4],
-          timestamp:   rows[i][5],
+          timestamp:   timestamp,
           date:        fmtDate,
           time:        fmtTime,
           department:  rows[i][13] || '',
@@ -1171,8 +1276,9 @@ function getLastAction(email) {
       });
     }
   }
+
   return _json({ success: true, lastAction: null });
-}
+  }
 
 function getHistory(email) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
@@ -2980,5 +3086,249 @@ function rejectLeave(leaveId, approverEmail, reason) {
     'Your leave request was rejected by ' + approverName + '. Reason: ' + reason, leaveId);
 
   return _json({ success: true, message: 'Leave rejected' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TIME CORRECTION FILING
+// ══════════════════════════════════════════════════════════════════
+
+function submitTimeCorrection(data, documentData) {
+  if (!data) return _json({ success: false, message: 'No data provided' });
+  if (!data.email)             return _json({ success: false, message: 'Email is required' });
+  if (!data.attendanceDate)    return _json({ success: false, message: 'Attendance date is required' });
+  if (!data.attendanceRecordId) return _json({ success: false, message: 'Attendance record ID is required' });
+  if (!data.reason || String(data.reason).trim().length < 10)
+    return _json({ success: false, message: 'Reason must be at least 10 characters' });
+  if (!data.correctedTimeIn && !data.correctedTimeOut)
+    return _json({ success: false, message: 'At least one corrected time (In or Out) is required' });
+
+  var attDate  = new Date(data.attendanceDate);
+  var today    = new Date();
+  var diffDays = Math.floor((today.getTime() - attDate.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays > 30) return _json({ success: false, message: 'Attendance record is older than 30 days and is no longer eligible for correction' });
+  if (attDate > today) return _json({ success: false, message: 'Future attendance dates are not allowed' });
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionFilings');
+  if (!sheet) {
+    sheet = ss.insertSheet('TimeCorrectionFilings');
+    sheet.appendRow([
+      'ID','Employee Name','Email','Department','Designation',
+      'Attendance Date','Attendance Record ID',
+      'Original Time In','Original Time Out',
+      'Corrected Time In','Corrected Time Out',
+      'Reason','Document ID','Document URL',
+      'Status','Submitted At','Approver Email','Rejection Reason'
+    ]);
+  }
+
+  if (sheet.getLastRow() > 1) {
+    var rows2   = sheet.getDataRange().getValues();
+    var hdr2    = rows2[0];
+    var cE2     = findColumnIndex(hdr2, ['Email']);
+    var cRId2   = findColumnIndex(hdr2, ['Attendance Record ID']);
+    var cSt2    = findColumnIndex(hdr2, ['Status']);
+    for (var i = 1; i < rows2.length; i++) {
+      if (String(rows2[i][cE2]  || '').trim().toLowerCase() === String(data.email).trim().toLowerCase()
+       && String(rows2[i][cRId2]|| '').trim() === String(data.attendanceRecordId).trim()
+       && (String(rows2[i][cSt2]|| '') === 'Pending' || String(rows2[i][cSt2]|| '') === 'Approved')) {
+        return _json({ success: false, message: 'An active Time Correction request already exists for this attendance record' });
+      }
+    }
+  }
+
+  var docId = '', docUrl = '';
+  if (documentData) {
+    try {
+      var folder = getOrCreateFolder('DTR Documents');
+      var parts  = documentData.split(',');
+      var mime   = parts[0].match(/:(.*?);/)[1];
+      var ext    = mime.split('/')[1] || 'bin';
+      var blob   = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, 'TC_' + data.email + '_' + Date.now() + '.' + ext);
+      var file   = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      docId  = file.getId();
+      docUrl = file.getUrl();
+    } catch (e2) { /* silent */ }
+  }
+
+  var id  = Utilities.getUuid();
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+
+  sheet.appendRow([
+    id, data.employeeName || '', data.email,
+    data.department || '', data.designation || '',
+    data.attendanceDate, data.attendanceRecordId,
+    data.originalTimeIn  || '', data.originalTimeOut || '',
+    data.correctedTimeIn || '', data.correctedTimeOut || '',
+    data.reason, docId, docUrl,
+    'Pending', now, data.approverEmail || '', ''
+  ]);
+
+  if (data.approverEmail) {
+    createNotification(data.approverEmail, 'TC_FILED',
+      (data.employeeName || data.email) + ' submitted a Time Correction request for ' + data.attendanceDate, id);
+  }
+
+  return _json({ success: true, message: 'Time Correction filed successfully', id: id, docId: docId, docUrl: docUrl });
+}
+
+function getTimeCorrectionHistory(email) {
+  if (!email) return _json({ success: false, message: 'Email is required' });
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionFilings');
+  if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    var cEmail = findColumnIndex(headers, ['Email']);
+    if (String(rows[i][cEmail] || '').trim().toLowerCase() !== String(email).trim().toLowerCase()) continue;
+    records.push({
+      id:                String(rows[i][findColumnIndex(headers,['ID'])]                    || ''),
+      employeeName:      String(rows[i][findColumnIndex(headers,['Employee Name'])]         || ''),
+      email:             String(rows[i][cEmail]                                             || ''),
+      department:        String(rows[i][findColumnIndex(headers,['Department'])]            || ''),
+      designation:       String(rows[i][findColumnIndex(headers,['Designation'])]           || ''),
+      attendanceDate:    String(rows[i][findColumnIndex(headers,['Attendance Date'])]       || ''),
+      attendanceRecordId:String(rows[i][findColumnIndex(headers,['Attendance Record ID'])]  || ''),
+      originalTimeIn:    String(rows[i][findColumnIndex(headers,['Original Time In'])]      || ''),
+      originalTimeOut:   String(rows[i][findColumnIndex(headers,['Original Time Out'])]     || ''),
+      correctedTimeIn:   String(rows[i][findColumnIndex(headers,['Corrected Time In'])]     || ''),
+      correctedTimeOut:  String(rows[i][findColumnIndex(headers,['Corrected Time Out'])]    || ''),
+      reason:            String(rows[i][findColumnIndex(headers,['Reason'])]                || ''),
+      docId:             String(rows[i][findColumnIndex(headers,['Document ID'])]           || ''),
+      documentUrl:       String(rows[i][findColumnIndex(headers,['Document URL'])]          || ''),
+      status:            String(rows[i][findColumnIndex(headers,['Status'])]                || 'Pending'),
+      submittedAt:       String(rows[i][findColumnIndex(headers,['Submitted At'])]          || ''),
+      approverEmail:     String(rows[i][findColumnIndex(headers,['Approver Email'])]        || ''),
+      rejectionReason:   String(rows[i][findColumnIndex(headers,['Rejection Reason'])]      || '')
+    });
+  }
+  return _json({ success: true, records: records.reverse() });
+}
+
+function getPendingTimeCorrectionApprovals(approverEmail) {
+  if (!approverEmail) return _json({ success: false, message: 'Email required' });
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionFilings');
+  if (!sheet || sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
+
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var cApprover = findColumnIndex(headers, ['Approver Email']);
+  var cStatus   = findColumnIndex(headers, ['Status']);
+  var isAdmin   = String(approverEmail).toLowerCase() === ADMIN_EMAIL;
+  var records   = [];
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][cStatus] || '') !== 'Pending') continue;
+    var rowApprover = String(rows[i][cApprover] || '').trim().toLowerCase();
+    if (!isAdmin && rowApprover !== String(approverEmail).trim().toLowerCase()) continue;
+    records.push({
+      id:                String(rows[i][findColumnIndex(headers,['ID'])]                    || ''),
+      employeeName:      String(rows[i][findColumnIndex(headers,['Employee Name'])]         || ''),
+      email:             String(rows[i][findColumnIndex(headers,['Email'])]                 || ''),
+      department:        String(rows[i][findColumnIndex(headers,['Department'])]            || ''),
+      designation:       String(rows[i][findColumnIndex(headers,['Designation'])]           || ''),
+      attendanceDate:    String(rows[i][findColumnIndex(headers,['Attendance Date'])]       || ''),
+      attendanceRecordId:String(rows[i][findColumnIndex(headers,['Attendance Record ID'])]  || ''),
+      originalTimeIn:    String(rows[i][findColumnIndex(headers,['Original Time In'])]      || ''),
+      originalTimeOut:   String(rows[i][findColumnIndex(headers,['Original Time Out'])]     || ''),
+      correctedTimeIn:   String(rows[i][findColumnIndex(headers,['Corrected Time In'])]     || ''),
+      correctedTimeOut:  String(rows[i][findColumnIndex(headers,['Corrected Time Out'])]    || ''),
+      reason:            String(rows[i][findColumnIndex(headers,['Reason'])]                || ''),
+      docId:             String(rows[i][findColumnIndex(headers,['Document ID'])]           || ''),
+      documentUrl:       String(rows[i][findColumnIndex(headers,['Document URL'])]          || ''),
+      status:            String(rows[i][cStatus]                                            || 'Pending'),
+      submittedAt:       String(rows[i][findColumnIndex(headers,['Submitted At'])]          || ''),
+      approverEmail:     String(rows[i][cApprover]                                          || ''),
+      rejectionReason:   String(rows[i][findColumnIndex(headers,['Rejection Reason'])]      || '')
+    });
+  }
+  return _json({ success: true, records: records });
+}
+
+function findTimeCorrectionRow(id) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionFilings');
+  if (!sheet || sheet.getLastRow() <= 1) return null;
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var cId     = findColumnIndex(headers, ['ID']);
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][cId] || '').trim() === String(id).trim()) {
+      return { sheet: sheet, rowIndex: i + 1, row: rows[i], headers: headers };
+    }
+  }
+  return null;
+}
+
+function approveTimeCorrection(id, approverEmail) {
+  if (!id || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findTimeCorrectionRow(id);
+  if (!found) return _json({ success: false, message: 'Time Correction request not found' });
+  var cStatus = findColumnIndex(found.headers, ['Status']);
+  var cEmail  = findColumnIndex(found.headers, ['Email']);
+  var cDate   = findColumnIndex(found.headers, ['Attendance Date']);
+  if (String(found.row[cStatus] || '') !== 'Pending')
+    return _json({ success: false, message: 'Only Pending requests can be approved' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Approved');
+  var approverName  = getApproverName(approverEmail);
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  appendTimeCorrectionHistory(id, approverEmail, approverName, 'Approve', '', now);
+  createNotification(String(found.row[cEmail] || ''), 'TC_APPROVED',
+    'Your Time Correction request for ' + String(found.row[cDate] || '') + ' was approved by ' + approverName, id);
+  return _json({ success: true, message: 'Time Correction approved' });
+}
+
+function rejectTimeCorrection(id, approverEmail, reason) {
+  if (!id || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findTimeCorrectionRow(id);
+  if (!found) return _json({ success: false, message: 'Time Correction request not found' });
+  var cStatus = findColumnIndex(found.headers, ['Status']);
+  var cEmail  = findColumnIndex(found.headers, ['Email']);
+  var cRej    = findColumnIndex(found.headers, ['Rejection Reason']);
+  if (String(found.row[cStatus] || '') !== 'Pending')
+    return _json({ success: false, message: 'Only Pending requests can be rejected' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Rejected');
+  if (cRej !== -1) found.sheet.getRange(found.rowIndex, cRej + 1).setValue(String(reason || ''));
+  var approverName = getApproverName(approverEmail);
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  appendTimeCorrectionHistory(id, approverEmail, approverName, 'Reject', reason, now);
+  createNotification(String(found.row[cEmail] || ''), 'TC_REJECTED',
+    'Your Time Correction request was rejected by ' + approverName + '. Reason: ' + reason, id);
+  return _json({ success: true, message: 'Time Correction rejected' });
+}
+
+function cancelTimeCorrection(id, email) {
+  if (!id || !email) return _json({ success: false, message: 'Missing parameters' });
+  var found = findTimeCorrectionRow(id);
+  if (!found) return _json({ success: false, message: 'Time Correction request not found' });
+  var cStatus = findColumnIndex(found.headers, ['Status']);
+  var cEmail  = findColumnIndex(found.headers, ['Email']);
+  var currentStatus = String(found.row[cStatus] || '');
+  if (String(found.row[cEmail] || '').trim().toLowerCase() !== String(email).trim().toLowerCase())
+    return _json({ success: false, message: 'Unauthorized' });
+  if (currentStatus === 'Approved' || currentStatus === 'Cancelled')
+    return _json({ success: false, message: 'Cannot cancel an already ' + currentStatus + ' request' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Cancelled');
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  appendTimeCorrectionHistory(id, email, email, 'Cancel', 'Cancelled by employee', now);
+  return _json({ success: true, message: 'Time Correction cancelled' });
+}
+
+function appendTimeCorrectionHistory(tcId, approverEmail, approverName, action, reason, timestamp) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TimeCorrectionHistory');
+  if (!sheet) {
+    sheet = ss.insertSheet('TimeCorrectionHistory');
+    sheet.appendRow(['ID','TC ID','Approver Email','Approver Name','Action','Reason','Timestamp']);
+  }
+  sheet.appendRow([Utilities.getUuid(), tcId, approverEmail, approverName, action, reason || '', timestamp]);
 }
 `;

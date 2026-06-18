@@ -17,6 +17,9 @@ import AttendanceMonitor from './AttendanceMonitor';
 import LeaveApproval from './LeaveApproval';
 import ApproverSettings from './ApproverSettings';
 import NotificationInbox from './NotificationInbox';
+import TimeCorrectionFiling from './TimeCorrectionFiling';
+import TimeCorrectionReport from './TimeCorrectionReport';
+import TimeCorrectionApproval from './TimeCorrectionApproval';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -50,7 +53,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -358,6 +361,18 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   if (activeTab === 'leave') {
     return <LeaveApplication user={user} onBack={() => setActiveTab('home')} onViewReports={() => setActiveTab('leave-report')} />;
+  }
+
+  if (activeTab === 'time-correction') {
+    return <TimeCorrectionFiling user={user} onBack={() => setActiveTab('home')} onViewReports={() => setActiveTab('time-correction-report')} />;
+  }
+
+  if (activeTab === 'time-correction-report') {
+    return <TimeCorrectionReport user={user} onBack={() => setActiveTab('time-correction')} />;
+  }
+
+  if (activeTab === 'time-correction-approval') {
+    return <TimeCorrectionApproval user={user} onBack={() => setActiveTab('home')} />;
   }
 
   if (activeTab === 'leave-report') {
@@ -816,6 +831,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           </button>
 
           <button
+            onClick={() => { setShowDrawer(false); setActiveTab('time-correction'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'time-correction' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <Clock className="w-4.5 h-4.5 shrink-0" />
+            Time Correction
+          </button>
+
+          <button
             onClick={() => { setShowDrawer(false); setActiveTab('leave-report'); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
               activeTab === 'leave-report' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
@@ -873,6 +898,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           >
             <ClipboardList className="w-4.5 h-4.5 shrink-0" />
             Leave Approvals
+          </button>
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('time-correction-approval'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'time-correction-approval' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <Clock className="w-4.5 h-4.5 shrink-0" />
+            TC Approvals
           </button>
 
           {isAdmin && (
