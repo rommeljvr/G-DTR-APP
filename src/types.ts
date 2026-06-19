@@ -128,6 +128,7 @@ export type NotificationType =
   | 'LEAVE_REJECTED'
   | 'PENDING_APPROVAL'
   | 'TC_FILED'
+  | 'TC_ACKNOWLEDGED'
   | 'TC_APPROVED'
   | 'TC_REJECTED'
   | 'TC_CANCELLED';

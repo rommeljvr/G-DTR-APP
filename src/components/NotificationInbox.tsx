@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, Eye, FileText, ClipboardList } from 'lucide-react';
-import { User, AppNotification, NotificationType } from '../types';
-import { getNotifications, markNotificationsRead, acknowledgeLeave, rejectLeave, getLeaveById, getTimeCorrectionById } from '../utils/sheets';
+import { Bell, CheckCheck, ChevronLeft, Loader2, RefreshCw, ThumbsDown, ThumbsUp, Eye, FileText, ClipboardList } from 'lucide-react';
+import { User, AppNotification, NotificationType, ApproverSettings } from '../types';
+import {
+  getNotifications, markNotificationsRead,
+  acknowledgeLeave, rejectLeave, getLeaveById,
+  acknowledgeTimeCorrection, approveTimeCorrection, rejectTimeCorrection, getTimeCorrectionById, getApproverSettings,
+} from '../utils/sheets';
 import LeaveDetailModal from './LeaveDetailModal';
 import { LeaveApplication, TimeCorrectionFiling } from '../types';
 
@@ -19,6 +23,7 @@ const TYPE_META: Record<NotificationType, { label: string; icon: string; color: 
   LEAVE_APPROVED:     { label: 'Approved',               icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
   LEAVE_REJECTED:     { label: 'Rejected',               icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
   TC_FILED:           { label: 'TC Request Filed',       icon: '🕐', color: 'bg-cyan-500/15 border-cyan-400/20 text-cyan-300' },
+  TC_ACKNOWLEDGED:    { label: 'TC Acknowledged',        icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
   TC_APPROVED:        { label: 'TC Approved',            icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
   TC_REJECTED:        { label: 'TC Rejected',            icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
   TC_CANCELLED:       { label: 'TC Cancelled',           icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
@@ -46,6 +51,9 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
   const [detailLeave, setDetailLeave]     = useState<LeaveApplication | null>(null);
   const [detailTC, setDetailTC]           = useState<TimeCorrectionFiling | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [tcDetails, setTcDetails]         = useState<Record<string, TimeCorrectionFiling>>({});
+  const [tcSettings, setTcSettings]       = useState<Record<string, ApproverSettings>>({});
+  const [tcDetailsLoading, setTcDetailsLoading] = useState(false);
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
@@ -55,7 +63,7 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const data = await getNotifications(user.email);
-    const unreadItems = data.filter((n) => !n.isRead);
+    const unreadItems = data.filter((n: AppNotification) => !n.isRead);
     setItems(unreadItems);
     setLoading(false);
     if (unreadItems.length < data.length) onRead();
@@ -64,9 +72,38 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Fetch TC details and approver settings for any TC_FILED notifications
+  useEffect(() => {
+    const tcFiled = items.filter((n: AppNotification) => n.type === 'TC_FILED' && n.timeCorrectionId);
+    if (tcFiled.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setTcDetailsLoading(true);
+      const detailMap: Record<string, TimeCorrectionFiling> = {};
+      const settingsMap: Record<string, ApproverSettings> = {};
+      for (const n of tcFiled) {
+        if (!n.timeCorrectionId) continue;
+        const tc = await getTimeCorrectionById(n.timeCorrectionId);
+        if (tc) {
+          detailMap[n.id] = tc;
+          if (!settingsMap[tc.email]) {
+            const settings = await getApproverSettings(tc.email);
+            if (settings) settingsMap[tc.email] = settings;
+          }
+        }
+      }
+      if (!cancelled) {
+        setTcDetails(detailMap);
+        setTcSettings(settingsMap);
+        setTcDetailsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
+
   const dismiss = async (id: string) => {
     await markNotificationsRead(user.email, id);
-    setItems((prev) => prev.filter((n) => n.id !== id));
+    setItems((prev: AppNotification[]) => prev.filter((n: AppNotification) => n.id !== id));
   };
 
   const dismissAll = async () => {
@@ -107,13 +144,49 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     }
   };
 
-  const handleRejectSubmit = async () => {
-    if (!rejectTarget?.leaveId || !rejectReason.trim()) return;
-    setActingId(rejectTarget.id);
-    const res = await rejectLeave(rejectTarget.leaveId, user.email, rejectReason);
+  const handleAcknowledgeTC = async (n: AppNotification) => {
+    if (!n.timeCorrectionId) return;
+    setActingId(n.id);
+    const res = await acknowledgeTimeCorrection(n.timeCorrectionId, user.email);
     setActingId(null);
     if (res.success) {
-      showToast('Leave rejected.', true);
+      showToast('Time Correction acknowledged and forwarded.', true);
+      await dismiss(n.id);
+      onRead();
+    } else {
+      showToast(res.message || 'Failed to acknowledge.', false);
+    }
+  };
+
+  const handleApproveTC = async (n: AppNotification) => {
+    if (!n.timeCorrectionId) return;
+    setActingId(n.id);
+    const res = await approveTimeCorrection(n.timeCorrectionId, user.email);
+    setActingId(null);
+    if (res.success) {
+      showToast('Time Correction approved.', true);
+      await dismiss(n.id);
+      onRead();
+    } else {
+      showToast(res.message || 'Failed to approve.', false);
+    }
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    setActingId(rejectTarget.id);
+    let res;
+    if (rejectTarget.leaveId) {
+      res = await rejectLeave(rejectTarget.leaveId, user.email, rejectReason);
+    } else if (rejectTarget.timeCorrectionId) {
+      res = await rejectTimeCorrection(rejectTarget.timeCorrectionId, user.email, rejectReason);
+    } else {
+      setActingId(null);
+      return;
+    }
+    setActingId(null);
+    if (res.success) {
+      showToast(rejectTarget.leaveId ? 'Leave rejected.' : 'Time Correction rejected.', true);
       const id = rejectTarget.id;
       setRejectTarget(null);
       setRejectReason('');
@@ -126,7 +199,7 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
     }
   };
 
-  const unread = items.filter((n) => !n.isRead).length;
+  const unread = items.filter((n: AppNotification) => !n.isRead).length;
 
   return (
     <div className="min-h-dvh flex flex-col bg-gradient-to-b from-slate-950 to-slate-900">
@@ -169,10 +242,36 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
           </div>
         )}
 
-        {!loading && items.map((n) => {
+        {!loading && items.map((n: AppNotification) => {
           const meta = TYPE_META[n.type] ?? { label: n.type, icon: '🔔', color: 'bg-white/10 border-white/10 text-white/60' };
           const isPendingAction = n.type === 'PENDING_APPROVAL' && !!n.leaveId;
           const isActing = actingId === n.id;
+
+          // Determine TC inline actions based on current status and the user's role
+          let tcCanAcknowledge = false;
+          let tcCanApprove = false;
+          let tcCanReject = false;
+          if (n.type === 'TC_FILED' && n.timeCorrectionId) {
+            const tc = tcDetails[n.id];
+            const settings = tc ? tcSettings[tc.email] : null;
+            if (tc && settings) {
+              const userLower = user.email.toLowerCase();
+              const tl = String(settings.teamLeadEmail || '').toLowerCase();
+              const appr = String(settings.approverEmail || '').toLowerCase();
+              const wf = settings.workflowType || 'DIRECT';
+              const status = tc.status;
+              if (wf === 'TWO_STEP') {
+                tcCanAcknowledge = status === 'Pending' && userLower === tl;
+                tcCanApprove = ((status === 'Pending' || status === 'Acknowledged') && userLower === appr);
+                tcCanReject = (status === 'Pending' || status === 'Acknowledged') && (userLower === tl || userLower === appr);
+              } else {
+                tcCanApprove = status === 'Pending' && userLower === appr;
+                tcCanReject = status === 'Pending' && userLower === appr;
+              }
+            }
+          }
+          const isTCAction = tcCanAcknowledge || tcCanApprove || tcCanReject;
+
           return (
             <div key={n.id} className="relative rounded-2xl border bg-white/6 border-white/12 p-4 transition-all">
               {!n.isRead && <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-red-500" />}
@@ -209,7 +308,7 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
                     View TC Details
                   </button>
                 )}
-                {/* Acknowledge + Reject for PENDING_APPROVAL */}
+                {/* Acknowledge + Reject for PENDING_APPROVAL (Leave) */}
                 {isPendingAction ? (
                   <div className="flex gap-2">
                     <button
@@ -228,6 +327,39 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
                       <ThumbsDown className="w-3.5 h-3.5" />
                       Reject
                     </button>
+                  </div>
+                ) : isTCAction ? (
+                  <div className="flex gap-2">
+                    {tcCanAcknowledge && (
+                      <button
+                        onClick={() => handleAcknowledgeTC(n)}
+                        disabled={isActing || tcDetailsLoading}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                        Acknowledge
+                      </button>
+                    )}
+                    {tcCanApprove && (
+                      <button
+                        onClick={() => handleApproveTC(n)}
+                        disabled={isActing || tcDetailsLoading}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />}
+                        Approve
+                      </button>
+                    )}
+                    {tcCanReject && (
+                      <button
+                        onClick={() => { setRejectTarget(n); setRejectReason(''); }}
+                        disabled={isActing || tcDetailsLoading}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/30 text-red-300 text-xs font-semibold active:scale-[0.97] transition-transform disabled:opacity-50"
+                      >
+                        <ThumbsDown className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button
