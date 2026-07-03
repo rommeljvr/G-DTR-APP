@@ -3566,6 +3566,7 @@ function generateDTR(data) {
       latitude:  Number(attRows[ai][8]  || 0),
       longitude: Number(attRows[ai][9]  || 0),
       address:   String(attRows[ai][11] || ''),
+      imageId:   String(attRows[ai][15] || ''),
       imageUrl:  String(attRows[ai][16] || ''),
       tsMs: rawDate instanceof Date ? rawDate.getTime() : new Date(String(attRows[ai][5] || '')).getTime()
     };
@@ -3655,7 +3656,9 @@ function generateDTR(data) {
       latitude:         att.timeIn  ? att.timeIn.latitude  : 0,
       longitude:        att.timeIn  ? att.timeIn.longitude : 0,
       timeInImageUrl:   att.timeIn  ? att.timeIn.imageUrl  : '',
+      timeInImageId:    att.timeIn  ? att.timeIn.imageId   : '',
       timeOutImageUrl:  att.timeOut ? att.timeOut.imageUrl : '',
+      timeOutImageId:   att.timeOut ? att.timeOut.imageId  : '',
       timeInTimestamp:  att.timeIn  ? att.timeIn.timestamp  : '',
       timeOutTimestamp: att.timeOut ? att.timeOut.timestamp : '',
       remarks:          ''

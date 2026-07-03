@@ -230,7 +230,9 @@ export interface DTRDayRecord {
   latitude?: number;
   longitude?: number;
   timeInImageUrl?: string;
+  timeInImageId?: string;
   timeOutImageUrl?: string;
+  timeOutImageId?: string;
   timeInTimestamp?: string;
   timeOutTimestamp?: string;
   deviceUsed?: string;

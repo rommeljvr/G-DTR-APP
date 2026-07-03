@@ -151,12 +151,12 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
             )}
 
             {/* Photos */}
-            {(day.timeInImageUrl || day.timeOutImageUrl) && (
+            {(day.timeInImageId || day.timeInImageUrl || day.timeOutImageId || day.timeOutImageUrl) && (
               <div className="flex gap-2">
-                {day.timeInImageUrl && (
+                {(day.timeInImageId || day.timeInImageUrl) && (
                   <div className="flex flex-col items-center gap-1">
                     <DriveImage
-                      imageId={extractDriveId(day.timeInImageUrl) ?? undefined}
+                      imageId={day.timeInImageId || extractDriveId(day.timeInImageUrl ?? '') || undefined}
                       alt="Time In"
                       className="w-16 h-16 rounded-xl"
                       thumbnail
@@ -165,10 +165,10 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
                     <span className="text-white/30 text-[9px]">Time In</span>
                   </div>
                 )}
-                {day.timeOutImageUrl && (
+                {(day.timeOutImageId || day.timeOutImageUrl) && (
                   <div className="flex flex-col items-center gap-1">
                     <DriveImage
-                      imageId={extractDriveId(day.timeOutImageUrl) ?? undefined}
+                      imageId={day.timeOutImageId || extractDriveId(day.timeOutImageUrl ?? '') || undefined}
                       alt="Time Out"
                       className="w-16 h-16 rounded-xl"
                       thumbnail
