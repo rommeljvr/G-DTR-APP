@@ -2765,6 +2765,12 @@ function getNotifications(email) {
     if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
       var nType = String(rows[i][2] || '');
       var refId  = rows[i][4] || '';
+      // Legacy rows had 8 cols: [id,email,type,msg,refId,refField,isRead,createdAt]
+      // Detect by checking if col 5 is a boolean-like value vs a string label like 'dtrId'
+      var col5   = rows[i][5];
+      var isLegacy8Col = (col5 !== 'true' && col5 !== 'false' && col5 !== true && col5 !== false && String(col5).length > 0);
+      var isReadVal  = isLegacy8Col ? rows[i][6] : col5;
+      var createdVal = isLegacy8Col ? rows[i][7] : rows[i][6];
       results.push({
         id:                 rows[i][0],
         userId:             rows[i][1],
@@ -2773,8 +2779,8 @@ function getNotifications(email) {
         leaveId:            nType.indexOf('LEAVE_') === 0 || nType === 'PENDING_APPROVAL' ? refId : '',
         timeCorrectionId:   nType.indexOf('TC_') === 0 ? refId : '',
         dtrId:              nType.indexOf('DTR_') === 0 ? refId : '',
-        isRead:             rows[i][5] === 'true' || rows[i][5] === true,
-        createdAt:          rows[i][6]
+        isRead:             isReadVal === 'true' || isReadVal === true,
+        createdAt:          createdVal
       });
     }
   }
@@ -2790,7 +2796,10 @@ function getUnreadCount(email) {
   var count = 0;
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
-      if (rows[i][5] !== 'true' && rows[i][5] !== true) count++;
+      var c5 = rows[i][5];
+      var isLeg = (c5 !== 'true' && c5 !== 'false' && c5 !== true && c5 !== false && String(c5).length > 0);
+      var isReadV = isLeg ? rows[i][6] : c5;
+      if (isReadV !== 'true' && isReadV !== true) count++;
     }
   }
   return _json({ success: true, count: count });
@@ -2805,7 +2814,10 @@ function markNotificationsRead(email, notificationId) {
     var rowEmail = String(rows[i][1] || '').trim().toLowerCase();
     if (rowEmail !== emailLower) continue;
     if (!notificationId || rows[i][0] === notificationId) {
-      sheet.getRange(i + 1, 6).setValue('true');
+      var mc5 = rows[i][5];
+      var mIsLeg = (mc5 !== 'true' && mc5 !== 'false' && mc5 !== true && mc5 !== false && String(mc5).length > 0);
+      var isReadCol = mIsLeg ? 7 : 6; // 1-indexed
+      sheet.getRange(i + 1, isReadCol).setValue('true');
     }
   }
   return _json({ success: true, message: 'Marked as read' });
@@ -4014,13 +4026,8 @@ function resolveDTRIssue(issueId, adminEmail) {
 }
 
 function createNotificationRecord(toEmail, type, message, refId, refField) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Notifications');
-  if (!sheet) {
-    sheet = ss.insertSheet('Notifications');
-    sheet.appendRow(['ID','User ID','Type','Message','Ref ID','Ref Field','Is Read','Created At']);
-  }
-  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
-  sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', refField || '', 'false', now]);
+  var sheet = getNotificationsSheet();
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+  sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', 'false', now]);
 }
 `;
