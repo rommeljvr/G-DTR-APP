@@ -101,12 +101,24 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
         >
           <span className="w-7 text-center text-white/30 text-xs font-medium shrink-0">{idx + 1}</span>
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-white text-xs font-medium">{fmtDate(day.date)}</p>
-            <p className="text-white/30 text-[10px]">{day.dayOfWeek}</p>
+            {day.workPeriodLabel ? (
+              <>
+                <p className="text-white text-xs font-medium leading-tight">{fmtDate(day.date)}</p>
+                <p className="text-amber-300/70 text-[10px]">→ {fmtDate(day.timeOutDate ?? '')}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-white text-xs font-medium">{fmtDate(day.date)}</p>
+                <p className="text-white/30 text-[10px]">{day.dayOfWeek}</p>
+              </>
+            )}
           </div>
           <div className="text-right mr-2">
             <p className="text-white text-xs">{fmtTime(day.timeIn ?? '')}</p>
-            <p className="text-white/50 text-[10px]">{fmtTime(day.timeOut ?? '')}</p>
+            <p className="text-white/50 text-[10px]">
+              {fmtTime(day.timeOut ?? '')}
+              {day.timeOutDate && <span className="text-amber-300/60 ml-1">+1</span>}
+            </p>
           </div>
           <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${STATUS_BADGE[day.status] || 'bg-white/10 text-white/40 border-white/10'}`}>
             {day.status}
@@ -120,6 +132,15 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
 
         {expanded && (
           <div className="px-4 pb-4 space-y-3 bg-white/3">
+            {/* Cross-day period label */}
+            {day.workPeriodLabel && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/20 text-amber-300">
+                  Overnight / Multi-day Shift
+                </span>
+              </div>
+            )}
+
             {/* Working hours */}
             {!!day.workingHours && (
               <div className="flex items-center gap-2">

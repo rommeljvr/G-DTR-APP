@@ -224,6 +224,8 @@ export interface DTRDayRecord {
   dayOfWeek: string;
   timeIn?: string;
   timeOut?: string;
+  timeOutDate?: string;
+  workPeriodLabel?: string;
   workingHours?: number;
   status: AttendanceStatus;
   address?: string;

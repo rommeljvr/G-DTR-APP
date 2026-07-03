@@ -3556,8 +3556,9 @@ function generateDTR(data) {
   var coverageStart = month + '/' + startDay + '/' + year;
   var coverageEnd   = month + '/' + endDay   + '/' + year;
 
-  // Pull attendance records for this employee.
-  // We load one extra calendar day beyond endDay to catch overnight TIME_OUTs.
+  // Pull ALL attendance records for this employee (no date pre-filter).
+  // We need the full chronological stream to pair TIME_IN / TIME_OUT correctly
+  // across overnight, multi-day, and cross-coverage-boundary shifts.
   var attSheet = ss.getSheetByName('Attendance');
   var attRows  = attSheet ? attSheet.getDataRange().getValues() : [];
 
@@ -3566,98 +3567,76 @@ function generateDTR(data) {
     return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
   }
 
-  // endDayDate is the last coverage date; nextDay is endDay+1 for overnight look-ahead
-  var endDayDate = new Date(year, month - 1, endDay);
-  var nextDayDate = new Date(year, month - 1, endDay + 1);
-  var nextDayKey  = dateKey(nextDayDate);
+  // Coverage boundary timestamps for filtering pairs
+  var coverageStartTs = new Date(year, month - 1, startDay).getTime();
+  var coverageEndTs   = new Date(year, month - 1, endDay, 23, 59, 59, 999).getTime();
 
-  var empAttMap = {}; // dateKey -> { timeIn: entry|null, timeOut: entry|null }
-  // Also keep a separate bucket for records on the day AFTER coverage end (overnight)
-  var nextDayBucket = { timeIn: null, timeOut: null };
-
+  // Collect and sort all events for this employee by timestamp
+  var allEvents = [];
   for (var ai = 1; ai < attRows.length; ai++) {
-    var rowEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
+    var rowEmail = String(attRows[ai][3] || '').trim().toLowerCase();
     if (rowEmail !== empEmail) continue;
+    var action = String(attRows[ai][4] || '').trim();
+    if (action !== 'TIME_IN' && action !== 'TIME_OUT') continue;
 
-    // Use actual timestamp for tsMs — most reliable for ordering
     var tsRaw = attRows[ai][5];
     var tsMs  = tsRaw instanceof Date ? tsRaw.getTime() : new Date(String(tsRaw || '')).getTime();
     if (isNaN(tsMs)) continue;
 
-    // Derive the calendar date from col 6 (Date column)
-    var rawDate = attRows[ai][6];
-    var dateStr = rawDate instanceof Date
-      ? dateKey(rawDate)
-      : String(rawDate || '').trim();
-    var d = new Date(dateStr);
-    if (isNaN(d.getTime())) {
-      // Fall back: derive date from timestamp
-      var tsDate = new Date(tsMs);
-      dateStr = dateKey(tsDate);
-      d = tsDate;
-    }
-
-    var action = String(attRows[ai][4] || '').trim();
-    var entry  = {
+    var tsStr = tsRaw instanceof Date
+      ? Utilities.formatDate(tsRaw, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
+      : String(tsRaw || '');
+    var eventDate = new Date(tsMs);
+    allEvents.push({
+      action:    action,
+      tsMs:      tsMs,
+      timestamp: tsStr,
+      date:      dateKey(eventDate),
       time:      String(attRows[ai][7]  || ''),
-      timestamp: String(attRows[ai][5] instanceof Date
-        ? Utilities.formatDate(attRows[ai][5], 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'")
-        : (attRows[ai][5] || '')),
       latitude:  Number(attRows[ai][8]  || 0),
       longitude: Number(attRows[ai][9]  || 0),
       address:   String(attRows[ai][11] || ''),
       imageId:   String(attRows[ai][15] || ''),
-      imageUrl:  String(attRows[ai][16] || ''),
-      tsMs:      tsMs
-    };
-
-    // Check if this row falls within coverage range (including endDay+1 for overnight)
-    var inCoverage = (d.getFullYear() === year && (d.getMonth()+1) === month
-                      && d.getDate() >= startDay && d.getDate() <= endDay);
-    var isNextDay  = (dateStr === nextDayKey);
-
-    if (inCoverage) {
-      if (!empAttMap[dateStr]) empAttMap[dateStr] = { timeIn: null, timeOut: null };
-      if (action === 'TIME_IN') {
-        // Keep earliest TIME_IN
-        if (!empAttMap[dateStr].timeIn || tsMs < empAttMap[dateStr].timeIn.tsMs)
-          empAttMap[dateStr].timeIn = entry;
-      } else if (action === 'TIME_OUT') {
-        // Keep latest TIME_OUT
-        if (!empAttMap[dateStr].timeOut || tsMs > empAttMap[dateStr].timeOut.tsMs)
-          empAttMap[dateStr].timeOut = entry;
-      }
-    } else if (isNextDay && action === 'TIME_OUT') {
-      // Candidate overnight TIME_OUT — keep the latest one on the next day
-      if (!nextDayBucket.timeOut || tsMs > nextDayBucket.timeOut.tsMs)
-        nextDayBucket.timeOut = entry;
-    }
+      imageUrl:  String(attRows[ai][16] || '')
+    });
   }
+  allEvents.sort(function(a, b) { return a.tsMs - b.tsMs; });
 
-  // Overnight shift resolution:
-  // For every coverage date that has TIME_IN but NO TIME_OUT,
-  // check if the next calendar day has an unmatched TIME_OUT and assign it.
-  for (var dk in empAttMap) {
-    var slot = empAttMap[dk];
-    if (slot.timeIn && !slot.timeOut) {
-      var slotDate = new Date(dk);
-      var slotNext = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate() + 1);
-      var slotNextKey = dateKey(slotNext);
-      // Check nextDayBucket (last coverage day) or the next day's own slot
-      var candidate = null;
-      if (slotNextKey === nextDayKey && nextDayBucket.timeOut) {
-        candidate = nextDayBucket.timeOut;
-      } else if (empAttMap[slotNextKey] && empAttMap[slotNextKey].timeOut) {
-        // Only use it if the next day has no TIME_IN of its own (unambiguous overnight)
-        if (!empAttMap[slotNextKey].timeIn) {
-          candidate = empAttMap[slotNextKey].timeOut;
-          empAttMap[slotNextKey].timeOut = null; // consumed
+  // Sequential pairing: walk chronologically, TIME_IN opens a pair, next TIME_OUT closes it.
+  // A pair belongs to the DTR if the TIME_IN falls within the coverage range.
+  var pairs = []; // { timeIn, timeOut|null } — one entry per attendance session
+  var openIn = null;
+  for (var ei = 0; ei < allEvents.length; ei++) {
+    var ev = allEvents[ei];
+    if (ev.action === 'TIME_IN') {
+      // If there is an unclosed TIME_IN already, it has no TIME_OUT → keep it as-is and start fresh
+      if (openIn) {
+        // Only include the pair if the TIME_IN was within coverage
+        if (openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+          pairs.push({ timeIn: openIn, timeOut: null });
         }
       }
-      if (candidate && candidate.tsMs > slot.timeIn.tsMs) {
-        slot.timeOut = candidate;
+      openIn = ev;
+    } else { // TIME_OUT
+      if (openIn) {
+        // Close the open pair
+        if (openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+          pairs.push({ timeIn: openIn, timeOut: ev });
+        }
+        openIn = null;
       }
+      // Orphan TIME_OUT with no preceding TIME_IN — skip
     }
+  }
+  // Handle trailing unclosed TIME_IN
+  if (openIn && openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+    pairs.push({ timeIn: openIn, timeOut: null });
+  }
+
+  // Build a set of calendar dates that have at least one pair (TIME_IN date)
+  var pairedDates = {};
+  for (var pi = 0; pi < pairs.length; pi++) {
+    pairedDates[pairs[pi].timeIn.date] = true;
   }
 
   // Pull approved leaves for this employee in range
@@ -3679,7 +3658,7 @@ function generateDTR(data) {
     }
   }
 
-  // Build day records
+  // Build day records from pairs + absent rows
   var days = [];
   var summary = {
     totalWorkingDays: 0, daysPresent: 0, daysAbsent: 0,
@@ -3687,64 +3666,110 @@ function generateDTR(data) {
     missingTimeIn: 0, missingTimeOut: 0, totalHoursWorked: 0
   };
   var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  for (var day = startDay; day <= endDay; day++) {
-    var dt    = new Date(year, month - 1, day);
-    var dow   = dt.getDay();
-    var dKey  = month + '/' + day + '/' + year;
-    var isRestDay = (dow === 0 || dow === 6);
-    var att   = empAttMap[dKey] || {};
-    var isLeave = approvedLeaveDates[dKey] || false;
 
-    var status, workHours = 0;
-    if (isRestDay) {
-      status = 'Rest Day';
-    } else if (isLeave) {
-      status = 'Approved Leave';
-      summary.approvedLeave++;
-    } else if (!att.timeIn && !att.timeOut) {
-      status = 'Absent';
-      summary.daysAbsent++;
-      summary.totalWorkingDays++;
-    } else {
-      summary.totalWorkingDays++;
-      summary.daysPresent++;
-      if (!att.timeIn) { status = 'Missing Time In'; summary.missingTimeIn++; }
-      else if (!att.timeOut) { status = 'Missing Time Out'; summary.missingTimeOut++; }
-      else {
-        // Compute hours
-        var tin  = new Date(att.timeIn.timestamp);
-        var tout = new Date(att.timeOut.timestamp);
-        if (!isNaN(tin.getTime()) && !isNaN(tout.getTime())) {
-          workHours = (tout.getTime() - tin.getTime()) / 3600000;
-          summary.totalHoursWorked += workHours;
-        }
-        // Late check (after 8:00 AM)
-        var tinHr = tin.getHours ? tin.getHours() : 0;
-        var tinMin = tin.getMinutes ? tin.getMinutes() : 0;
-        if (tinHr > 8 || (tinHr === 8 && tinMin > 0)) summary.lateCount++;
-        status = 'Present';
+  // 1. One row per attendance pair
+  for (var pi = 0; pi < pairs.length; pi++) {
+    var pair = pairs[pi];
+    var tin  = pair.timeIn;
+    var tout = pair.timeOut;
+    var tinDate  = new Date(tin.tsMs);
+    var dow  = tinDate.getDay();
+    var workHours = 0;
+    var status;
+    var isCrossDay = tout && (tout.date !== tin.date);
+    var periodLabel = isCrossDay ? (tin.date + ' → ' + tout.date) : tin.date;
+
+    var isRestDay = (dow === 0 || dow === 6);
+    summary.totalWorkingDays++;
+    if (tout) {
+      var toutTs = new Date(tout.timestamp);
+      var tinTs  = new Date(tin.timestamp);
+      if (!isNaN(tinTs.getTime()) && !isNaN(toutTs.getTime())) {
+        workHours = (toutTs.getTime() - tinTs.getTime()) / 3600000;
+        summary.totalHoursWorked += workHours;
       }
+      var tinHr = tinTs.getHours ? tinTs.getHours() : 0;
+      var tinMin = tinTs.getMinutes ? tinTs.getMinutes() : 0;
+      if (tinHr > 8 || (tinHr === 8 && tinMin > 0)) summary.lateCount++;
+      status = isRestDay ? 'Rest Day' : 'Present';
+      summary.daysPresent++;
+    } else {
+      status = 'Missing Time Out';
+      summary.missingTimeOut++;
+      summary.daysPresent++;
     }
 
     days.push({
-      date:             dKey,
+      date:             tin.date,
       dayOfWeek:        dayNames[dow],
-      timeIn:           att.timeIn  ? att.timeIn.time  : '',
-      timeOut:          att.timeOut ? att.timeOut.time  : '',
+      timeIn:           tin.time,
+      timeOut:          tout ? tout.time : '',
+      timeOutDate:      isCrossDay ? tout.date : '',
+      workPeriodLabel:  isCrossDay ? periodLabel : '',
       workingHours:     Math.round(workHours * 100) / 100,
       status:           status,
-      address:          att.timeIn  ? att.timeIn.address : '',
-      latitude:         att.timeIn  ? att.timeIn.latitude  : 0,
-      longitude:        att.timeIn  ? att.timeIn.longitude : 0,
-      timeInImageUrl:   att.timeIn  ? att.timeIn.imageUrl  : '',
-      timeInImageId:    att.timeIn  ? att.timeIn.imageId   : '',
-      timeOutImageUrl:  att.timeOut ? att.timeOut.imageUrl : '',
-      timeOutImageId:   att.timeOut ? att.timeOut.imageId  : '',
-      timeInTimestamp:  att.timeIn  ? att.timeIn.timestamp  : '',
-      timeOutTimestamp: att.timeOut ? att.timeOut.timestamp : '',
+      address:          tin.address,
+      latitude:         tin.latitude,
+      longitude:        tin.longitude,
+      timeInImageUrl:   tin.imageUrl,
+      timeInImageId:    tin.imageId,
+      timeOutImageUrl:  tout ? tout.imageUrl : '',
+      timeOutImageId:   tout ? tout.imageId  : '',
+      timeInTimestamp:  tin.timestamp,
+      timeOutTimestamp: tout ? tout.timestamp : '',
       remarks:          ''
     });
   }
+
+  // 2. Insert Absent / Leave / Rest rows for every calendar day that had no pair
+  for (var day = startDay; day <= endDay; day++) {
+    var dt   = new Date(year, month - 1, day);
+    var dow2 = dt.getDay();
+    var dKey = month + '/' + day + '/' + year;
+    if (pairedDates[dKey]) continue; // already covered by a pair row
+
+    var isRestDay2 = (dow2 === 0 || dow2 === 6);
+    var isLeave   = approvedLeaveDates[dKey] || false;
+    var status2;
+    if (isRestDay2) {
+      status2 = 'Rest Day';
+    } else if (isLeave) {
+      status2 = 'Approved Leave';
+      summary.approvedLeave++;
+    } else {
+      status2 = 'Absent';
+      summary.daysAbsent++;
+      summary.totalWorkingDays++;
+    }
+    days.push({
+      date:            dKey,
+      dayOfWeek:       dayNames[dow2],
+      timeIn:          '',
+      timeOut:         '',
+      timeOutDate:     '',
+      workPeriodLabel: '',
+      workingHours:    0,
+      status:          status2,
+      address:         '',
+      latitude:        0,
+      longitude:       0,
+      timeInImageUrl:  '',
+      timeInImageId:   '',
+      timeOutImageUrl: '',
+      timeOutImageId:  '',
+      timeInTimestamp: '',
+      timeOutTimestamp:'',
+      remarks:         ''
+    });
+  }
+
+  // 3. Sort by TIME_IN timestamp (pairs first by occurrence, then absent days fill in order)
+  days.sort(function(a, b) {
+    var ta = a.timeInTimestamp ? new Date(a.timeInTimestamp).getTime() : new Date(a.date).getTime();
+    var tb = b.timeInTimestamp ? new Date(b.timeInTimestamp).getTime() : new Date(b.date).getTime();
+    return ta - tb;
+  });
+
   summary.totalHoursWorked = Math.round(summary.totalHoursWorked * 100) / 100;
 
   // Get employee info
