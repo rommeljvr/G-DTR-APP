@@ -6,7 +6,7 @@ import {
   Calendar, Building2, Briefcase, ChevronDown, User as UserIcon,
 } from 'lucide-react';
 import { User, DTRRecord, DTRStatus, DTRCutOff } from '../types';
-import { generateDTR, regenerateDTR, getDTRList, resolveDTRIssue, getDTRById, getEmployees, EmployeeRecord } from '../utils/sheets';
+import { generateDTR, regenerateDTR, getDTRList, getEmployeeDTRList, resolveDTRIssue, getDTRById, getEmployees, EmployeeRecord } from '../utils/sheets';
 import DTRView from './DTRView';
 
 interface Props {
@@ -232,9 +232,9 @@ export default function DTRManagement({ user, onBack }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    // Admins pass their own email as adminEmail to unlock all records;
-    // employees only pass their own email which restricts results to theirs.
-    const res = await getDTRList(user.email, isAdmin ? user.email : undefined);
+    const res = isAdmin
+      ? await getDTRList(user.email)
+      : await getEmployeeDTRList(user.email);
     setRecords(res.records || []);
     setLoading(false);
   }, [user.email, isAdmin]);

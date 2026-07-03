@@ -923,14 +923,25 @@ export async function regenerateDTR(
 }
 
 export async function getDTRList(
-  email: string, adminEmail?: string
+  adminEmail: string
 ): Promise<{ success: boolean; records: DTRRecord[] }> {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) return { success: false, records: [] };
   try {
-    const params = new URLSearchParams({ action: 'getDTRList', email });
-    if (adminEmail) params.set('adminEmail', adminEmail);
-    else params.set('adminEmail', '');
+    const params = new URLSearchParams({ action: 'getDTRList', email: adminEmail });
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return { success: json.success, records: json.records || [] };
+  } catch { return { success: false, records: [] }; }
+}
+
+export async function getEmployeeDTRList(
+  employeeEmail: string
+): Promise<{ success: boolean; records: DTRRecord[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, records: [] };
+  try {
+    const params = new URLSearchParams({ action: 'getEmployeeDTRList', email: employeeEmail });
     const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
     const json = await res.json();
     return { success: json.success, records: json.records || [] };
@@ -1149,8 +1160,9 @@ function doGet(e) {
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getTimeCorrectionHistory')          return email ? getTimeCorrectionHistory(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getPendingTimeCorrectionApprovals') return email ? getPendingTimeCorrectionApprovals(email) : _json({ success: false, message: 'Email required' });
-  if (action === 'getDTRList')       return email ? getDTRList(email, p.adminEmail || '') : _json({ success: false, message: 'Email required' });
-  if (action === 'getDTRById')       return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
+  if (action === 'getDTRList')        return email ? getDTRList(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getEmployeeDTRList') return email ? getEmployeeDTRList(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getDTRById')        return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
   if (action === 'getEmployeesForDTR') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getEmployeeList() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
@@ -2194,6 +2206,221 @@ function getDesignationList() {
   return _json({ success: true, designations: Object.keys(desgs).sort() });
 }
 
+function getAttendanceMonitor() {
+  var ss          = SpreadsheetApp.getActiveSpreadsheet();
+  var empSheet    = ss.getSheetByName('Employee');
+  var attSheet    = ss.getSheetByName('Attendance');
+  var leaveSheet  = ss.getSheetByName('LeaveApplications');
+
+  var todayDate = new Date();
+  var today     = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'M/d/yyyy');
+  var todayAlt  = (todayDate.getMonth()+1) + '/' + todayDate.getDate() + '/' + todayDate.getFullYear();
+
+  // ── Read all employees ──────────────────────────────────────────
+  var employees = [];
+  if (empSheet) {
+    var empRows    = empSheet.getDataRange().getValues();
+    var empHeaders = empRows[0];
+    var cName  = findColumnIndex(empHeaders, ['Employee Name', 'Name', 'Full Name']);
+    var cEmail = findColumnIndex(empHeaders, ['Email', 'Email Address']);
+    var cRole  = findColumnIndex(empHeaders, ['Role', 'Access Role', 'User Role']);
+    var cImg   = findColumnIndex(empHeaders, ['Image', 'Photo', 'Picture']);
+    var cDept  = findColumnIndex(empHeaders, ['DEPARTMENT', 'Department', 'Dept']);
+    var cDesig = findColumnIndex(empHeaders, ['DESIGNATION', 'Designation', 'Position', 'Title']);
+    var cActive = findColumnIndex(empHeaders, ['Active', 'Status', 'Is Active']);
+    for (var i = 1; i < empRows.length; i++) {
+      var rowEmail = String(empRows[i][cEmail] || '').trim();
+      if (!rowEmail) continue;
+      var activeVal = cActive !== -1 ? empRows[i][cActive] : true;
+      if (activeVal === false || String(activeVal).toLowerCase() === 'false' || String(activeVal).toLowerCase() === 'inactive') continue;
+      employees.push({
+        email:       rowEmail.toLowerCase(),
+        name:        cName  !== -1 ? String(empRows[i][cName]  || '').trim() : rowEmail,
+        department:  cDept  !== -1 ? String(empRows[i][cDept]  || '').trim() : '',
+        designation: cDesig !== -1 ? String(empRows[i][cDesig] || '').trim() : '',
+        image:       cImg   !== -1 ? String(empRows[i][cImg]   || '').trim() : ''
+      });
+    }
+  }
+
+  // ── Read today's approved leaves ───────────────────────────────
+  var onLeaveEmails = {};
+  if (leaveSheet) {
+    var leaveRows    = leaveSheet.getDataRange().getValues();
+    var leaveHeaders = leaveRows[0];
+    var lEmail  = findColumnIndex(leaveHeaders, ['Email', 'Email Address']);
+    var lStart  = findColumnIndex(leaveHeaders, ['Start Date', 'StartDate']);
+    var lEnd    = findColumnIndex(leaveHeaders, ['End Date', 'EndDate']);
+    var lStatus = findColumnIndex(leaveHeaders, ['Status']);
+    var todayMs = new Date().setHours(0, 0, 0, 0);
+    for (var li = 1; li < leaveRows.length; li++) {
+      var lStat = lStatus !== -1 ? String(leaveRows[li][lStatus] || '').trim() : '';
+      if (lStat !== 'Approved') continue;
+      var leaveEmail = lEmail !== -1 ? String(leaveRows[li][lEmail] || '').trim().toLowerCase() : '';
+      if (!leaveEmail) continue;
+      var startMs = lStart !== -1 ? new Date(leaveRows[li][lStart]).setHours(0,0,0,0) : 0;
+      var endMs   = lEnd   !== -1 ? new Date(leaveRows[li][lEnd]).setHours(0,0,0,0)   : 0;
+      if (startMs <= todayMs && todayMs <= endMs) onLeaveEmails[leaveEmail] = true;
+    }
+  }
+
+  // ── Read today's attendance rows ───────────────────────────────
+  // cols: 0=id,1=userId,2=userName,3=email,4=action,5=timestamp,6=date,7=time,
+  //       8=lat,9=lng,10=accuracy,11=address,12=device,13=dept,14=desig,15=imgId,16=imgUrl
+  var timeIns  = {};
+  var timeOuts = {};
+  var lastActions = {};
+
+  if (attSheet && attSheet.getLastRow() > 1) {
+    var attRows = attSheet.getDataRange().getValues();
+    for (var ai = 1; ai < attRows.length; ai++) {
+      var rawDate  = attRows[ai][6];
+      var attDate;
+      if (rawDate instanceof Date) {
+        attDate = (rawDate.getMonth()+1) + '/' + rawDate.getDate() + '/' + rawDate.getFullYear();
+      } else {
+        attDate = String(rawDate || '').trim();
+      }
+     // if (attDate !== today && attDate !== todayAlt) continue;
+      /*var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
+      var attAction = String(attRows[ai][4] || '').trim();
+      var rawTs     = attRows[ai][5];
+      var tsMs      = rawTs instanceof Date ? rawTs.getTime() : new Date(String(rawTs || '')).getTime();
+      if (isNaN(tsMs)) tsMs = 0;
+      var attEntry  = {
+        time:      String(attRows[ai][7]  || ''),
+        timestamp: String(attRows[ai][5]  || ''),
+        tsMs:      tsMs,
+        latitude:  Number(attRows[ai][8]  || 0),
+        longitude: Number(attRows[ai][9]  || 0),
+        address:   String(attRows[ai][11] || ''),
+        imageUrl:  String(attRows[ai][16] || '')
+      }; */
+      var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
+      var attAction = String(attRows[ai][4] || '').trim();
+
+      var rawTs = attRows[ai][5];
+      var tsMs = rawTs instanceof Date
+        ? rawTs.getTime()
+        : new Date(String(rawTs || '')).getTime();
+
+      if (isNaN(tsMs)) tsMs = 0;
+
+      var attEntry = {
+        action:    attAction,
+        time:      String(attRows[ai][7]  || ''),
+        timestamp: String(attRows[ai][5]  || ''),
+        tsMs:      tsMs,
+        latitude:  Number(attRows[ai][8]  || 0),
+        longitude: Number(attRows[ai][9]  || 0),
+        address:   String(attRows[ai][11] || ''),
+        imageUrl:  String(attRows[ai][16] || '')
+      };
+
+      // NEW: Always remember the latest attendance record,
+      // even if it is from a previous day.
+      if (!lastActions[attEmail] || tsMs > lastActions[attEmail].tsMs) {
+        lastActions[attEmail] = attEntry;
+      }
+
+      if (attDate !== today && attDate !== todayAlt) continue;
+      if (attAction === 'TIME_IN') {
+        if (!timeIns[attEmail] || attEntry.tsMs > timeIns[attEmail].tsMs)
+          timeIns[attEmail] = attEntry;
+      } else if (attAction === 'TIME_OUT') {
+        if (!timeOuts[attEmail] || attEntry.tsMs > timeOuts[attEmail].tsMs)
+          timeOuts[attEmail] = attEntry;
+      }
+    }
+  }
+
+  // ── Build result ───────────────────────────────────────────────
+  var result = employees.map(function(emp) {
+    var tin  = timeIns[emp.email];
+    // Only count a TIME_OUT that occurred AFTER the latest TIME_IN
+    var toutRaw = timeOuts[emp.email];
+    //var tout = (toutRaw && tin && toutRaw.tsMs > tin.tsMs) ? toutRaw : null;
+    var tout = null;
+
+    if (toutRaw) {
+      if (!tin) {
+        // TIME_OUT today that closes yesterday's TIME_IN
+        tout = toutRaw;
+      } else if (toutRaw.tsMs > tin.tsMs) {
+        tout = toutRaw;
+      }
+    }
+    /*var status;
+    if (tin) {
+      // Actual attendance overrides any leave record
+      status = tout ? 'Completed' : 'Active';
+    } else if (onLeaveEmails[emp.email]) {
+      status = 'On Leave';
+    } else {
+      status = 'Absent';
+    } */
+
+    var rec = {
+      email:       emp.email,
+      name:        emp.name,
+      department:  emp.department,
+      designation: emp.designation,
+      image:       emp.image,
+      status:      status
+    };
+
+    var status;
+    var last = lastActions[emp.email];
+
+    if (tin) {
+
+      // Existing logic for today's attendance
+      status = tout ? 'Completed' : 'Active';
+
+    } else if (last && last.action === 'TIME_IN') {
+
+      // NEW: Overnight shift (last attendance is still TIME_IN)
+      status = 'Active';
+
+      rec.timeIn = last.time;
+      rec.timeInTimestamp = last.timestamp;
+      rec.timeInLatitude = last.latitude;
+      rec.timeInLongitude = last.longitude;
+      rec.timeInAddress = last.address;
+      rec.imageUrl = last.imageUrl;
+
+    } else if (onLeaveEmails[emp.email]) {
+
+      status = 'On Leave';
+
+    } else {
+
+      status = 'Absent';
+
+    }
+    rec.status = status;
+
+    if (tin) {
+      rec.timeIn          = tin.time;
+      rec.timeInTimestamp = tin.timestamp;
+      rec.timeInLatitude  = tin.latitude;
+      rec.timeInLongitude = tin.longitude;
+      rec.timeInAddress   = tin.address;
+      rec.imageUrl        = tin.imageUrl;
+    }
+    if (tout) {
+      rec.timeOut          = tout.time;
+      rec.timeOutTimestamp = tout.timestamp;
+      rec.timeOutLatitude  = tout.latitude;
+      rec.timeOutLongitude = tout.longitude;
+      rec.timeOutAddress   = tout.address;
+    }
+    return rec;
+  });
+
+  return _json({ success: true, date: today, records: result });
+}
+  
 function uploadEmployeePhoto(data) {
   if (!data.email) return _json({ success: false, message: 'Email is required' });
   if (!data.photo || String(data.photo).indexOf('base64,') === -1) {
@@ -3850,25 +4077,66 @@ function regenerateDTR(dtrId, adminEmail) {
   return _json({ success: false, message: 'DTR not found' });
 }
 
-function getDTRList(email, adminEmail) {
-  var sheet = initDTRSheet();
-  var rows  = sheet.getDataRange().getValues();
-  var adminLower = adminEmail ? adminEmail.toLowerCase() : '';
-  var isAdmin = adminLower === ADMIN_EMAIL;
-  if (!isAdmin && adminLower) {
-    var empSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
-    var empRows  = empSheet ? empSheet.getDataRange().getValues() : [];
-    for (var ei = 1; ei < empRows.length; ei++) {
-      if (String(empRows[ei][0] || '').trim().toLowerCase() === adminLower) {
-        var role = String(empRows[ei][3] || '').trim().toLowerCase();
-        if (role === 'admin' || role === 'superadmin') { isAdmin = true; break; }
-      }
+// ── Shared admin-role check ─────────────────────────────────────
+function isAdminRole(emailToCheck) {
+  if (!emailToCheck) return false;
+  var lower = emailToCheck.toLowerCase();
+  if (lower === ADMIN_EMAIL) return true;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var empSheet = ss.getSheetByName('Employee');
+  if (!empSheet) return false;
+  var empRows = empSheet.getDataRange().getValues();
+  for (var ei = 1; ei < empRows.length; ei++) {
+    if (String(empRows[ei][0] || '').trim().toLowerCase() === lower) {
+      var role = String(empRows[ei][3] || '').trim().toLowerCase();
+      return (role === 'admin' || role === 'superadmin');
     }
   }
+  return false;
+}
+
+// getDTRList – admin only; returns all DTR records
+function getDTRList(email) {
+  if (!isAdminRole(email)) return _json({ success: false, message: 'Unauthorized' });
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
   var records = [];
   for (var i = 1; i < rows.length; i++) {
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
-    if (!isAdmin && empEmail !== email.toLowerCase()) continue;
+    records.push({
+      id:            String(rows[i][0]),
+      version:       Number(rows[i][1]),
+      employeeEmail: empEmail,
+      employeeName:  String(rows[i][3]),
+      department:    String(rows[i][5]),
+      designation:   String(rows[i][6]),
+      month:         Number(rows[i][8]),
+      year:          Number(rows[i][9]),
+      cutOff:        String(rows[i][10]),
+      coverageStart: String(rows[i][11]),
+      coverageEnd:   String(rows[i][12]),
+      status:        String(rows[i][13]),
+      generatedBy:   String(rows[i][14]),
+      generatedAt:   String(rows[i][15]),
+      sentAt:        String(rows[i][16] || ''),
+      acknowledgedAt:String(rows[i][18] || ''),
+      acknowledgedBy:String(rows[i][19] || '')
+    });
+  }
+  records.reverse();
+  return _json({ success: true, records: records });
+}
+
+// getEmployeeDTRList – employee only; always scoped to caller's email
+function getEmployeeDTRList(email) {
+  if (!email) return _json({ success: false, message: 'Email required' });
+  var emailLower = email.toLowerCase();
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    if (empEmail !== emailLower) continue;
     records.push({
       id:            String(rows[i][0]),
       version:       Number(rows[i][1]),
@@ -3900,17 +4168,7 @@ function getDTRById(dtrId, requesterEmail) {
     if (String(rows[i][0]) !== String(dtrId)) continue;
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
     var reqLower = requesterEmail ? requesterEmail.toLowerCase() : '';
-    var isAdmin  = reqLower === ADMIN_EMAIL;
-    if (!isAdmin && reqLower) {
-      var empSheet2 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
-      var empRows2  = empSheet2 ? empSheet2.getDataRange().getValues() : [];
-      for (var ei2 = 1; ei2 < empRows2.length; ei2++) {
-        if (String(empRows2[ei2][0] || '').trim().toLowerCase() === reqLower) {
-          var role2 = String(empRows2[ei2][3] || '').trim().toLowerCase();
-          if (role2 === 'admin' || role2 === 'superadmin') { isAdmin = true; break; }
-        }
-      }
-    }
+    var isAdmin  = isAdminRole(reqLower);
     var isOwner  = reqLower && reqLower === empEmail;
     if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
 
