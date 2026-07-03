@@ -83,18 +83,28 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR 
     let cancelled = false;
     (async () => {
       setTcDetailsLoading(true);
+      // Fetch all TC details in parallel
+      const results = await Promise.all(
+        tcFiled.map(async (n) => {
+          const tc = await getTimeCorrectionById(n.timeCorrectionId!);
+          return { notifId: n.id, tc };
+        })
+      );
       const detailMap: Record<string, TimeCorrectionFiling> = {};
+      const emailsNeedingSettings = new Set<string>();
+      for (const { notifId, tc } of results) {
+        if (tc) { detailMap[notifId] = tc; emailsNeedingSettings.add(tc.email); }
+      }
+      // Fetch distinct approver settings in parallel
+      const settingsResults = await Promise.all(
+        Array.from(emailsNeedingSettings).map(async (email) => ({
+          email,
+          settings: await getApproverSettings(email),
+        }))
+      );
       const settingsMap: Record<string, ApproverSettings> = {};
-      for (const n of tcFiled) {
-        if (!n.timeCorrectionId) continue;
-        const tc = await getTimeCorrectionById(n.timeCorrectionId);
-        if (tc) {
-          detailMap[n.id] = tc;
-          if (!settingsMap[tc.email]) {
-            const settings = await getApproverSettings(tc.email);
-            if (settings) settingsMap[tc.email] = settings;
-          }
-        }
+      for (const { email, settings } of settingsResults) {
+        if (settings) settingsMap[email] = settings;
       }
       if (!cancelled) {
         setTcDetails(detailMap);
@@ -106,8 +116,8 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR 
   }, [items]);
 
   const dismiss = async (id: string) => {
-    await markNotificationsRead(user.email, id);
     setItems((prev: AppNotification[]) => prev.filter((n: AppNotification) => n.id !== id));
+    markNotificationsRead(user.email, id); // fire-and-forget
   };
 
   const dismissAll = async () => {

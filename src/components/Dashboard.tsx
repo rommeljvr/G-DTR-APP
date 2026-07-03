@@ -1,7 +1,7 @@
 /// <reference path="../pwa.d.ts" />
 import { useState, useEffect, useCallback } from 'react';
 import { User, AttendanceRecord, LocationData } from '../types';
-import { getLastAction, submitAttendance, getUnreadCount } from '../utils/sheets';
+import { getLastAction, submitAttendance, getNotifications } from '../utils/sheets';
 import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
@@ -110,9 +110,11 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   useEffect(() => {
     requestNotificationPermission();
     const pollUnread = async () => {
-      const count = await getUnreadCount(user.email);
-      setUnreadCount(count);
-      if (count > 0) await checkAndFirePushNotifications(user.email);
+      // Single fetch: derive unread count and fire push notifications in one pass
+      const notifications = await getNotifications(user.email);
+      const unread = notifications.filter((n: { isRead: boolean }) => !n.isRead);
+      setUnreadCount(unread.length);
+      if (unread.length > 0) await checkAndFirePushNotifications(user.email);
     };
     pollUnread();
     const poll = setInterval(pollUnread, 30000);
