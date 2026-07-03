@@ -303,6 +303,8 @@ export default function DTRManagement({ user, onBack }: Props) {
 
   const handleRegenerate = async (id: string) => {
     if (!isAdmin) { showToast('error', 'Unauthorized'); return; }
+    const rec = records.find(r => r.id === id);
+    if (rec?.status === 'Acknowledged') { showToast('error', 'This DTR is acknowledged and locked. It cannot be regenerated.'); return; }
     setActingId(id);
     const res = await regenerateDTR(id, user.email);
     setActingId(null);

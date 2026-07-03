@@ -3,7 +3,7 @@ import {
   ArrowLeft, CheckCircle2, AlertCircle, Clock, MapPin,
   User as UserIcon, Building2, Briefcase, ChevronDown,
   ChevronUp, X, Loader2, RotateCcw, FileText, Navigation,
-  ThumbsUp, MessageSquare,
+  ThumbsUp, MessageSquare, Lock, ShieldCheck,
 } from 'lucide-react';
 import { User, DTRRecord, DTRDayRecord, DTRIssueType, AttendanceStatus } from '../types';
 import { acknowledgeDTR, reportDTRIssue } from '../utils/sheets';
@@ -228,16 +228,24 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
 }
 
 export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onResolveIssue }: Props) {
-  const [showAckModal, setShowAckModal]   = useState(false);
+  const [showAckModal, setShowAckModal]     = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
-  const [issueType, setIssueType]         = useState<DTRIssueType>('Missing Time In');
-  const [issueComment, setIssueComment]   = useState('');
-  const [submitting, setSubmitting]       = useState(false);
+  const [issueType, setIssueType]           = useState<DTRIssueType>('Missing Time In');
+  const [issueComment, setIssueComment]     = useState('');
+  const [submitting, setSubmitting]         = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  // Local ack state — updates optimistically so UI reflects immediately
+  const [ackState, setAckState] = useState<{
+    acknowledgedAt: string; acknowledgedBy: string; acknowledgedRole: string;
+  } | null>(
+    dtr.acknowledgedAt
+      ? { acknowledgedAt: dtr.acknowledgedAt, acknowledgedBy: dtr.acknowledgedBy ?? '', acknowledgedRole: dtr.acknowledgedRole ?? '' }
+      : null
+  );
 
   const isOwner = user.email.toLowerCase() === dtr.employeeEmail.toLowerCase();
-  const alreadyAcknowledged = !!dtr.acknowledgedAt;
-  const canAcknowledge = isOwner && !alreadyAcknowledged && !isAdmin;
+  const isFinalized = !!ackState;
+  const canAcknowledge = (isOwner || isAdmin) && !isFinalized && dtr.status !== 'Regenerated';
 
   const showToast = (type: 'success' | 'error', msg: string) => {
     setToast({ type, msg });
@@ -249,8 +257,16 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
     const res = await acknowledgeDTR(dtr.id, user.email);
     setSubmitting(false);
     setShowAckModal(false);
-    if (res.success) showToast('success', 'DTR acknowledged successfully');
-    else showToast('error', res.message);
+    if (res.success) {
+      setAckState({
+        acknowledgedAt:   res.acknowledgedAt   ?? new Date().toISOString(),
+        acknowledgedBy:   res.acknowledgedBy   ?? user.email,
+        acknowledgedRole: res.acknowledgedRole ?? (isAdmin ? 'Administrator' : 'Employee'),
+      });
+      showToast('success', 'DTR acknowledged and finalized');
+    } else {
+      showToast('error', res.message);
+    }
   };
 
   const handleReportIssue = async () => {
@@ -304,13 +320,27 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
             <h1 className="text-white font-bold text-base truncate">Daily Time Record</h1>
             <p className="text-white/40 text-xs truncate">{cutOffRange}</p>
           </div>
-          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${
-            dtr.status === 'Acknowledged' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/20' :
+          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border flex items-center gap-1 ${
+            isFinalized ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/20' :
             dtr.status === 'Returned for Review' ? 'bg-amber-500/20 text-amber-300 border-amber-400/20' :
             'bg-blue-500/20 text-blue-300 border-blue-400/20'
-          }`}>{dtr.status}</span>
+          }`}>
+            {isFinalized && <Lock className="w-2.5 h-2.5" />}
+            {isFinalized ? 'Acknowledged' : dtr.status}
+          </span>
         </div>
       </div>
+
+      {/* Finalized banner */}
+      {isFinalized && (
+        <div className="mx-4 mt-3 flex items-center gap-2.5 bg-emerald-500/10 border border-emerald-400/20 rounded-2xl px-4 py-3">
+          <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-emerald-300 text-xs font-semibold">Finalized &amp; Locked</p>
+            <p className="text-emerald-300/50 text-[10px]">This DTR has been officially acknowledged. No further changes are permitted.</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 px-4 pt-4 space-y-4">
 
@@ -368,10 +398,34 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
               <p className="text-white/30 text-[10px]">By</p>
               <p className="text-white/70 truncate">{dtr.generatedBy}</p>
             </div>
-            {dtr.acknowledgedAt && (
-              <div className="col-span-2 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-300">Acknowledged {fmtDate(dtr.acknowledgedAt)}</span>
+            {ackState && (
+              <div className="col-span-2 bg-emerald-500/8 border border-emerald-400/15 rounded-xl p-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-300 text-[10px] font-semibold uppercase tracking-wider">Acknowledgment Details</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  <div>
+                    <p className="text-white/30 text-[9px]">Acknowledged By</p>
+                    <p className="text-white/70 text-[10px] truncate">{ackState.acknowledgedBy}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[9px]">Role</p>
+                    <p className="text-emerald-300 text-[10px] font-medium">{ackState.acknowledgedRole || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[9px]">Date</p>
+                    <p className="text-white/70 text-[10px]">{fmtDate(ackState.acknowledgedAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[9px]">Time</p>
+                    <p className="text-white/70 text-[10px]">{fmtTime(ackState.acknowledgedAt)}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-white/30 text-[9px]">Revision</p>
+                    <p className="text-white/70 text-[10px]">Version {dtr.version}</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -463,27 +517,27 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
       </div>
 
       {/* Bottom action bar */}
-      {(canAcknowledge || isAdmin) && (
+      {(canAcknowledge || (isAdmin && !isFinalized)) && (
         <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-4 py-4 flex gap-3">
-          {canAcknowledge && (
-            <>
-              <button
-                onClick={() => setShowIssueModal(true)}
-                className="flex-1 flex items-center justify-center gap-2 bg-amber-500/15 text-amber-300 border border-amber-400/20 text-sm font-medium py-3 rounded-xl active:scale-[0.98] transition-transform"
-              >
-                <MessageSquare className="w-4 h-4" />
-                Report Issue
-              </button>
-              <button
-                onClick={() => setShowAckModal(true)}
-                className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white font-semibold text-sm py-3 rounded-xl active:scale-[0.98] transition-transform"
-              >
-                <ThumbsUp className="w-4 h-4" />
-                Acknowledge
-              </button>
-            </>
+          {canAcknowledge && !isAdmin && (
+            <button
+              onClick={() => setShowIssueModal(true)}
+              className="flex-1 flex items-center justify-center gap-2 bg-amber-500/15 text-amber-300 border border-amber-400/20 text-sm font-medium py-3 rounded-xl active:scale-[0.98] transition-transform"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Report Issue
+            </button>
           )}
-          {isAdmin && onRegenerate && (
+          {canAcknowledge && (
+            <button
+              onClick={() => setShowAckModal(true)}
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white font-semibold text-sm py-3 rounded-xl active:scale-[0.98] transition-transform"
+            >
+              <ThumbsUp className="w-4 h-4" />
+              {isAdmin ? 'Acknowledge as Admin' : 'Acknowledge'}
+            </button>
+          )}
+          {isAdmin && onRegenerate && !isFinalized && (
             <button
               onClick={() => onRegenerate(dtr.id)}
               className="flex-1 flex items-center justify-center gap-2 bg-orange-500/15 text-orange-300 border border-orange-400/20 text-sm font-medium py-3 rounded-xl active:scale-[0.98] transition-transform"
@@ -506,10 +560,17 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
                 <X className="w-4 h-4 text-white" />
               </button>
             </div>
-            <div className="bg-white/5 rounded-2xl p-4 mb-4">
+            <div className="bg-white/5 rounded-2xl p-4 mb-4 space-y-3">
               <p className="text-white/70 text-sm leading-relaxed">
-                By acknowledging this DTR, you confirm that you have reviewed your attendance record for <strong className="text-white">{cutOffRange}</strong> and agree that it is accurate.
+                {isAdmin
+                  ? <>You are acknowledging this DTR as <strong className="text-white">Administrator</strong> on behalf of <strong className="text-white">{dtr.employeeName}</strong> for <strong className="text-white">{cutOffRange}</strong>.</>
+                  : <>By acknowledging this DTR, you confirm that you have reviewed your attendance record for <strong className="text-white">{cutOffRange}</strong> and agree that it is accurate.</>
+                }
               </p>
+              <div className="flex items-center gap-1.5">
+                <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                <p className="text-amber-300/70 text-xs">This action is irreversible. The DTR will be finalized and locked.</p>
+              </div>
             </div>
             <div className="flex gap-3">
               <button

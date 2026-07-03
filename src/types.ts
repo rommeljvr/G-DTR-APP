@@ -293,6 +293,7 @@ export interface DTRRecord {
   viewedAt?: string;
   acknowledgedAt?: string;
   acknowledgedBy?: string;
+  acknowledgedRole?: string;
   days: DTRDayRecord[];
   summary: DTRSummary;
   issues?: DTRIssue[];

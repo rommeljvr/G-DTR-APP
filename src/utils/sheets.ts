@@ -964,7 +964,7 @@ export async function getDTRById(
 
 export async function acknowledgeDTR(
   dtrId: string, employeeEmail: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; acknowledgedAt?: string; acknowledgedBy?: string; acknowledgedRole?: string }> {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) return { success: false, message: 'No script URL configured' };
   try {
@@ -4063,6 +4063,10 @@ function regenerateDTR(dtrId, adminEmail) {
   var rows  = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) !== String(dtrId)) continue;
+    // Block regeneration of acknowledged (finalized) records
+    if (String(rows[i][13] || '').trim() === 'Acknowledged') {
+      return _json({ success: false, message: 'This DTR has been acknowledged and is locked. It cannot be regenerated.' });
+    }
     // Build a re-generate request from existing record
     var data = {
       adminEmail:    adminEmail,
@@ -4214,57 +4218,90 @@ function getDTRById(dtrId, requesterEmail) {
       }
     }
 
+    // Extract acknowledgedRole from audit trail note field
+    var ackRole = '';
+    for (var ai2 = audit.length - 1; ai2 >= 0; ai2--) {
+      if (audit[ai2].action === 'Acknowledged' && audit[ai2].note) {
+        ackRole = String(audit[ai2].note).indexOf('Administrator') !== -1 ? 'Administrator' : 'Employee';
+        break;
+      }
+    }
+
     return _json({ success: true, record: {
-      id:            String(rows[i][0]),
-      version:       Number(rows[i][1]),
-      employeeEmail: empEmail,
-      employeeName:  String(rows[i][3]),
-      employeeNumber:String(rows[i][4]),
-      department:    String(rows[i][5]),
-      designation:   String(rows[i][6]),
-      branch:        String(rows[i][7] || ''),
-      month:         Number(rows[i][8]),
-      year:          Number(rows[i][9]),
-      cutOff:        String(rows[i][10]),
-      coverageStart: String(rows[i][11]),
-      coverageEnd:   String(rows[i][12]),
-      status:        String(rows[i][13]),
-      generatedBy:   String(rows[i][14]),
-      generatedAt:   String(rows[i][15]),
-      sentAt:        String(rows[i][16] || ''),
-      viewedAt:      String(rows[i][17] || ''),
-      acknowledgedAt:String(rows[i][18] || ''),
-      acknowledgedBy:String(rows[i][19] || ''),
-      days:          days,
-      summary:       summary,
-      issues:        issues,
-      auditTrail:    audit
+      id:              String(rows[i][0]),
+      version:         Number(rows[i][1]),
+      employeeEmail:   empEmail,
+      employeeName:    String(rows[i][3]),
+      employeeNumber:  String(rows[i][4]),
+      department:      String(rows[i][5]),
+      designation:     String(rows[i][6]),
+      branch:          String(rows[i][7] || ''),
+      month:           Number(rows[i][8]),
+      year:            Number(rows[i][9]),
+      cutOff:          String(rows[i][10]),
+      coverageStart:   String(rows[i][11]),
+      coverageEnd:     String(rows[i][12]),
+      status:          String(rows[i][13]),
+      generatedBy:     String(rows[i][14]),
+      generatedAt:     String(rows[i][15]),
+      sentAt:          String(rows[i][16] || ''),
+      viewedAt:        String(rows[i][17] || ''),
+      acknowledgedAt:  String(rows[i][18] || ''),
+      acknowledgedBy:  String(rows[i][19] || ''),
+      acknowledgedRole:ackRole,
+      days:            days,
+      summary:         summary,
+      issues:          issues,
+      auditTrail:      audit
     }});
   }
   return _json({ success: false, message: 'DTR not found' });
 }
 
-function acknowledgeDTR(dtrId, employeeEmail) {
-  if (!dtrId || !employeeEmail) return _json({ success: false, message: 'Missing parameters' });
+function acknowledgeDTR(dtrId, requesterEmail) {
+  if (!dtrId || !requesterEmail) return _json({ success: false, message: 'Missing parameters' });
+  var reqLower = requesterEmail.trim().toLowerCase();
   var sheet = initDTRSheet();
   var rows  = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) !== String(dtrId)) continue;
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
-    if (empEmail !== employeeEmail.toLowerCase()) return _json({ success: false, message: 'Unauthorized' });
+    var isAdmin  = isAdminRole(reqLower);
+    var isOwner  = reqLower === empEmail;
+    if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
     if (rows[i][18]) return _json({ success: false, message: 'DTR already acknowledged' });
-    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    // Only allow acknowledgment when DTR has been sent or is in a reviewable state
+    var status = String(rows[i][13] || '').trim();
+    if (status === 'Regenerated') return _json({ success: false, message: 'Cannot acknowledge a superseded DTR version' });
+    var now  = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var role = isAdmin ? 'Administrator' : 'Employee';
+    var version = Number(rows[i][1]) || 1;
     sheet.getRange(i + 1, 14).setValue('Acknowledged');
-    sheet.getRange(i + 1, 19).setValue(now);
-    sheet.getRange(i + 1, 20).setValue(String(rows[i][3]));
+    sheet.getRange(i + 1, 19).setValue(now);             // col 19 = Acknowledged At
+    sheet.getRange(i + 1, 20).setValue(String(rows[i][3])); // col 20 = Acknowledged By (name)
     var audit = [];
     try { audit = JSON.parse(String(rows[i][22] || '[]')); } catch(e) {}
-    audit.push({ action: 'Acknowledged', performedBy: employeeEmail, performedAt: now });
+    audit.push({
+      action:      'Acknowledged',
+      performedBy: requesterEmail,
+      performedAt: now,
+      note:        role + ' — Version ' + version
+    });
     sheet.getRange(i + 1, 23).setValue(JSON.stringify(audit));
-    // Notify admin
-    createNotificationRecord(ADMIN_EMAIL, 'DTR_GENERATED',
-      String(rows[i][3]) + ' acknowledged their DTR for cut-off ' + String(rows[i][10]) + '.', dtrId, 'dtrId');
-    return _json({ success: true, message: 'DTR acknowledged' });
+    // Notify admin (unless admin performed the acknowledgment)
+    if (!isAdmin) {
+      createNotificationRecord(ADMIN_EMAIL, 'DTR_GENERATED',
+        String(rows[i][3]) + ' acknowledged their DTR for ' +
+        String(rows[i][10]) + ' cut-off of ' +
+        new Date(Number(rows[i][9]), Number(rows[i][8])-1, 1).toLocaleString('default', { month: 'long' }) +
+        ' ' + String(rows[i][9]) + '.', dtrId, 'dtrId');
+    } else {
+      // Notify the employee that admin acknowledged on their behalf
+      createNotificationRecord(empEmail, 'DTR_GENERATED',
+        'Your DTR for ' + String(rows[i][10]) + ' cut-off has been acknowledged by an Administrator.',
+        dtrId, 'dtrId');
+    }
+    return _json({ success: true, message: 'DTR acknowledged', acknowledgedAt: now, acknowledgedBy: requesterEmail, acknowledgedRole: role });
   }
   return _json({ success: false, message: 'DTR not found' });
 }
