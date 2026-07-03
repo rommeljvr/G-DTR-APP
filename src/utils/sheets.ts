@@ -1,4 +1,4 @@
-import { AttendanceRecord, Employee, ApproverSettings, LeaveApplication, AppNotification } from '../types';
+import { AttendanceRecord, Employee, ApproverSettings, LeaveApplication, AppNotification, DTRRecord, DTRIssueType } from '../types';
 import { getConfig } from './config';
 
 // ─── helpers ───────────────────────────────────────────────────────
@@ -622,11 +622,13 @@ export interface AttendanceMonitorRecord {
   image: string;
   status: 'Active' | 'Completed' | 'On Leave' | 'Absent';
   timeIn?: string;
+  timeInDate?: string;
   timeInTimestamp?: string;
   timeInLatitude?: number;
   timeInLongitude?: number;
   timeInAddress?: string;
   timeOut?: string;
+  timeOutDate?: string;
   timeOutTimestamp?: string;
   timeOutLatitude?: number;
   timeOutLongitude?: number;
@@ -827,6 +829,21 @@ export async function getPendingTimeCorrectionApprovals(
   } catch { return { success: false, records: [] }; }
 }
 
+export async function acknowledgeTimeCorrection(
+  id: string, approverEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'acknowledgeTimeCorrection', id, email: approverEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 export async function approveTimeCorrection(
   id: string, approverEmail: string
 ): Promise<{ success: boolean; message: string }> {
@@ -867,6 +884,113 @@ export async function cancelTimeCorrection(
       method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'cancelTimeCorrection', id, email }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+// ─── DTR Management ──────────────────────────────────────────────
+
+export async function generateDTR(params: {
+  adminEmail: string; employeeEmail: string; employeeName?: string;
+  month: number; year: number; cutOff: '1st' | '2nd';
+}): Promise<{ success: boolean; message: string; dtrId?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'generateDTR', ...params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function regenerateDTR(
+  dtrId: string, adminEmail: string
+): Promise<{ success: boolean; message: string; dtrId?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'regenerateDTR', dtrId, email: adminEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getDTRList(
+  email: string, adminEmail?: string
+): Promise<{ success: boolean; records: DTRRecord[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, records: [] };
+  try {
+    const params = new URLSearchParams({ action: 'getDTRList', email });
+    if (adminEmail) params.set('adminEmail', adminEmail);
+    else params.set('adminEmail', '');
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    return { success: json.success, records: json.records || [] };
+  } catch { return { success: false, records: [] }; }
+}
+
+export async function getDTRById(
+  dtrId: string, requesterEmail: string
+): Promise<{ success: boolean; record?: DTRRecord; message?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(
+      `${scriptUrl}?action=getDTRById&dtrId=${encodeURIComponent(dtrId)}&email=${encodeURIComponent(requesterEmail)}`,
+      { method: 'GET', redirect: 'follow' }
+    );
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function acknowledgeDTR(
+  dtrId: string, employeeEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'acknowledgeDTR', dtrId, email: employeeEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function reportDTRIssue(params: {
+  dtrId: string; employeeEmail: string; issueType: DTRIssueType; comments: string;
+}): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'reportDTRIssue', ...params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function resolveDTRIssue(
+  issueId: string, adminEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'resolveDTRIssue', issueId, email: adminEmail }),
     });
     return await res.json();
   } catch (err) { return { success: false, message: String(err) }; }
@@ -971,10 +1095,16 @@ function doPost(e) {
     if (data.action === 'approveLeave')         return approveLeave(data.leaveId, data.email);
     if (data.action === 'rejectLeave')          return rejectLeave(data.leaveId, data.email, data.reason);
     if (data.action === 'markNotificationsRead') return markNotificationsRead(data.email, data.notificationId);
-    if (data.action === 'submitTimeCorrection')    return submitTimeCorrection(data.data, data.documentData);
-    if (data.action === 'approveTimeCorrection')   return approveTimeCorrection(data.id, data.email);
-    if (data.action === 'rejectTimeCorrection')    return rejectTimeCorrection(data.id, data.email, data.reason);
+    if (data.action === 'submitTimeCorrection')      return submitTimeCorrection(data.data, data.documentData);
+    if (data.action === 'acknowledgeTimeCorrection') return acknowledgeTimeCorrection(data.id, data.email);
+    if (data.action === 'approveTimeCorrection')     return approveTimeCorrection(data.id, data.email);
+    if (data.action === 'rejectTimeCorrection')      return rejectTimeCorrection(data.id, data.email, data.reason);
     if (data.action === 'cancelTimeCorrection')    return cancelTimeCorrection(data.id, data.email);
+    if (data.action === 'generateDTR')       return generateDTR(data);
+    if (data.action === 'regenerateDTR')     return regenerateDTR(data.dtrId, data.email);
+    if (data.action === 'acknowledgeDTR')    return acknowledgeDTR(data.dtrId, data.email);
+    if (data.action === 'reportDTRIssue')    return reportDTRIssue(data);
+    if (data.action === 'resolveDTRIssue')   return resolveDTRIssue(data.issueId, data.email);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1019,6 +1149,9 @@ function doGet(e) {
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getTimeCorrectionHistory')          return email ? getTimeCorrectionHistory(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getPendingTimeCorrectionApprovals') return email ? getPendingTimeCorrectionApprovals(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getDTRList')       return email ? getDTRList(email, p.adminEmail || '') : _json({ success: false, message: 'Email required' });
+  if (action === 'getDTRById')       return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
+  if (action === 'getEmployeesForDTR') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getEmployeeList() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -1305,9 +1438,8 @@ function getHistory(email) {
       var dStr = rDate instanceof Date
         ? Utilities.formatDate(rDate, 'Asia/Manila', 'M/d/yyyy')
         : String(rDate || '');
-      var tStr = rTime instanceof Date
-        ? Utilities.formatDate(rTime, 'GMT', 'hh:mm:ss a')  // Use GMT to preserve literal time, avoid TZ shift
-        : String(rTime || '');
+      var tStr = formatTimeValue(rTime);
+      
       records.push({
         id:          rows[i][0],
         action:      rows[i][4],
@@ -1327,147 +1459,7 @@ function getHistory(email) {
   return _json({ success: true, records: records.reverse() });
 }
 
-function getAttendanceMonitor() {
-  var ss          = SpreadsheetApp.getActiveSpreadsheet();
-  var empSheet    = ss.getSheetByName('Employee');
-  var attSheet    = ss.getSheetByName('Attendance');
-  var leaveSheet  = ss.getSheetByName('LeaveApplications');
 
-  var todayDate = new Date();
-  var today     = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'M/d/yyyy');
-  var todayAlt  = (todayDate.getMonth()+1) + '/' + todayDate.getDate() + '/' + todayDate.getFullYear();
-
-  // ── Read all employees ──────────────────────────────────────────
-  var employees = [];
-  if (empSheet) {
-    var empRows    = empSheet.getDataRange().getValues();
-    var empHeaders = empRows[0];
-    var cName  = findColumnIndex(empHeaders, ['Employee Name', 'Name', 'Full Name']);
-    var cEmail = findColumnIndex(empHeaders, ['Email', 'Email Address']);
-    var cRole  = findColumnIndex(empHeaders, ['Role', 'Access Role', 'User Role']);
-    var cImg   = findColumnIndex(empHeaders, ['Image', 'Photo', 'Picture']);
-    var cDept  = findColumnIndex(empHeaders, ['DEPARTMENT', 'Department', 'Dept']);
-    var cDesig = findColumnIndex(empHeaders, ['DESIGNATION', 'Designation', 'Position', 'Title']);
-    var cActive = findColumnIndex(empHeaders, ['Active', 'Status', 'Is Active']);
-    for (var i = 1; i < empRows.length; i++) {
-      var rowEmail = String(empRows[i][cEmail] || '').trim();
-      if (!rowEmail) continue;
-      var activeVal = cActive !== -1 ? empRows[i][cActive] : true;
-      if (activeVal === false || String(activeVal).toLowerCase() === 'false' || String(activeVal).toLowerCase() === 'inactive') continue;
-      employees.push({
-        email:       rowEmail.toLowerCase(),
-        name:        cName  !== -1 ? String(empRows[i][cName]  || '').trim() : rowEmail,
-        department:  cDept  !== -1 ? String(empRows[i][cDept]  || '').trim() : '',
-        designation: cDesig !== -1 ? String(empRows[i][cDesig] || '').trim() : '',
-        image:       cImg   !== -1 ? String(empRows[i][cImg]   || '').trim() : ''
-      });
-    }
-  }
-
-  // ── Read today's approved leaves ───────────────────────────────
-  var onLeaveEmails = {};
-  if (leaveSheet) {
-    var leaveRows    = leaveSheet.getDataRange().getValues();
-    var leaveHeaders = leaveRows[0];
-    var lEmail  = findColumnIndex(leaveHeaders, ['Email', 'Email Address']);
-    var lStart  = findColumnIndex(leaveHeaders, ['Start Date', 'StartDate']);
-    var lEnd    = findColumnIndex(leaveHeaders, ['End Date', 'EndDate']);
-    var lStatus = findColumnIndex(leaveHeaders, ['Status']);
-    var todayMs = new Date().setHours(0, 0, 0, 0);
-    for (var li = 1; li < leaveRows.length; li++) {
-      var lStat = lStatus !== -1 ? String(leaveRows[li][lStatus] || '').trim() : '';
-      if (lStat !== 'Approved') continue;
-      var leaveEmail = lEmail !== -1 ? String(leaveRows[li][lEmail] || '').trim().toLowerCase() : '';
-      if (!leaveEmail) continue;
-      var startMs = lStart !== -1 ? new Date(leaveRows[li][lStart]).setHours(0,0,0,0) : 0;
-      var endMs   = lEnd   !== -1 ? new Date(leaveRows[li][lEnd]).setHours(0,0,0,0)   : 0;
-      if (startMs <= todayMs && todayMs <= endMs) onLeaveEmails[leaveEmail] = true;
-    }
-  }
-
-  // ── Read today's attendance rows ───────────────────────────────
-  // cols: 0=id,1=userId,2=userName,3=email,4=action,5=timestamp,6=date,7=time,
-  //       8=lat,9=lng,10=accuracy,11=address,12=device,13=dept,14=desig,15=imgId,16=imgUrl
-  var timeIns  = {};
-  var timeOuts = {};
-  if (attSheet && attSheet.getLastRow() > 1) {
-    var attRows = attSheet.getDataRange().getValues();
-    for (var ai = 1; ai < attRows.length; ai++) {
-      var rawDate  = attRows[ai][6];
-      var attDate;
-      if (rawDate instanceof Date) {
-        attDate = (rawDate.getMonth()+1) + '/' + rawDate.getDate() + '/' + rawDate.getFullYear();
-      } else {
-        attDate = String(rawDate || '').trim();
-      }
-      if (attDate !== today && attDate !== todayAlt) continue;
-      var attEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
-      var attAction = String(attRows[ai][4] || '').trim();
-      var rawTs     = attRows[ai][5];
-      var tsMs      = rawTs instanceof Date ? rawTs.getTime() : new Date(String(rawTs || '')).getTime();
-      if (isNaN(tsMs)) tsMs = 0;
-      var attEntry  = {
-        time:      String(attRows[ai][7]  || ''),
-        timestamp: String(attRows[ai][5]  || ''),
-        tsMs:      tsMs,
-        latitude:  Number(attRows[ai][8]  || 0),
-        longitude: Number(attRows[ai][9]  || 0),
-        address:   String(attRows[ai][11] || ''),
-        imageUrl:  String(attRows[ai][16] || '')
-      };
-      if (attAction === 'TIME_IN') {
-        if (!timeIns[attEmail] || attEntry.tsMs > timeIns[attEmail].tsMs)
-          timeIns[attEmail] = attEntry;
-      } else if (attAction === 'TIME_OUT') {
-        if (!timeOuts[attEmail] || attEntry.tsMs > timeOuts[attEmail].tsMs)
-          timeOuts[attEmail] = attEntry;
-      }
-    }
-  }
-
-  // ── Build result ───────────────────────────────────────────────
-  var result = employees.map(function(emp) {
-    var tin  = timeIns[emp.email];
-    // Only count a TIME_OUT that occurred AFTER the latest TIME_IN
-    var toutRaw = timeOuts[emp.email];
-    var tout = (toutRaw && tin && toutRaw.tsMs > tin.tsMs) ? toutRaw : null;
-    var status;
-    if (tin) {
-      // Actual attendance overrides any leave record
-      status = tout ? 'Completed' : 'Active';
-    } else if (onLeaveEmails[emp.email]) {
-      status = 'On Leave';
-    } else {
-      status = 'Absent';
-    }
-    var rec = {
-      email:       emp.email,
-      name:        emp.name,
-      department:  emp.department,
-      designation: emp.designation,
-      image:       emp.image,
-      status:      status
-    };
-    if (tin) {
-      rec.timeIn          = tin.time;
-      rec.timeInTimestamp = tin.timestamp;
-      rec.timeInLatitude  = tin.latitude;
-      rec.timeInLongitude = tin.longitude;
-      rec.timeInAddress   = tin.address;
-      rec.imageUrl        = tin.imageUrl;
-    }
-    if (tout) {
-      rec.timeOut          = tout.time;
-      rec.timeOutTimestamp = tout.timestamp;
-      rec.timeOutLatitude  = tout.latitude;
-      rec.timeOutLongitude = tout.longitude;
-      rec.timeOutAddress   = tout.address;
-    }
-    return rec;
-  });
-
-  return _json({ success: true, date: today, records: result });
-}
 
 function getSettings() {
   initSettingsSheet();
@@ -3151,6 +3143,8 @@ function submitTimeCorrection(data, documentData) {
     }
   }
 
+  var hdr2 = sheet.getDataRange().getValues()[0];
+
   var docId = '', docUrl = '';
   if (documentData && String(documentData).indexOf('base64,') > -1) {
     try {
@@ -3188,8 +3182,27 @@ function submitTimeCorrection(data, documentData) {
     'Pending', now, data.approverEmail || '', ''
   ]);
 
-  if (data.approverEmail) {
-    createNotification(data.approverEmail, 'TC_FILED',
+  // Determine approver based on employee workflow settings
+  var tcSettings  = null;
+  try {
+    var apResult = getApproverSettings(data.email);
+    var apJson   = JSON.parse(apResult.getContent());
+    if (apJson.success && apJson.settings) tcSettings = apJson.settings;
+  } catch (ae) { Logger.log('submitTimeCorrection: getApproverSettings error: ' + ae); }
+
+  var finalApprover = data.approverEmail || (tcSettings ? tcSettings.approverEmail : '');
+  var teamLead      = tcSettings ? tcSettings.teamLeadEmail : '';
+  var tcWorkflow    = tcSettings ? tcSettings.workflowType : 'DIRECT';
+  var firstApprover = (tcWorkflow === 'TWO_STEP' && teamLead) ? teamLead : finalApprover;
+
+  // Update the stored approver to the first handler
+  if (firstApprover) {
+    var cAppr = findColumnIndex(hdr2, ['Approver Email']);
+    if (cAppr !== -1) sheet.getRange(sheet.getLastRow(), cAppr + 1).setValue(firstApprover);
+  }
+
+  if (firstApprover) {
+    createNotification(firstApprover, 'TC_FILED',
       (data.employeeName || data.email) + ' submitted a Time Correction request for ' + data.attendanceDate, id);
   }
 
@@ -3276,13 +3289,34 @@ function getPendingTimeCorrectionApprovals(approverEmail) {
   var headers = rows[0];
   var cApprover = findColumnIndex(headers, ['Approver Email']);
   var cStatus   = findColumnIndex(headers, ['Status']);
+  var cEmail    = findColumnIndex(headers, ['Email']);
   var isAdmin   = String(approverEmail).toLowerCase() === ADMIN_EMAIL;
+  var approverLower = String(approverEmail).trim().toLowerCase();
   var records   = [];
 
   for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][cStatus] || '') !== 'Pending') continue;
+    var status = String(rows[i][cStatus] || '');
+    if (status !== 'Pending' && status !== 'Acknowledged') continue;
     var rowApprover = String(rows[i][cApprover] || '').trim().toLowerCase();
-    if (!isAdmin && rowApprover !== String(approverEmail).trim().toLowerCase()) continue;
+
+    // Determine if caller is the current step's approver
+    var isNextApprover = false;
+    if (!isAdmin) {
+      var employeeEmail = String(rows[i][cEmail] || '').trim().toLowerCase();
+      var cfg = getSettingsForEmployee(employeeEmail);
+      var tl = cfg ? cfg.teamLeadEmail : '';
+      var appr = cfg ? cfg.approverEmail : '';
+      var wf = cfg ? cfg.workflowType : 'DIRECT';
+      if (wf === 'TWO_STEP') {
+        if (status === 'Pending' && tl === approverLower) isNextApprover = true;
+        if (status === 'Acknowledged' && appr === approverLower) isNextApprover = true;
+      } else {
+        if (status === 'Pending' && appr === approverLower) isNextApprover = true;
+      }
+      // Fallback to stored approver if no settings
+      if (!isNextApprover && rowApprover === approverLower) isNextApprover = true;
+    }
+    if (!isAdmin && !isNextApprover) continue;
     records.push({
       id:                String(rows[i][findColumnIndex(headers,['ID'])]                    || ''),
       employeeName:      String(rows[i][findColumnIndex(headers,['Employee Name'])]         || ''),
@@ -3337,6 +3371,43 @@ function findTimeCorrectionRow(id) {
   return null;
 }
 
+function acknowledgeTimeCorrection(id, approverEmail) {
+  if (!id || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findTimeCorrectionRow(id);
+  if (!found) return _json({ success: false, message: 'Time Correction request not found' });
+
+  var headers = found.headers;
+  var cStatus = findColumnIndex(headers, ['Status']);
+  var cEmail  = findColumnIndex(headers, ['Email']);
+  var cAppr   = findColumnIndex(headers, ['Approver Email']);
+  var cDate   = findColumnIndex(headers, ['Attendance Date']);
+  var currentStatus = String(found.row[cStatus] || '');
+
+  if (currentStatus !== 'Pending') return _json({ success: false, message: 'Can only acknowledge Pending requests' });
+
+  var employeeEmail = String(found.row[cEmail] || '');
+  var cfg = getSettingsForEmployee(employeeEmail);
+  var tlEmail = cfg ? cfg.teamLeadEmail : '';
+  var nextApprover = cfg ? cfg.approverEmail : '';
+
+  if (tlEmail !== String(approverEmail).trim().toLowerCase()) return _json({ success: false, message: 'You are not the assigned Team Lead' });
+
+  found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Acknowledged');
+  if (cAppr !== -1 && nextApprover) found.sheet.getRange(found.rowIndex, cAppr + 1).setValue(nextApprover);
+
+  var approverName = getApproverName(approverEmail);
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  appendTimeCorrectionHistory(id, approverEmail, approverName, 'Acknowledge', '', now);
+
+  createNotification(employeeEmail, 'TC_ACKNOWLEDGED',
+    'Your Time Correction request has been acknowledged by ' + approverName + ' and forwarded for approval.', id);
+  if (nextApprover) {
+    createNotification(nextApprover, 'TC_FILED',
+      'Time Correction request for ' + String(found.row[cDate] || '') + ' has been forwarded for your approval.', id);
+  }
+  return _json({ success: true, message: 'Time Correction acknowledged and forwarded' });
+}
+
 function approveTimeCorrection(id, approverEmail) {
   if (!id || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
   var found = findTimeCorrectionRow(id);
@@ -3344,8 +3415,14 @@ function approveTimeCorrection(id, approverEmail) {
   var cStatus = findColumnIndex(found.headers, ['Status']);
   var cEmail  = findColumnIndex(found.headers, ['Email']);
   var cDate   = findColumnIndex(found.headers, ['Attendance Date']);
-  if (String(found.row[cStatus] || '') !== 'Pending')
-    return _json({ success: false, message: 'Only Pending requests can be approved' });
+  var status = String(found.row[cStatus] || '');
+  if (status !== 'Pending' && status !== 'Acknowledged')
+    return _json({ success: false, message: 'Only Pending or Acknowledged requests can be approved' });
+
+  var cAppr = findColumnIndex(found.headers, ['Approver Email']);
+  var currentApprover = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
+  if (currentApprover && currentApprover !== String(approverEmail).trim().toLowerCase())
+    return _json({ success: false, message: 'You are not the assigned approver' });
 
   found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Approved');
   var approverName  = getApproverName(approverEmail);
@@ -3360,18 +3437,32 @@ function rejectTimeCorrection(id, approverEmail, reason) {
   if (!id || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
   var found = findTimeCorrectionRow(id);
   if (!found) return _json({ success: false, message: 'Time Correction request not found' });
-  var cStatus = findColumnIndex(found.headers, ['Status']);
-  var cEmail  = findColumnIndex(found.headers, ['Email']);
-  var cRej    = findColumnIndex(found.headers, ['Rejection Reason']);
-  if (String(found.row[cStatus] || '') !== 'Pending')
-    return _json({ success: false, message: 'Only Pending requests can be rejected' });
+  var headers = found.headers;
+  var cStatus = findColumnIndex(headers, ['Status']);
+  var cEmail  = findColumnIndex(headers, ['Email']);
+  var cRej    = findColumnIndex(headers, ['Rejection Reason']);
+  var cAppr   = findColumnIndex(headers, ['Approver Email']);
+  var status = String(found.row[cStatus] || '');
+  if (status !== 'Pending' && status !== 'Acknowledged')
+    return _json({ success: false, message: 'Only Pending or Acknowledged requests can be rejected' });
+
+  var employeeEmail = String(found.row[cEmail] || '');
+  var cfg = getSettingsForEmployee(employeeEmail);
+  var tlEmail = cfg ? cfg.teamLeadEmail : '';
+  var apprEmail = cfg ? cfg.approverEmail : '';
+  var callerLower = String(approverEmail).trim().toLowerCase();
+  var currentApprover = cAppr !== -1 ? String(found.row[cAppr] || '').trim().toLowerCase() : '';
+
+  if (currentApprover && currentApprover !== callerLower && tlEmail !== callerLower && apprEmail !== callerLower) {
+    return _json({ success: false, message: 'You are not authorized to reject this request' });
+  }
 
   found.sheet.getRange(found.rowIndex, cStatus + 1).setValue('Rejected');
   if (cRej !== -1) found.sheet.getRange(found.rowIndex, cRej + 1).setValue(String(reason || ''));
   var approverName = getApproverName(approverEmail);
   var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
   appendTimeCorrectionHistory(id, approverEmail, approverName, 'Reject', reason, now);
-  createNotification(String(found.row[cEmail] || ''), 'TC_REJECTED',
+  createNotification(employeeEmail, 'TC_REJECTED',
     'Your Time Correction request was rejected by ' + approverName + '. Reason: ' + reason, id);
   return _json({ success: true, message: 'Time Correction rejected' });
 }
@@ -3402,5 +3493,462 @@ function appendTimeCorrectionHistory(tcId, approverEmail, approverName, action, 
     sheet.appendRow(['ID','TC ID','Approver Email','Approver Name','Action','Reason','Timestamp']);
   }
   sheet.appendRow([Utilities.getUuid(), tcId, approverEmail, approverName, action, reason || '', timestamp]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DTR MANAGEMENT
+// ══════════════════════════════════════════════════════════════════
+
+function initDTRSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('DTRRecords');
+  if (!sheet) {
+    sheet = ss.insertSheet('DTRRecords');
+    sheet.appendRow([
+      'ID','Version','Employee Email','Employee Name','Employee Number',
+      'Department','Designation','Branch','Month','Year','Cut-Off',
+      'Coverage Start','Coverage End','Status','Generated By','Generated At',
+      'Sent At','Viewed At','Acknowledged At','Acknowledged By',
+      'Days JSON','Summary JSON','Audit Trail JSON'
+    ]);
+  }
+  return sheet;
+}
+
+function initDTRIssuesSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('DTRIssues');
+  if (!sheet) {
+    sheet = ss.insertSheet('DTRIssues');
+    sheet.appendRow(['ID','DTR ID','Employee Email','Employee Name','Issue Type','Comments','Submitted At','Resolved At','Resolved By']);
+  }
+  return sheet;
+}
+
+function generateDTR(data) {
+  var adminEmail = String(data.adminEmail || '').trim().toLowerCase();
+  var empEmail   = String(data.employeeEmail || '').trim().toLowerCase();
+  var month      = parseInt(data.month, 10);
+  var year       = parseInt(data.year, 10);
+  var cutOff     = String(data.cutOff || '1st').trim();
+
+  if (!adminEmail || !empEmail || !month || !year)
+    return _json({ success: false, message: 'Missing required parameters' });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Coverage dates
+  var startDay = cutOff === '1st' ? 1 : 16;
+  var endDay   = cutOff === '1st' ? 15 : new Date(year, month, 0).getDate();
+  var coverageStart = month + '/' + startDay + '/' + year;
+  var coverageEnd   = month + '/' + endDay   + '/' + year;
+
+  // Pull attendance records for this employee in the coverage range
+  var attSheet = ss.getSheetByName('Attendance');
+  var attRows  = attSheet ? attSheet.getDataRange().getValues() : [];
+  var empAttMap = {};
+  for (var ai = 1; ai < attRows.length; ai++) {
+    var rowEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
+    if (rowEmail !== empEmail) continue;
+    var rawDate   = attRows[ai][6];
+    var dateStr   = rawDate instanceof Date
+      ? (rawDate.getMonth()+1) + '/' + rawDate.getDate() + '/' + rawDate.getFullYear()
+      : String(rawDate || '').trim();
+    var d = new Date(dateStr);
+    if (isNaN(d.getTime())) continue;
+    if (d.getFullYear() !== year || (d.getMonth()+1) !== month) continue;
+    if (d.getDate() < startDay || d.getDate() > endDay) continue;
+    if (!empAttMap[dateStr]) empAttMap[dateStr] = { timeIn: null, timeOut: null };
+    var action = String(attRows[ai][4] || '').trim();
+    var entry  = {
+      time:      String(attRows[ai][7]  || ''),
+      timestamp: String(attRows[ai][5]  || ''),
+      latitude:  Number(attRows[ai][8]  || 0),
+      longitude: Number(attRows[ai][9]  || 0),
+      address:   String(attRows[ai][11] || ''),
+      imageUrl:  String(attRows[ai][16] || ''),
+      tsMs: rawDate instanceof Date ? rawDate.getTime() : new Date(String(attRows[ai][5] || '')).getTime()
+    };
+    if (action === 'TIME_IN') {
+      if (!empAttMap[dateStr].timeIn || entry.tsMs < empAttMap[dateStr].timeIn.tsMs)
+        empAttMap[dateStr].timeIn = entry;
+    } else if (action === 'TIME_OUT') {
+      if (!empAttMap[dateStr].timeOut || entry.tsMs > empAttMap[dateStr].timeOut.tsMs)
+        empAttMap[dateStr].timeOut = entry;
+    }
+  }
+
+  // Pull approved leaves for this employee in range
+  var leaveSheet = ss.getSheetByName('LeaveApplications');
+  var leaveRows  = leaveSheet ? leaveSheet.getDataRange().getValues() : [];
+  var approvedLeaveDates = {};
+  for (var li = 1; li < leaveRows.length; li++) {
+    var lEmail  = String(leaveRows[li][1] || '').trim().toLowerCase();
+    var lStatus = String(leaveRows[li][13] || '').trim();
+    if (lEmail !== empEmail || lStatus !== 'Approved') continue;
+    var lStart = new Date(String(leaveRows[li][4] || ''));
+    var lEnd   = new Date(String(leaveRows[li][5] || ''));
+    if (isNaN(lStart.getTime()) || isNaN(lEnd.getTime())) continue;
+    var cur = new Date(lStart);
+    while (cur <= lEnd) {
+      var key = (cur.getMonth()+1) + '/' + cur.getDate() + '/' + cur.getFullYear();
+      approvedLeaveDates[key] = true;
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+
+  // Build day records
+  var days = [];
+  var summary = {
+    totalWorkingDays: 0, daysPresent: 0, daysAbsent: 0,
+    approvedLeave: 0, lateCount: 0, undertimeCount: 0,
+    missingTimeIn: 0, missingTimeOut: 0, totalHoursWorked: 0
+  };
+  var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  for (var day = startDay; day <= endDay; day++) {
+    var dt    = new Date(year, month - 1, day);
+    var dow   = dt.getDay();
+    var dKey  = month + '/' + day + '/' + year;
+    var isRestDay = (dow === 0 || dow === 6);
+    var att   = empAttMap[dKey] || {};
+    var isLeave = approvedLeaveDates[dKey] || false;
+
+    var status, workHours = 0;
+    if (isRestDay) {
+      status = 'Rest Day';
+    } else if (isLeave) {
+      status = 'Approved Leave';
+      summary.approvedLeave++;
+    } else if (!att.timeIn && !att.timeOut) {
+      status = 'Absent';
+      summary.daysAbsent++;
+      summary.totalWorkingDays++;
+    } else {
+      summary.totalWorkingDays++;
+      summary.daysPresent++;
+      if (!att.timeIn) { status = 'Missing Time In'; summary.missingTimeIn++; }
+      else if (!att.timeOut) { status = 'Missing Time Out'; summary.missingTimeOut++; }
+      else {
+        // Compute hours
+        var tin  = new Date(att.timeIn.timestamp);
+        var tout = new Date(att.timeOut.timestamp);
+        if (!isNaN(tin.getTime()) && !isNaN(tout.getTime())) {
+          workHours = (tout.getTime() - tin.getTime()) / 3600000;
+          summary.totalHoursWorked += workHours;
+        }
+        // Late check (after 8:00 AM)
+        var tinHr = tin.getHours ? tin.getHours() : 0;
+        var tinMin = tin.getMinutes ? tin.getMinutes() : 0;
+        if (tinHr > 8 || (tinHr === 8 && tinMin > 0)) summary.lateCount++;
+        status = 'Present';
+      }
+    }
+
+    days.push({
+      date:             dKey,
+      dayOfWeek:        dayNames[dow],
+      timeIn:           att.timeIn  ? att.timeIn.time  : '',
+      timeOut:          att.timeOut ? att.timeOut.time  : '',
+      workingHours:     Math.round(workHours * 100) / 100,
+      status:           status,
+      address:          att.timeIn  ? att.timeIn.address : '',
+      latitude:         att.timeIn  ? att.timeIn.latitude  : 0,
+      longitude:        att.timeIn  ? att.timeIn.longitude : 0,
+      timeInImageUrl:   att.timeIn  ? att.timeIn.imageUrl  : '',
+      timeOutImageUrl:  att.timeOut ? att.timeOut.imageUrl : '',
+      timeInTimestamp:  att.timeIn  ? att.timeIn.timestamp  : '',
+      timeOutTimestamp: att.timeOut ? att.timeOut.timestamp : '',
+      remarks:          ''
+    });
+  }
+  summary.totalHoursWorked = Math.round(summary.totalHoursWorked * 100) / 100;
+
+  // Get employee info
+  var empSheet = ss.getSheetByName('Employee');
+  var empRows  = empSheet ? empSheet.getDataRange().getValues() : [];
+  var empName = data.employeeName || empEmail;
+  var dept = '', desig = '', branch = '', empNumber = '';
+  for (var ei = 1; ei < empRows.length; ei++) {
+    if (String(empRows[ei][0] || '').trim().toLowerCase() === empEmail) {
+      empName   = String(empRows[ei][1] || empName);
+      dept      = String(empRows[ei][5] || '');
+      desig     = String(empRows[ei][6] || '');
+      empNumber = String(empRows[ei][2] || '');
+      break;
+    }
+  }
+
+  var now   = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var dtrId = Utilities.getUuid();
+  var auditTrail = [{ action: 'Generated', performedBy: adminEmail, performedAt: now }];
+
+  var sheet = initDTRSheet();
+  sheet.appendRow([
+    dtrId, 1, empEmail, empName, empNumber,
+    dept, desig, branch, month, year, cutOff,
+    coverageStart, coverageEnd, 'Generated', adminEmail, now,
+    '', '', '', '',
+    JSON.stringify(days), JSON.stringify(summary), JSON.stringify(auditTrail)
+  ]);
+
+  // Notify employee
+  createNotificationRecord(empEmail, 'DTR_GENERATED',
+    'Your DTR for ' + (cutOff === '1st' ? '1st' : '2nd') + ' cut-off of ' +
+    new Date(year, month-1, 1).toLocaleString('default', { month: 'long' }) + ' ' + year + ' is ready for review.',
+    dtrId, 'dtrId');
+
+  return _json({ success: true, message: 'DTR generated', dtrId: dtrId });
+}
+
+function regenerateDTR(dtrId, adminEmail) {
+  if (!dtrId || !adminEmail) return _json({ success: false, message: 'dtrId and adminEmail required' });
+  var adminLowerR = adminEmail.toLowerCase();
+  var isAdminR = adminLowerR === ADMIN_EMAIL;
+  if (!isAdminR) {
+    var empSheetR = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
+    var empRowsR  = empSheetR ? empSheetR.getDataRange().getValues() : [];
+    for (var eiR = 1; eiR < empRowsR.length; eiR++) {
+      if (String(empRowsR[eiR][0] || '').trim().toLowerCase() === adminLowerR) {
+        var roleR = String(empRowsR[eiR][3] || '').trim().toLowerCase();
+        if (roleR === 'admin' || roleR === 'superadmin') { isAdminR = true; break; }
+      }
+    }
+  }
+  if (!isAdminR) return _json({ success: false, message: 'Unauthorized' });
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    // Build a re-generate request from existing record
+    var data = {
+      adminEmail:    adminEmail,
+      employeeEmail: String(rows[i][2]),
+      employeeName:  String(rows[i][3]),
+      month:         Number(rows[i][8]),
+      year:          Number(rows[i][9]),
+      cutOff:        String(rows[i][10])
+    };
+    // Mark old as Regenerated
+    var oldAudit = [];
+    try { oldAudit = JSON.parse(String(rows[i][22] || '[]')); } catch(e) {}
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    oldAudit.push({ action: 'Regenerated', performedBy: adminEmail, performedAt: now });
+    sheet.getRange(i + 1, 14).setValue('Regenerated');
+    sheet.getRange(i + 1, 23).setValue(JSON.stringify(oldAudit));
+    // Generate fresh
+    return generateDTR(data);
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function getDTRList(email, adminEmail) {
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var adminLower = adminEmail ? adminEmail.toLowerCase() : '';
+  var isAdmin = adminLower === ADMIN_EMAIL;
+  if (!isAdmin && adminLower) {
+    var empSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
+    var empRows  = empSheet ? empSheet.getDataRange().getValues() : [];
+    for (var ei = 1; ei < empRows.length; ei++) {
+      if (String(empRows[ei][0] || '').trim().toLowerCase() === adminLower) {
+        var role = String(empRows[ei][3] || '').trim().toLowerCase();
+        if (role === 'admin' || role === 'superadmin') { isAdmin = true; break; }
+      }
+    }
+  }
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    if (!isAdmin && empEmail !== email.toLowerCase()) continue;
+    records.push({
+      id:            String(rows[i][0]),
+      version:       Number(rows[i][1]),
+      employeeEmail: empEmail,
+      employeeName:  String(rows[i][3]),
+      department:    String(rows[i][5]),
+      designation:   String(rows[i][6]),
+      month:         Number(rows[i][8]),
+      year:          Number(rows[i][9]),
+      cutOff:        String(rows[i][10]),
+      coverageStart: String(rows[i][11]),
+      coverageEnd:   String(rows[i][12]),
+      status:        String(rows[i][13]),
+      generatedBy:   String(rows[i][14]),
+      generatedAt:   String(rows[i][15]),
+      sentAt:        String(rows[i][16] || ''),
+      acknowledgedAt:String(rows[i][18] || ''),
+      acknowledgedBy:String(rows[i][19] || '')
+    });
+  }
+  records.reverse();
+  return _json({ success: true, records: records });
+}
+
+function getDTRById(dtrId, requesterEmail) {
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    var reqLower = requesterEmail ? requesterEmail.toLowerCase() : '';
+    var isAdmin  = reqLower === ADMIN_EMAIL;
+    if (!isAdmin && reqLower) {
+      var empSheet2 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
+      var empRows2  = empSheet2 ? empSheet2.getDataRange().getValues() : [];
+      for (var ei2 = 1; ei2 < empRows2.length; ei2++) {
+        if (String(empRows2[ei2][0] || '').trim().toLowerCase() === reqLower) {
+          var role2 = String(empRows2[ei2][3] || '').trim().toLowerCase();
+          if (role2 === 'admin' || role2 === 'superadmin') { isAdmin = true; break; }
+        }
+      }
+    }
+    var isOwner  = reqLower && reqLower === empEmail;
+    if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
+
+    var days = [], summary = {}, audit = [];
+    try { days    = JSON.parse(String(rows[i][20] || '[]')); } catch(e) {}
+    try { summary = JSON.parse(String(rows[i][21] || '{}')); } catch(e) {}
+    try { audit   = JSON.parse(String(rows[i][22] || '[]')); } catch(e) {}
+
+    // Mark viewed if employee first access
+    if (isOwner && !rows[i][17]) {
+      var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+      sheet.getRange(i + 1, 18).setValue(now);
+      if (String(rows[i][13]) === 'Sent to Employee') {
+        sheet.getRange(i + 1, 14).setValue('Sent to Employee');
+      }
+    }
+
+    // Pull issues
+    var issueSheet = initDTRIssuesSheet();
+    var issueRows  = issueSheet.getDataRange().getValues();
+    var issues = [];
+    for (var j = 1; j < issueRows.length; j++) {
+      if (String(issueRows[j][1]) === String(dtrId)) {
+        issues.push({
+          id:           String(issueRows[j][0]),
+          dtrId:        String(issueRows[j][1]),
+          employeeEmail:String(issueRows[j][2]),
+          employeeName: String(issueRows[j][3]),
+          issueType:    String(issueRows[j][4]),
+          comments:     String(issueRows[j][5]),
+          submittedAt:  String(issueRows[j][6]),
+          resolvedAt:   String(issueRows[j][7] || ''),
+          resolvedBy:   String(issueRows[j][8] || '')
+        });
+      }
+    }
+
+    return _json({ success: true, record: {
+      id:            String(rows[i][0]),
+      version:       Number(rows[i][1]),
+      employeeEmail: empEmail,
+      employeeName:  String(rows[i][3]),
+      employeeNumber:String(rows[i][4]),
+      department:    String(rows[i][5]),
+      designation:   String(rows[i][6]),
+      branch:        String(rows[i][7] || ''),
+      month:         Number(rows[i][8]),
+      year:          Number(rows[i][9]),
+      cutOff:        String(rows[i][10]),
+      coverageStart: String(rows[i][11]),
+      coverageEnd:   String(rows[i][12]),
+      status:        String(rows[i][13]),
+      generatedBy:   String(rows[i][14]),
+      generatedAt:   String(rows[i][15]),
+      sentAt:        String(rows[i][16] || ''),
+      viewedAt:      String(rows[i][17] || ''),
+      acknowledgedAt:String(rows[i][18] || ''),
+      acknowledgedBy:String(rows[i][19] || ''),
+      days:          days,
+      summary:       summary,
+      issues:        issues,
+      auditTrail:    audit
+    }});
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function acknowledgeDTR(dtrId, employeeEmail) {
+  if (!dtrId || !employeeEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    if (empEmail !== employeeEmail.toLowerCase()) return _json({ success: false, message: 'Unauthorized' });
+    if (rows[i][18]) return _json({ success: false, message: 'DTR already acknowledged' });
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    sheet.getRange(i + 1, 14).setValue('Acknowledged');
+    sheet.getRange(i + 1, 19).setValue(now);
+    sheet.getRange(i + 1, 20).setValue(String(rows[i][3]));
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][22] || '[]')); } catch(e) {}
+    audit.push({ action: 'Acknowledged', performedBy: employeeEmail, performedAt: now });
+    sheet.getRange(i + 1, 23).setValue(JSON.stringify(audit));
+    // Notify admin
+    createNotificationRecord(ADMIN_EMAIL, 'DTR_GENERATED',
+      String(rows[i][3]) + ' acknowledged their DTR for cut-off ' + String(rows[i][10]) + '.', dtrId, 'dtrId');
+    return _json({ success: true, message: 'DTR acknowledged' });
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function reportDTRIssue(data) {
+  var dtrId      = String(data.dtrId || '');
+  var empEmail   = String(data.employeeEmail || '').trim().toLowerCase();
+  var issueType  = String(data.issueType || '');
+  var comments   = String(data.comments || '');
+  if (!dtrId || !empEmail || !issueType) return _json({ success: false, message: 'Missing parameters' });
+
+  var sheet = initDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var empName = empEmail;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === dtrId) {
+      empName = String(rows[i][3] || empEmail);
+      sheet.getRange(i + 1, 14).setValue('Returned for Review');
+      var audit = [];
+      try { audit = JSON.parse(String(rows[i][22] || '[]')); } catch(e) {}
+      var now2 = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+      audit.push({ action: 'Issue Reported', performedBy: empEmail, performedAt: now2, note: issueType + ': ' + comments });
+      sheet.getRange(i + 1, 23).setValue(JSON.stringify(audit));
+      break;
+    }
+  }
+
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var issueSheet = initDTRIssuesSheet();
+  issueSheet.appendRow([Utilities.getUuid(), dtrId, empEmail, empName, issueType, comments, now, '', '']);
+
+  createNotificationRecord(ADMIN_EMAIL, 'DTR_ISSUE_SUBMITTED',
+    empName + ' reported an issue on their DTR: ' + issueType, dtrId, 'dtrId');
+  return _json({ success: true, message: 'Issue submitted' });
+}
+
+function resolveDTRIssue(issueId, adminEmail) {
+  if (!issueId || !adminEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initDTRIssuesSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(issueId)) {
+      var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+      sheet.getRange(i + 1, 8).setValue(now);
+      sheet.getRange(i + 1, 9).setValue(adminEmail);
+      return _json({ success: true, message: 'Issue resolved' });
+    }
+  }
+  return _json({ success: false, message: 'Issue not found' });
+}
+
+function createNotificationRecord(toEmail, type, message, refId, refField) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Notifications');
+  if (!sheet) {
+    sheet = ss.insertSheet('Notifications');
+    sheet.appendRow(['ID','User ID','Type','Message','Ref ID','Ref Field','Is Read','Created At']);
+  }
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', refField || '', 'false', now]);
 }
 `;

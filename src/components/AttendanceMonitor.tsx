@@ -18,6 +18,7 @@ import {
   ChevronUp,
   Building2,
   Briefcase,
+  Calendar,
 } from 'lucide-react';
 import { User } from '../types';
 import { getAttendanceMonitor, getLeaveHistory, AttendanceMonitorRecord } from '../utils/sheets';
@@ -29,6 +30,14 @@ interface Props {
 
 function formatDisplayDate(val: string): string {
   if (!val) return '';
+  // For ISO timestamps, extract the date portion directly to avoid timezone shifts
+  const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoMatch) {
+    const d = new Date(`${isoMatch[1]}/${isoMatch[2]}/${isoMatch[3]}`);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }
   const d = new Date(val.replace(/-/g, '/'));
   if (!isNaN(d.getTime())) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -192,6 +201,12 @@ function DetailModal({
                 <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span className="text-white text-sm font-medium">{formatDisplayTime(record.timeIn)}</span>
               </div>
+              {(record.timeInDate || record.timeInTimestamp) && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-white/40 text-xs">{formatDisplayDate(record.timeInDate || record.timeInTimestamp || '')}</span>
+                </div>
+              )}
               {record.timeInAddress && (
                 <div className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
@@ -230,6 +245,12 @@ function DetailModal({
                 <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span className="text-white text-sm font-medium">{formatDisplayTime(record.timeOut)}</span>
               </div>
+              {(record.timeOutDate || record.timeOutTimestamp) && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-white/40 text-xs">{formatDisplayDate(record.timeOutDate || record.timeOutTimestamp || '')}</span>
+                </div>
+              )}
               {record.timeOutAddress && (
                 <div className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />

@@ -230,13 +230,13 @@ export default function LoginScreen({ onLogin, onShowSettings }: Props) {
         </p>
 
         {/* Settings access for initial configuration */}
-        <button
+        {/* <button
           onClick={onShowSettings}
           className="mt-4 text-blue-300/50 hover:text-blue-200 text-[10px] flex items-center gap-1 mx-auto transition-colors"
         >
           <Settings className="w-3 h-3" />
           System Configuration
-        </button>
+        </button>*/}
       </div>
     </div>
   );

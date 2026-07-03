@@ -20,6 +20,7 @@ import NotificationInbox from './NotificationInbox';
 import TimeCorrectionFiling from './TimeCorrectionFiling';
 import TimeCorrectionReport from './TimeCorrectionReport';
 import TimeCorrectionApproval from './TimeCorrectionApproval';
+import DTRManagement from './DTRManagement';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -44,6 +45,7 @@ import {
   Users,
   Bell,
   Shield,
+  FileText,
 } from 'lucide-react';
 
 interface Props {
@@ -53,7 +55,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -84,7 +86,13 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const [unreadCount, setUnreadCount] = useState(0);
 
   const ADMIN_EMAIL = 'rommeljvr@gmail.com';
-  const isAdmin = user.email?.toLowerCase() === ADMIN_EMAIL;
+
+  const isSuperAdmin =
+    user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  const isAdmin =
+    isSuperAdmin ||
+    user.employee?.role?.toLowerCase() === 'admin';
 
   const nextAction: 'TIME_IN' | 'TIME_OUT' =
     lastAction?.action === 'TIME_IN' ? 'TIME_OUT' : 'TIME_IN';
@@ -377,6 +385,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   if (activeTab === 'leave-report') {
     return <LeaveReport user={user} onBack={() => setActiveTab('leave')} />;
+  }
+
+  if (activeTab === 'dtr-management') {
+    return <DTRManagement user={user} onBack={() => setActiveTab('home')} />;
   }
 
   // ── Main render ──────────────────────────────────────────
@@ -936,7 +948,17 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
             </button>
           )}
 
-          {isAdmin && (
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('dtr-management'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'dtr-management' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <FileText className="w-4.5 h-4.5 shrink-0" />
+            DTR Management
+          </button>
+
+          {isSuperAdmin && (
             <button
               onClick={() => { setShowDrawer(false); setActiveTab('setup'); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${

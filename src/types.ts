@@ -131,7 +131,10 @@ export type NotificationType =
   | 'TC_ACKNOWLEDGED'
   | 'TC_APPROVED'
   | 'TC_REJECTED'
-  | 'TC_CANCELLED';
+  | 'TC_CANCELLED'
+  | 'DTR_GENERATED'
+  | 'DTR_REGENERATED'
+  | 'DTR_ISSUE_SUBMITTED';
 
 export interface AppNotification {
   id: string;
@@ -140,6 +143,7 @@ export interface AppNotification {
   message: string;
   leaveId?: string;
   timeCorrectionId?: string;
+  dtrId?: string;
   isRead: boolean;
   createdAt: string;
 }
@@ -178,4 +182,115 @@ export interface TimeCorrectionApprovalRecord {
   action: 'Approve' | 'Reject' | 'Cancel';
   reason?: string;
   timestamp: string;
+}
+
+// ── DTR Management ─────────────────────────────────────────────────
+
+export type DTRStatus =
+  | 'Draft'
+  | 'Generated'
+  | 'Sent to Employee'
+  | 'Acknowledged'
+  | 'Returned for Review'
+  | 'Regenerated'
+  | 'Finalized';
+
+export type DTRCutOff = '1st' | '2nd';
+
+export type AttendanceStatus =
+  | 'Present'
+  | 'Late'
+  | 'Absent'
+  | 'Half Day'
+  | 'Official Business'
+  | 'Holiday'
+  | 'Rest Day'
+  | 'Approved Leave'
+  | 'Missing Time In'
+  | 'Missing Time Out';
+
+export type DTRIssueType =
+  | 'Missing Time In'
+  | 'Missing Time Out'
+  | 'Incorrect Schedule'
+  | 'Incorrect Leave'
+  | 'Wrong Attendance Status'
+  | 'Missing Photo'
+  | 'Incorrect Location'
+  | 'Other';
+
+export interface DTRDayRecord {
+  date: string;
+  dayOfWeek: string;
+  timeIn?: string;
+  timeOut?: string;
+  workingHours?: number;
+  status: AttendanceStatus;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  timeInImageUrl?: string;
+  timeOutImageUrl?: string;
+  timeInTimestamp?: string;
+  timeOutTimestamp?: string;
+  deviceUsed?: string;
+  remarks?: string;
+}
+
+export interface DTRSummary {
+  totalWorkingDays: number;
+  daysPresent: number;
+  daysAbsent: number;
+  approvedLeave: number;
+  lateCount: number;
+  undertimeCount: number;
+  missingTimeIn: number;
+  missingTimeOut: number;
+  totalHoursWorked: number;
+}
+
+export interface DTRIssue {
+  id: string;
+  dtrId: string;
+  employeeEmail: string;
+  employeeName: string;
+  issueType: DTRIssueType;
+  comments: string;
+  submittedAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface DTRAuditEntry {
+  action: string;
+  performedBy: string;
+  performedAt: string;
+  note?: string;
+}
+
+export interface DTRRecord {
+  id: string;
+  version: number;
+  employeeEmail: string;
+  employeeName: string;
+  employeeNumber?: string;
+  department: string;
+  designation: string;
+  branch?: string;
+  month: number;
+  year: number;
+  cutOff: DTRCutOff;
+  coverageStart: string;
+  coverageEnd: string;
+  status: DTRStatus;
+  generatedBy: string;
+  generatedAt: string;
+  sentAt?: string;
+  viewedAt?: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  days: DTRDayRecord[];
+  summary: DTRSummary;
+  issues?: DTRIssue[];
+  auditTrail?: DTRAuditEntry[];
 }
