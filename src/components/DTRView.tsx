@@ -1,12 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  ArrowLeft, CheckCircle2, AlertCircle, Clock, MapPin, Camera,
-  Calendar, User as UserIcon, Building2, Briefcase, ChevronDown,
+  ArrowLeft, CheckCircle2, AlertCircle, Clock, MapPin,
+  User as UserIcon, Building2, Briefcase, ChevronDown,
   ChevronUp, X, Loader2, RotateCcw, FileText, Navigation,
   ThumbsUp, MessageSquare,
 } from 'lucide-react';
 import { User, DTRRecord, DTRDayRecord, DTRIssueType, AttendanceStatus } from '../types';
-import { acknowledgeDTR, reportDTRIssue } from '../utils/sheets';
+import { acknowledgeDTR, reportDTRIssue, fetchImageBase64 } from '../utils/sheets';
+
+function extractDriveId(url: string): string | null {
+  if (!url) return null;
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function DriveImageButton({ url, label, onLightbox }: { url: string; label: string; onLightbox: (src: string) => void }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    const id = extractDriveId(url);
+    if (!id) { setErr(true); return; }
+    fetchImageBase64(id).then(b64 => {
+      if (b64) setSrc(b64);
+      else setErr(true);
+    });
+  }, [url]);
+  return (
+    <button onClick={() => src && onLightbox(src)} className="flex flex-col items-center gap-1" disabled={!src}>
+      <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+        {err ? <span className="text-white/20 text-[9px]">N/A</span>
+          : !src ? <div className="w-full h-full animate-pulse bg-white/10" />
+          : <img src={src} alt={label} className="w-full h-full object-cover" />}
+      </div>
+      <span className="text-white/30 text-[9px]">{label}</span>
+    </button>
+  );
+}
 
 interface Props {
   dtr: DTRRecord;
@@ -98,8 +127,8 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
             <p className="text-white/30 text-[10px]">{day.dayOfWeek}</p>
           </div>
           <div className="text-right mr-2">
-            <p className="text-white text-xs">{fmtTime(day.timeIn)}</p>
-            <p className="text-white/50 text-[10px]">{fmtTime(day.timeOut)}</p>
+            <p className="text-white text-xs">{fmtTime(day.timeIn ?? '')}</p>
+            <p className="text-white/50 text-[10px]">{fmtTime(day.timeOut ?? '')}</p>
           </div>
           <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${STATUS_BADGE[day.status] || 'bg-white/10 text-white/40 border-white/10'}`}>
             {day.status}
@@ -147,22 +176,10 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
             {(day.timeInImageUrl || day.timeOutImageUrl) && (
               <div className="flex gap-2">
                 {day.timeInImageUrl && (
-                  <button onClick={() => setLightbox(day.timeInImageUrl!)}
-                    className="flex flex-col items-center gap-1">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5 border border-white/10">
-                      <img src={day.timeInImageUrl} alt="Time In" className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-white/30 text-[9px]">Time In</span>
-                  </button>
+                  <DriveImageButton url={day.timeInImageUrl} label="Time In" onLightbox={setLightbox} />
                 )}
                 {day.timeOutImageUrl && (
-                  <button onClick={() => setLightbox(day.timeOutImageUrl!)}
-                    className="flex flex-col items-center gap-1">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5 border border-white/10">
-                      <img src={day.timeOutImageUrl} alt="Time Out" className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-white/30 text-[9px]">Time Out</span>
-                  </button>
+                  <DriveImageButton url={day.timeOutImageUrl} label="Time Out" onLightbox={setLightbox} />
                 )}
               </div>
             )}
