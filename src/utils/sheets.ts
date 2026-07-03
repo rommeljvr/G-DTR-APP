@@ -3543,39 +3543,107 @@ function generateDTR(data) {
   var coverageStart = month + '/' + startDay + '/' + year;
   var coverageEnd   = month + '/' + endDay   + '/' + year;
 
-  // Pull attendance records for this employee in the coverage range
+  // Pull attendance records for this employee.
+  // We load one extra calendar day beyond endDay to catch overnight TIME_OUTs.
   var attSheet = ss.getSheetByName('Attendance');
   var attRows  = attSheet ? attSheet.getDataRange().getValues() : [];
-  var empAttMap = {};
+
+  // Helper: format a Date to M/D/YYYY key
+  function dateKey(d) {
+    return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+
+  // endDayDate is the last coverage date; nextDay is endDay+1 for overnight look-ahead
+  var endDayDate = new Date(year, month - 1, endDay);
+  var nextDayDate = new Date(year, month - 1, endDay + 1);
+  var nextDayKey  = dateKey(nextDayDate);
+
+  var empAttMap = {}; // dateKey -> { timeIn: entry|null, timeOut: entry|null }
+  // Also keep a separate bucket for records on the day AFTER coverage end (overnight)
+  var nextDayBucket = { timeIn: null, timeOut: null };
+
   for (var ai = 1; ai < attRows.length; ai++) {
     var rowEmail  = String(attRows[ai][3] || '').trim().toLowerCase();
     if (rowEmail !== empEmail) continue;
-    var rawDate   = attRows[ai][6];
-    var dateStr   = rawDate instanceof Date
-      ? (rawDate.getMonth()+1) + '/' + rawDate.getDate() + '/' + rawDate.getFullYear()
+
+    // Use actual timestamp for tsMs — most reliable for ordering
+    var tsRaw = attRows[ai][5];
+    var tsMs  = tsRaw instanceof Date ? tsRaw.getTime() : new Date(String(tsRaw || '')).getTime();
+    if (isNaN(tsMs)) continue;
+
+    // Derive the calendar date from col 6 (Date column)
+    var rawDate = attRows[ai][6];
+    var dateStr = rawDate instanceof Date
+      ? dateKey(rawDate)
       : String(rawDate || '').trim();
     var d = new Date(dateStr);
-    if (isNaN(d.getTime())) continue;
-    if (d.getFullYear() !== year || (d.getMonth()+1) !== month) continue;
-    if (d.getDate() < startDay || d.getDate() > endDay) continue;
-    if (!empAttMap[dateStr]) empAttMap[dateStr] = { timeIn: null, timeOut: null };
+    if (isNaN(d.getTime())) {
+      // Fall back: derive date from timestamp
+      var tsDate = new Date(tsMs);
+      dateStr = dateKey(tsDate);
+      d = tsDate;
+    }
+
     var action = String(attRows[ai][4] || '').trim();
     var entry  = {
       time:      String(attRows[ai][7]  || ''),
-      timestamp: String(attRows[ai][5]  || ''),
+      timestamp: String(attRows[ai][5] instanceof Date
+        ? Utilities.formatDate(attRows[ai][5], 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'")
+        : (attRows[ai][5] || '')),
       latitude:  Number(attRows[ai][8]  || 0),
       longitude: Number(attRows[ai][9]  || 0),
       address:   String(attRows[ai][11] || ''),
       imageId:   String(attRows[ai][15] || ''),
       imageUrl:  String(attRows[ai][16] || ''),
-      tsMs: rawDate instanceof Date ? rawDate.getTime() : new Date(String(attRows[ai][5] || '')).getTime()
+      tsMs:      tsMs
     };
-    if (action === 'TIME_IN') {
-      if (!empAttMap[dateStr].timeIn || entry.tsMs < empAttMap[dateStr].timeIn.tsMs)
-        empAttMap[dateStr].timeIn = entry;
-    } else if (action === 'TIME_OUT') {
-      if (!empAttMap[dateStr].timeOut || entry.tsMs > empAttMap[dateStr].timeOut.tsMs)
-        empAttMap[dateStr].timeOut = entry;
+
+    // Check if this row falls within coverage range (including endDay+1 for overnight)
+    var inCoverage = (d.getFullYear() === year && (d.getMonth()+1) === month
+                      && d.getDate() >= startDay && d.getDate() <= endDay);
+    var isNextDay  = (dateStr === nextDayKey);
+
+    if (inCoverage) {
+      if (!empAttMap[dateStr]) empAttMap[dateStr] = { timeIn: null, timeOut: null };
+      if (action === 'TIME_IN') {
+        // Keep earliest TIME_IN
+        if (!empAttMap[dateStr].timeIn || tsMs < empAttMap[dateStr].timeIn.tsMs)
+          empAttMap[dateStr].timeIn = entry;
+      } else if (action === 'TIME_OUT') {
+        // Keep latest TIME_OUT
+        if (!empAttMap[dateStr].timeOut || tsMs > empAttMap[dateStr].timeOut.tsMs)
+          empAttMap[dateStr].timeOut = entry;
+      }
+    } else if (isNextDay && action === 'TIME_OUT') {
+      // Candidate overnight TIME_OUT — keep the latest one on the next day
+      if (!nextDayBucket.timeOut || tsMs > nextDayBucket.timeOut.tsMs)
+        nextDayBucket.timeOut = entry;
+    }
+  }
+
+  // Overnight shift resolution:
+  // For every coverage date that has TIME_IN but NO TIME_OUT,
+  // check if the next calendar day has an unmatched TIME_OUT and assign it.
+  for (var dk in empAttMap) {
+    var slot = empAttMap[dk];
+    if (slot.timeIn && !slot.timeOut) {
+      var slotDate = new Date(dk);
+      var slotNext = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate() + 1);
+      var slotNextKey = dateKey(slotNext);
+      // Check nextDayBucket (last coverage day) or the next day's own slot
+      var candidate = null;
+      if (slotNextKey === nextDayKey && nextDayBucket.timeOut) {
+        candidate = nextDayBucket.timeOut;
+      } else if (empAttMap[slotNextKey] && empAttMap[slotNextKey].timeOut) {
+        // Only use it if the next day has no TIME_IN of its own (unambiguous overnight)
+        if (!empAttMap[slotNextKey].timeIn) {
+          candidate = empAttMap[slotNextKey].timeOut;
+          empAttMap[slotNextKey].timeOut = null; // consumed
+        }
+      }
+      if (candidate && candidate.tsMs > slot.timeIn.tsMs) {
+        slot.timeOut = candidate;
+      }
     }
   }
 
