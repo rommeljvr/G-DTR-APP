@@ -2770,8 +2770,9 @@ function getNotifications(email) {
         userId:             rows[i][1],
         type:               nType,
         message:            rows[i][3],
-        leaveId:            nType.indexOf('TC_') === 0 ? '' : refId,
+        leaveId:            nType.indexOf('LEAVE_') === 0 || nType === 'PENDING_APPROVAL' ? refId : '',
         timeCorrectionId:   nType.indexOf('TC_') === 0 ? refId : '',
+        dtrId:              nType.indexOf('DTR_') === 0 ? refId : '',
         isRead:             rows[i][5] === 'true' || rows[i][5] === true,
         createdAt:          rows[i][6]
       });

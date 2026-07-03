@@ -355,7 +355,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   if (activeTab === 'notifications') {
-    return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={handleNotifRead} />;
+    return <NotificationInbox user={user} onBack={() => setActiveTab('home')} onRead={handleNotifRead} onNavigateDTR={() => setActiveTab('dtr-management')} />;
   }
 
   if (activeTab === 'leave-approval') {

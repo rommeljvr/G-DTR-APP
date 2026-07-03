@@ -13,6 +13,7 @@ interface Props {
   user: User;
   onBack: () => void;
   onRead: () => void;
+  onNavigateDTR?: () => void;
 }
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
@@ -27,6 +28,9 @@ const TYPE_META: Record<NotificationType, { label: string; icon: string; color: 
   TC_APPROVED:        { label: 'TC Approved',            icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
   TC_REJECTED:        { label: 'TC Rejected',            icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
   TC_CANCELLED:       { label: 'TC Cancelled',           icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
+  DTR_GENERATED:      { label: 'DTR Generated',          icon: '📄', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  DTR_REGENERATED:    { label: 'DTR Regenerated',        icon: '🔄', color: 'bg-orange-500/15 border-orange-400/20 text-orange-300' },
+  DTR_ISSUE_SUBMITTED:{ label: 'DTR Issue Reported',     icon: '⚠️', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
 };
 
 function timeAgo(iso: string): string {
@@ -41,7 +45,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function NotificationInbox({ user, onBack, onRead }: Props) {
+export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR }: Props) {
   const [items, setItems]           = useState<AppNotification[]>([]);
   const [loading, setLoading]       = useState(true);
   const [actingId, setActingId]     = useState<string | null>(null);
@@ -259,7 +263,7 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
               const tl = String(settings.teamLeadEmail || '').toLowerCase();
               const appr = String(settings.approverEmail || '').toLowerCase();
               const wf = settings.workflowType || 'DIRECT';
-              const status = tc.status;
+              const status = tc.status as string;
               if (wf === 'TWO_STEP') {
                 tcCanAcknowledge = status === 'Pending' && userLower === tl;
                 tcCanApprove = ((status === 'Pending' || status === 'Acknowledged') && userLower === appr);
@@ -306,6 +310,16 @@ export default function NotificationInbox({ user, onBack, onRead }: Props) {
                   >
                     {detailLoading === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
                     View TC Details
+                  </button>
+                )}
+                {/* View DTR — for DTR_ notifications */}
+                {n.dtrId && onNavigateDTR && (
+                  <button
+                    onClick={async () => { await dismiss(n.id); onNavigateDTR(); }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-blue-500/15"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    View DTR
                   </button>
                 )}
                 {/* Acknowledge + Reject for PENDING_APPROVAL (Leave) */}
