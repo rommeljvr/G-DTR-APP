@@ -8,6 +8,7 @@ import {
 import { User, DTRRecord, DTRStatus, DTRCutOff } from '../types';
 import { generateDTR, regenerateDTR, getDTRList, getEmployeeDTRList, resolveDTRIssue, getDTRById, getEmployees, EmployeeRecord } from '../utils/sheets';
 import DTRView from './DTRView';
+import EmployeeAvatar from './EmployeeAvatar';
 
 interface Props {
   user: User;
@@ -559,9 +560,11 @@ export default function DTRManagement({ user, onBack }: Props) {
             {/* Card header */}
             <div className="px-4 pt-4 pb-3">
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
-                  <FileText className="w-4.5 h-4.5 text-white" />
-                </div>
+                <EmployeeAvatar
+                  src={r.employeeImage || _empCache?.find(e => e.email.toLowerCase() === r.employeeEmail.toLowerCase())?.image}
+                  name={r.employeeName}
+                  size="md"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-semibold text-sm truncate">{r.employeeName}</p>
                   <p className="text-white/40 text-xs truncate">{r.employeeEmail}</p>

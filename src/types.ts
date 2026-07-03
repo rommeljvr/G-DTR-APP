@@ -278,6 +278,7 @@ export interface DTRRecord {
   employeeEmail: string;
   employeeName: string;
   employeeNumber?: string;
+  employeeImage?: string;
   department: string;
   designation: string;
   branch?: string;

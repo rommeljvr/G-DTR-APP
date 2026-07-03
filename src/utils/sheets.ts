@@ -4089,6 +4089,25 @@ function regenerateDTR(dtrId, adminEmail) {
   return _json({ success: false, message: 'DTR not found' });
 }
 
+// ── Build email → image URL map from Employee sheet (used by all DTR reads) ──
+function getEmpImageMap() {
+  var map = {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var empSheet = ss.getSheetByName('Employee');
+  if (!empSheet) return map;
+  var rows    = empSheet.getDataRange().getValues();
+  var headers = rows[0];
+  var cEmail  = findColumnIndex(headers, ['Email', 'Email Address']);
+  var cImg    = findColumnIndex(headers, ['Image', 'Photo', 'Picture']);
+  if (cEmail === -1 || cImg === -1) return map;
+  for (var i = 1; i < rows.length; i++) {
+    var em = String(rows[i][cEmail] || '').trim().toLowerCase();
+    var img = String(rows[i][cImg]  || '').trim();
+    if (em && img) map[em] = img;
+  }
+  return map;
+}
+
 // ── Shared admin-role check ─────────────────────────────────────
 function isAdminRole(emailToCheck) {
   if (!emailToCheck) return false;
@@ -4110,29 +4129,31 @@ function isAdminRole(emailToCheck) {
 // getDTRList – admin only; returns all DTR records
 function getDTRList(email) {
   if (!isAdminRole(email)) return _json({ success: false, message: 'Unauthorized' });
-  var sheet = initDTRSheet();
-  var rows  = sheet.getDataRange().getValues();
+  var imgMap  = getEmpImageMap();
+  var sheet   = initDTRSheet();
+  var rows    = sheet.getDataRange().getValues();
   var records = [];
   for (var i = 1; i < rows.length; i++) {
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
     records.push({
-      id:            String(rows[i][0]),
-      version:       Number(rows[i][1]),
-      employeeEmail: empEmail,
-      employeeName:  String(rows[i][3]),
-      department:    String(rows[i][5]),
-      designation:   String(rows[i][6]),
-      month:         Number(rows[i][8]),
-      year:          Number(rows[i][9]),
-      cutOff:        String(rows[i][10]),
-      coverageStart: String(rows[i][11]),
-      coverageEnd:   String(rows[i][12]),
-      status:        String(rows[i][13]),
-      generatedBy:   String(rows[i][14]),
-      generatedAt:   String(rows[i][15]),
-      sentAt:        String(rows[i][16] || ''),
-      acknowledgedAt:String(rows[i][18] || ''),
-      acknowledgedBy:String(rows[i][19] || '')
+      id:             String(rows[i][0]),
+      version:        Number(rows[i][1]),
+      employeeEmail:  empEmail,
+      employeeName:   String(rows[i][3]),
+      employeeImage:  imgMap[empEmail] || '',
+      department:     String(rows[i][5]),
+      designation:    String(rows[i][6]),
+      month:          Number(rows[i][8]),
+      year:           Number(rows[i][9]),
+      cutOff:         String(rows[i][10]),
+      coverageStart:  String(rows[i][11]),
+      coverageEnd:    String(rows[i][12]),
+      status:         String(rows[i][13]),
+      generatedBy:    String(rows[i][14]),
+      generatedAt:    String(rows[i][15]),
+      sentAt:         String(rows[i][16] || ''),
+      acknowledgedAt: String(rows[i][18] || ''),
+      acknowledgedBy: String(rows[i][19] || '')
     });
   }
   records.reverse();
@@ -4143,30 +4164,32 @@ function getDTRList(email) {
 function getEmployeeDTRList(email) {
   if (!email) return _json({ success: false, message: 'Email required' });
   var emailLower = email.toLowerCase();
-  var sheet = initDTRSheet();
-  var rows  = sheet.getDataRange().getValues();
+  var imgMap  = getEmpImageMap();
+  var sheet   = initDTRSheet();
+  var rows    = sheet.getDataRange().getValues();
   var records = [];
   for (var i = 1; i < rows.length; i++) {
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
     if (empEmail !== emailLower) continue;
     records.push({
-      id:            String(rows[i][0]),
-      version:       Number(rows[i][1]),
-      employeeEmail: empEmail,
-      employeeName:  String(rows[i][3]),
-      department:    String(rows[i][5]),
-      designation:   String(rows[i][6]),
-      month:         Number(rows[i][8]),
-      year:          Number(rows[i][9]),
-      cutOff:        String(rows[i][10]),
-      coverageStart: String(rows[i][11]),
-      coverageEnd:   String(rows[i][12]),
-      status:        String(rows[i][13]),
-      generatedBy:   String(rows[i][14]),
-      generatedAt:   String(rows[i][15]),
-      sentAt:        String(rows[i][16] || ''),
-      acknowledgedAt:String(rows[i][18] || ''),
-      acknowledgedBy:String(rows[i][19] || '')
+      id:             String(rows[i][0]),
+      version:        Number(rows[i][1]),
+      employeeEmail:  empEmail,
+      employeeName:   String(rows[i][3]),
+      employeeImage:  imgMap[empEmail] || '',
+      department:     String(rows[i][5]),
+      designation:    String(rows[i][6]),
+      month:          Number(rows[i][8]),
+      year:           Number(rows[i][9]),
+      cutOff:         String(rows[i][10]),
+      coverageStart:  String(rows[i][11]),
+      coverageEnd:    String(rows[i][12]),
+      status:         String(rows[i][13]),
+      generatedBy:    String(rows[i][14]),
+      generatedAt:    String(rows[i][15]),
+      sentAt:         String(rows[i][16] || ''),
+      acknowledgedAt: String(rows[i][18] || ''),
+      acknowledgedBy: String(rows[i][19] || '')
     });
   }
   records.reverse();
@@ -4249,6 +4272,7 @@ function getDTRById(dtrId, requesterEmail) {
       acknowledgedAt:  String(rows[i][18] || ''),
       acknowledgedBy:  String(rows[i][19] || ''),
       acknowledgedRole:ackRole,
+      employeeImage:   (getEmpImageMap()[empEmail] || ''),
       days:            days,
       summary:         summary,
       issues:          issues,

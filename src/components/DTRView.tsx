@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
   ArrowLeft, CheckCircle2, AlertCircle, Clock, MapPin,
-  User as UserIcon, Building2, Briefcase, ChevronDown,
+  Building2, Briefcase, ChevronDown,
   ChevronUp, X, Loader2, RotateCcw, FileText, Navigation,
   ThumbsUp, MessageSquare, Lock, ShieldCheck,
 } from 'lucide-react';
 import { User, DTRRecord, DTRDayRecord, DTRIssueType, AttendanceStatus } from '../types';
 import { acknowledgeDTR, reportDTRIssue } from '../utils/sheets';
 import DriveImage from './DriveImage';
+import EmployeeAvatar from './EmployeeAvatar';
 
 function extractDriveId(url: string): string | null {
   if (!url) return null;
@@ -230,6 +231,7 @@ function DayRow({ day, idx }: { day: DTRDayRecord; idx: number }) {
 export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onResolveIssue }: Props) {
   const [showAckModal, setShowAckModal]     = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showAvatarLightbox, setShowAvatarLightbox] = useState(false);
   const [issueType, setIssueType]           = useState<DTRIssueType>('Missing Time In');
   const [issueComment, setIssueComment]     = useState('');
   const [submitting, setSubmitting]         = useState(false);
@@ -346,10 +348,29 @@ export default function DTRView({ dtr, user, isAdmin, onBack, onRegenerate, onRe
 
         {/* Employee info card */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
-              <UserIcon className="w-5 h-5 text-white" />
+          {/* Avatar lightbox */}
+          {showAvatarLightbox && dtr.employeeImage && (
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+              onClick={() => setShowAvatarLightbox(false)}
+            >
+              <img
+                src={dtr.employeeImage}
+                alt={dtr.employeeName}
+                className="w-48 h-48 rounded-2xl object-cover shadow-2xl"
+              />
+              <button className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10">
+                <X className="w-5 h-5 text-white" />
+              </button>
             </div>
+          )}
+          <div className="flex items-center gap-3 mb-3">
+            <EmployeeAvatar
+              src={dtr.employeeImage}
+              name={dtr.employeeName}
+              size="lg"
+              onClick={dtr.employeeImage ? () => setShowAvatarLightbox(true) : undefined}
+            />
             <div className="flex-1 min-w-0">
               <p className="text-white font-semibold text-sm truncate">{dtr.employeeName}</p>
               <p className="text-white/40 text-xs truncate">{dtr.employeeEmail}</p>
