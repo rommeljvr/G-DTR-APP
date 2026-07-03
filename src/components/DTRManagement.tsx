@@ -250,6 +250,14 @@ export default function DTRManagement({ user, onBack }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  const openDTR = async (id: string) => {
+    setActingId(id);
+    const res = await getDTRById(id, user.email);
+    setActingId(null);
+    if (res.success && res.record) setViewDTR(res.record);
+    else showToast('error', res.message || 'Failed to load DTR');
+  };
+
   const handleGenerate = async () => {
     if (!isAdmin) { showToast('error', 'Unauthorized'); return; }
     if (!genEmpEmail.trim()) {
@@ -263,7 +271,17 @@ export default function DTRManagement({ user, onBack }: Props) {
       month: genMonth, year: genYear, cutOff: genCutOff,
     });
     setGenerating(false);
-    if (res.success) {
+    if (res.success && res.dtrId) {
+      setShowGenerate(false);
+      setGenEmpEmail('');
+      // Pre-focus the list on this period
+      setFilterMonth(genMonth);
+      setFilterYear(genYear);
+      setFilterCutOff(genCutOff);
+      await load();
+      showToast('success', 'DTR generated — opening record…');
+      openDTR(res.dtrId);
+    } else if (res.success) {
       showToast('success', 'DTR generated successfully');
       setShowGenerate(false);
       setGenEmpEmail('');
@@ -273,21 +291,24 @@ export default function DTRManagement({ user, onBack }: Props) {
     }
   };
 
-  const handleRegenerate = async (dtrId: string) => {
+  const handleRegenerate = async (id: string) => {
     if (!isAdmin) { showToast('error', 'Unauthorized'); return; }
-    setActingId(dtrId);
-    const res = await regenerateDTR(dtrId, user.email);
+    setActingId(id);
+    const res = await regenerateDTR(id, user.email);
     setActingId(null);
-    if (res.success) { showToast('success', 'DTR regenerated'); load(); }
-    else showToast('error', res.message || 'Failed');
+    if (res.success) {
+      // The regenerated record gets a new dtrId; fall back to original id if not returned
+      const newId = res.dtrId || id;
+      await load();
+      showToast('success', 'DTR regenerated — opening record…');
+      openDTR(newId);
+    } else {
+      showToast('error', res.message || 'Failed');
+    }
   };
 
   const handleViewFull = async (id: string) => {
-    setActingId(id);
-    const res = await getDTRById(id, user.email);
-    setActingId(null);
-    if (res.success && res.record) setViewDTR(res.record);
-    else showToast('error', res.message || 'Failed to load DTR');
+    openDTR(id);
   };
 
   const handleResolveIssue = async (issueId: string) => {
