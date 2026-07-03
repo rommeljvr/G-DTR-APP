@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import {
   ArrowLeft, FileText, RefreshCw, Loader2, Plus, Search, Filter,
   CheckCircle2, Clock, AlertCircle, RotateCcw, X, Eye,
@@ -39,6 +40,51 @@ function cutOffLabel(month: number, year: number, cutOff: DTRCutOff): string {
   const mon = MONTHS[month - 1] || '';
   const range = cutOff === '1st' ? '1–15' : `16–${new Date(year, month, 0).getDate()}`;
   return `${mon} ${year} • ${cutOff} Cut-Off (${range})`;
+}
+
+// ── Custom dark-themed select dropdown ─────────────────────────────────────
+function SelectField<T extends string | number>({ label, value, onChange, children }: {
+  label: string; value: T; onChange: (v: T) => void; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  // Find the selected label from children
+  const opts: { value: T; label: string }[] = [];
+  React.Children.forEach(children, (child: any) => {
+    if (child?.props) opts.push({ value: child.props.value, label: child.props.children });
+  });
+  const selectedLabel = opts.find(o => String(o.value) === String(value))?.label ?? String(value);
+
+  return (
+    <div className="relative">
+      <label className="text-white/50 text-xs mb-1 block">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full flex items-center justify-between gap-2 bg-slate-800 border rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
+          open ? 'border-blue-400/50' : 'border-white/10'
+        }`}
+      >
+        <span className="text-white font-medium">{selectedLabel}</span>
+        <ChevronDown className={`w-4 h-4 text-white/40 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+          {opts.map(opt => (
+            <button
+              key={String(opt.value)}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-white/8 ${
+                String(opt.value) === String(value) ? 'text-blue-300 bg-blue-500/10' : 'text-white/80'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Searchable employee picker (same pattern as ApproverSettings) ───────────
@@ -367,23 +413,23 @@ export default function DTRManagement({ user, onBack }: Props) {
         {showFilters && (
           <div className="mt-2 grid grid-cols-2 gap-2">
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as DTRStatus | '')}
-              className="bg-white/5 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
+              className="bg-slate-800 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
               <option value="">All Statuses</option>
               {Object.keys(STATUS_STYLE).map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <select value={filterCutOff} onChange={e => setFilterCutOff(e.target.value as DTRCutOff | '')}
-              className="bg-white/5 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
+              className="bg-slate-800 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
               <option value="">All Cut-Offs</option>
               <option value="1st">1st Cut-Off</option>
               <option value="2nd">2nd Cut-Off</option>
             </select>
             <select value={filterMonth} onChange={e => setFilterMonth(e.target.value ? Number(e.target.value) : '')}
-              className="bg-white/5 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
+              className="bg-slate-800 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
               <option value="">All Months</option>
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
             <select value={filterYear} onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : '')}
-              className="bg-white/5 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
+              className="bg-slate-800 border border-white/10 text-white/70 text-xs rounded-xl px-3 py-2 outline-none">
               <option value="">All Years</option>
               {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
@@ -485,60 +531,56 @@ export default function DTRManagement({ user, onBack }: Props) {
 
       {/* Generate Modal */}
       {showGenerate && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setShowGenerate(false); }}>
-          <div className="w-full bg-slate-900 border-t border-white/10 rounded-t-3xl px-5 pt-5 pb-10 space-y-4">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-white font-bold text-base">Generate DTR</h2>
-              <button onClick={() => setShowGenerate(false)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={e => { if (e.target === e.currentTarget) setShowGenerate(false); }}>
+          <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl px-5 pt-5 pb-6 space-y-4 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-blue-300" />
+                </div>
+                <h2 className="text-white font-bold text-base">Generate DTR</h2>
+              </div>
+              <button onClick={() => setShowGenerate(false)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
                 <X className="w-4 h-4 text-white" />
               </button>
             </div>
 
             <div className="space-y-3">
               {/* Month + Year */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-white/50 text-xs mb-1 block">Month</label>
-                  <select value={genMonth} onChange={e => setGenMonth(Number(e.target.value))}
-                    className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none">
-                    {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-white/50 text-xs mb-1 block">Year</label>
-                  <select value={genYear} onChange={e => setGenYear(Number(e.target.value))}
-                    className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none">
-                    {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <SelectField<number> label="Month" value={genMonth} onChange={setGenMonth}>
+                  {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </SelectField>
+                <SelectField<number> label="Year" value={genYear} onChange={setGenYear}>
+                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                </SelectField>
               </div>
 
               {/* Cut-off */}
               <div>
-                <label className="text-white/50 text-xs mb-1 block">Payroll Cut-Off</label>
+                <label className="text-white/50 text-xs mb-1.5 block">Payroll Cut-Off</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(['1st', '2nd'] as DTRCutOff[]).map(c => (
-                    <button key={c} onClick={() => setGenCutOff(c)}
+                    <button key={c} type="button" onClick={() => setGenCutOff(c)}
                       className={`py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                        genCutOff === c ? 'bg-blue-500/20 text-blue-300 border-blue-400/30' : 'bg-white/5 text-white/60 border-white/10'
+                        genCutOff === c ? 'bg-blue-500/20 text-blue-300 border-blue-400/30' : 'bg-slate-800 text-white/60 border-white/10 hover:border-white/20'
                       }`}
                     >
                       {c} Cut-Off
                     </button>
                   ))}
                 </div>
-                <p className="text-white/30 text-xs mt-1">
-                  {genCutOff === '1st'
-                    ? `Coverage: ${MONTHS[genMonth - 1]} 1–15, ${genYear}`
-                    : `Coverage: ${MONTHS[genMonth - 1]} 16–${new Date(genYear, genMonth, 0).getDate()}, ${genYear}`}
+                <p className="text-white/30 text-xs mt-1.5">
+                  📅 Coverage: <span className="text-white/50">{MONTHS[genMonth - 1]} {genCutOff === '1st' ? `1–15` : `16–${new Date(genYear, genMonth, 0).getDate()}`}, {genYear}</span>
                 </p>
               </div>
 
               {/* Employee */}
               <div>
-                <label className="text-white/50 text-xs mb-1 block">Employee</label>
+                <label className="text-white/50 text-xs mb-1.5 block">Employee</label>
                 {empLoading ? (
-                  <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-3">
+                  <div className="flex items-center gap-2 bg-slate-800 border border-white/10 rounded-xl px-3 py-3">
                     <Loader2 className="w-4 h-4 text-white/30 animate-spin" />
                     <span className="text-white/30 text-sm">Loading employees…</span>
                   </div>
@@ -555,10 +597,10 @@ export default function DTRManagement({ user, onBack }: Props) {
             <button
               onClick={handleGenerate}
               disabled={generating || !genEmpEmail}
-              className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-400 text-white font-semibold text-sm py-3 rounded-xl disabled:opacity-60 active:scale-[0.98] transition-all"
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm py-3 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-all"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              {generating ? 'Generating...' : 'Generate DTR'}
+              {generating ? 'Generating…' : 'Generate DTR'}
             </button>
           </div>
         </div>
