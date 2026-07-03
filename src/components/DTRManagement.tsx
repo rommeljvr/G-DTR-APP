@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import React from 'react';
 import {
   ArrowLeft, FileText, RefreshCw, Loader2, Plus, Search, Filter,
@@ -193,6 +193,47 @@ function EmployeeSelect({
   );
 }
 
+// ── Module-level employee cache — survives remounts, fetched once per session ──
+let _empCache: EmployeeRecord[] | null = null;
+let _empCachePromise: Promise<EmployeeRecord[]> | null = null;
+
+function getEmployeeCache(): Promise<EmployeeRecord[]> {
+  if (_empCache) return Promise.resolve(_empCache);
+  if (_empCachePromise) return _empCachePromise;
+  _empCachePromise = getEmployees().then(res => {
+    const list = res.success ? res.employees.filter((e: EmployeeRecord) => e.active !== false) : [];
+    _empCache = list;
+    _empCachePromise = null;
+    return list;
+  });
+  return _empCachePromise;
+}
+
+// ── Skeleton card shown while records are loading ──────────────────────────
+function SkeletonCard() {
+  return (
+    <div className="bg-white/5 border border-white/8 rounded-2xl overflow-hidden animate-pulse">
+      <div className="px-4 pt-4 pb-3 flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-white/8 shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-3.5 w-32 bg-white/8 rounded-full" />
+          <div className="h-2.5 w-48 bg-white/5 rounded-full" />
+          <div className="h-2 w-24 bg-white/5 rounded-full" />
+        </div>
+        <div className="h-5 w-20 bg-white/8 rounded-full" />
+      </div>
+      <div className="px-4 pb-3 pt-3 border-t border-white/5 space-y-2">
+        <div className="h-2.5 w-56 bg-white/5 rounded-full" />
+        <div className="h-2.5 w-40 bg-white/5 rounded-full" />
+      </div>
+      <div className="px-4 pb-4 flex gap-2">
+        <div className="h-8 w-16 bg-white/5 rounded-xl" />
+        <div className="h-8 w-24 bg-white/5 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
 export default function DTRManagement({ user, onBack }: Props) {
   const now = new Date();
   const [records, setRecords] = useState<DTRRecord[]>([]);
@@ -203,7 +244,7 @@ export default function DTRManagement({ user, onBack }: Props) {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // Employee list for searchable picker
-  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>(_empCache ?? []);
   const [empLoading, setEmpLoading] = useState(false);
 
   // Generate form state
@@ -215,11 +256,16 @@ export default function DTRManagement({ user, onBack }: Props) {
 
   // Filter state
   const [filterSearch, setFilterSearch] = useState('');
+  const [filterSearchDebounced, setFilterSearchDebounced] = useState('');
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filterStatus, setFilterStatus] = useState<DTRStatus | ''>('');
   const [filterMonth, setFilterMonth]   = useState<number | ''>('');
   const [filterYear, setFilterYear]     = useState<number | ''>(now.getFullYear());
   const [filterCutOff, setFilterCutOff] = useState<DTRCutOff | ''>('');
   const [showFilters, setShowFilters]   = useState(false);
+
+  // Dirty flag: true when records may be stale after an action
+  const dirtyRef = useRef(false);
 
   const isAdmin = user.email?.toLowerCase() === 'rommeljvr@gmail.com' ||
     user.employee?.role?.toLowerCase() === 'admin' ||
@@ -230,23 +276,33 @@ export default function DTRManagement({ user, onBack }: Props) {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // Debounce search input — avoids filtering on every keystroke
+  const handleSearchChange = (val: string) => {
+    setFilterSearch(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setFilterSearchDebounced(val), 200);
+  };
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const res = isAdmin
       ? await getDTRList(user.email)
       : await getEmployeeDTRList(user.email);
     setRecords(res.records || []);
-    setLoading(false);
+    dirtyRef.current = false;
+    if (!silent) setLoading(false);
+    else setLoading(false); // always clear spinner
   }, [user.email, isAdmin]);
 
-  // Load employee list when generate modal opens (admin only)
+  // Load employee list on demand — reads module-level cache first
   const loadEmployees = useCallback(async () => {
-    if (!isAdmin || employees.length > 0) return;
+    if (!isAdmin) return;
+    if (_empCache) { setEmployees(_empCache); return; }
     setEmpLoading(true);
-    const res = await getEmployees();
-    if (res.success) setEmployees(res.employees.filter((e: EmployeeRecord) => e.active !== false));
+    const list = await getEmployeeCache();
+    setEmployees(list);
     setEmpLoading(false);
-  }, [isAdmin, employees.length]);
+  }, [isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -278,7 +334,8 @@ export default function DTRManagement({ user, onBack }: Props) {
       setFilterMonth(genMonth);
       setFilterYear(genYear);
       setFilterCutOff(genCutOff);
-      await load();
+      dirtyRef.current = true;
+      load(true); // background refresh — don't block
       showToast('success', 'DTR generated — opening record…');
       openDTR(res.dtrId);
     } else if (res.success) {
@@ -287,13 +344,13 @@ export default function DTRManagement({ user, onBack }: Props) {
       setGenEmpEmail('');
       load();
     } else if (res.alreadyExists && res.dtrId) {
-      // DTR already exists — close modal, focus the period, open existing record
       setShowGenerate(false);
       setGenEmpEmail('');
       setFilterMonth(genMonth);
       setFilterYear(genYear);
       setFilterCutOff(genCutOff);
-      await load();
+      dirtyRef.current = true;
+      load(true);
       showToast('error', 'DTR already exists for this cut-off. Opening existing record…');
       openDTR(res.dtrId);
     } else {
@@ -309,9 +366,9 @@ export default function DTRManagement({ user, onBack }: Props) {
     const res = await regenerateDTR(id, user.email);
     setActingId(null);
     if (res.success) {
-      // The regenerated record gets a new dtrId; fall back to original id if not returned
       const newId = res.dtrId || id;
-      await load();
+      dirtyRef.current = true;
+      load(true); // background refresh — don't block
       showToast('success', 'DTR regenerated — opening record…');
       openDTR(newId);
     } else {
@@ -326,31 +383,38 @@ export default function DTRManagement({ user, onBack }: Props) {
   const handleResolveIssue = async (issueId: string) => {
     if (!isAdmin) { showToast('error', 'Unauthorized'); return; }
     const res = await resolveDTRIssue(issueId, user.email);
-    if (res.success) { showToast('success', 'Issue resolved'); load(); }
+    if (res.success) { showToast('success', 'Issue resolved'); dirtyRef.current = true; }
     else showToast('error', res.message || 'Failed');
   };
 
   // Employees must only ever see their own records (second safety layer on top of backend)
-  const ownedRecords = isAdmin
-    ? records
-    : records.filter(r => r.employeeEmail.toLowerCase() === user.email.toLowerCase());
+  const ownedRecords = useMemo(() =>
+    isAdmin
+      ? records
+      : records.filter(r => r.employeeEmail.toLowerCase() === user.email.toLowerCase()),
+  [records, isAdmin, user.email]);
 
-  const filtered = ownedRecords.filter(r => {
-    if (filterSearch && !r.employeeName.toLowerCase().includes(filterSearch.toLowerCase()) &&
-        !r.employeeEmail.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+  const filtered = useMemo(() => ownedRecords.filter(r => {
+    if (filterSearchDebounced && !r.employeeName.toLowerCase().includes(filterSearchDebounced.toLowerCase()) &&
+        !r.employeeEmail.toLowerCase().includes(filterSearchDebounced.toLowerCase())) return false;
     if (filterStatus && r.status !== filterStatus) return false;
     if (filterMonth && r.month !== filterMonth) return false;
     if (filterYear && r.year !== Number(filterYear)) return false;
     if (filterCutOff && r.cutOff !== filterCutOff) return false;
     return true;
-  });
+  }), [ownedRecords, filterSearchDebounced, filterStatus, filterMonth, filterYear, filterCutOff]);
 
   // Summary stats (scoped to owned records)
-  const stats = {
+  const stats = useMemo(() => ({
     total:       ownedRecords.length,
     generated:   ownedRecords.filter(r => r.status === 'Generated' || r.status === 'Sent to Employee').length,
     acknowledged:ownedRecords.filter(r => r.status === 'Acknowledged').length,
     issues:      ownedRecords.filter(r => r.status === 'Returned for Review').length,
+  }), [ownedRecords]);
+
+  const handleBack = () => {
+    setViewDTR(null);
+    if (dirtyRef.current) load();
   };
 
   if (viewDTR) {
@@ -359,7 +423,7 @@ export default function DTRManagement({ user, onBack }: Props) {
         dtr={viewDTR}
         user={user}
         isAdmin={isAdmin}
-        onBack={() => { setViewDTR(null); load(); }}
+        onBack={handleBack}
         onRegenerate={isAdmin ? (id: string) => { setViewDTR(null); handleRegenerate(id); } : undefined}
         onResolveIssue={isAdmin ? handleResolveIssue : undefined}
       />
@@ -390,7 +454,7 @@ export default function DTRManagement({ user, onBack }: Props) {
             <h1 className="text-white font-bold text-base">DTR Management</h1>
             <p className="text-white/40 text-xs">{isAdmin ? 'All Employees' : 'My Records'}</p>
           </div>
-          <button onClick={load} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
+          <button onClick={() => load()} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
             <RefreshCw className={`w-4 h-4 text-white ${loading ? 'animate-spin' : ''}`} />
           </button>
           {isAdmin && (
@@ -425,11 +489,11 @@ export default function DTRManagement({ user, onBack }: Props) {
             <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
             <input
               value={filterSearch}
-              onChange={e => setFilterSearch(e.target.value)}
+              onChange={e => handleSearchChange(e.target.value)}
               placeholder="Search employee..."
               className="bg-transparent text-white text-xs flex-1 outline-none placeholder-white/30"
             />
-            {filterSearch && <button onClick={() => setFilterSearch('')}><X className="w-3.5 h-3.5 text-white/30" /></button>}
+            {filterSearch && <button onClick={() => { setFilterSearch(''); setFilterSearchDebounced(''); }}><X className="w-3.5 h-3.5 text-white/30" /></button>}
           </div>
           <button
             onClick={() => setShowFilters(v => !v)}
@@ -473,10 +537,11 @@ export default function DTRManagement({ user, onBack }: Props) {
       {/* List */}
       <div className="flex-1 px-4 pt-4 space-y-3">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-            <p className="text-white/40 text-sm">Loading DTR records...</p>
-          </div>
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <FileText className="w-12 h-12 text-white/10" />
