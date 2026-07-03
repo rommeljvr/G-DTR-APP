@@ -894,7 +894,7 @@ export async function cancelTimeCorrection(
 export async function generateDTR(params: {
   adminEmail: string; employeeEmail: string; employeeName?: string;
   month: number; year: number; cutOff: '1st' | '2nd';
-}): Promise<{ success: boolean; message: string; dtrId?: string }> {
+}): Promise<{ success: boolean; message: string; dtrId?: string; alreadyExists?: boolean }> {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) return { success: false, message: 'No script URL configured' };
   try {
@@ -4014,11 +4014,31 @@ function generateDTR(data) {
     }
   }
 
+  // Duplicate check: reject if an active DTR already exists for this employee + period
+  var dtrSheet = initDTRSheet();
+  var existingRows = dtrSheet.getDataRange().getValues();
+  for (var di = 1; di < existingRows.length; di++) {
+    var exEmail  = String(existingRows[di][2] || '').trim().toLowerCase();
+    var exMonth  = Number(existingRows[di][8]);
+    var exYear   = Number(existingRows[di][9]);
+    var exCutOff = String(existingRows[di][10] || '').trim();
+    var exStatus = String(existingRows[di][13] || '').trim();
+    if (exEmail === empEmail && exMonth === month && exYear === year && exCutOff === cutOff
+        && exStatus !== 'Regenerated') {
+      return _json({
+        success:       false,
+        alreadyExists: true,
+        dtrId:         String(existingRows[di][0]),
+        message:       'A DTR already exists for this employee and payroll cut-off. Use Regenerate DTR to update it.'
+      });
+    }
+  }
+
   var now   = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
   var dtrId = Utilities.getUuid();
   var auditTrail = [{ action: 'Generated', performedBy: adminEmail, performedAt: now }];
 
-  var sheet = initDTRSheet();
+  var sheet = dtrSheet;
   sheet.appendRow([
     dtrId, 1, empEmail, empName, empNumber,
     dept, desig, branch, month, year, cutOff,
@@ -4038,19 +4058,7 @@ function generateDTR(data) {
 
 function regenerateDTR(dtrId, adminEmail) {
   if (!dtrId || !adminEmail) return _json({ success: false, message: 'dtrId and adminEmail required' });
-  var adminLowerR = adminEmail.toLowerCase();
-  var isAdminR = adminLowerR === ADMIN_EMAIL;
-  if (!isAdminR) {
-    var empSheetR = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employee');
-    var empRowsR  = empSheetR ? empSheetR.getDataRange().getValues() : [];
-    for (var eiR = 1; eiR < empRowsR.length; eiR++) {
-      if (String(empRowsR[eiR][0] || '').trim().toLowerCase() === adminLowerR) {
-        var roleR = String(empRowsR[eiR][3] || '').trim().toLowerCase();
-        if (roleR === 'admin' || roleR === 'superadmin') { isAdminR = true; break; }
-      }
-    }
-  }
-  if (!isAdminR) return _json({ success: false, message: 'Unauthorized' });
+  if (!isAdminRole(adminEmail)) return _json({ success: false, message: 'Unauthorized' });
   var sheet = initDTRSheet();
   var rows  = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {

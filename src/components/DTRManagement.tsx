@@ -286,6 +286,16 @@ export default function DTRManagement({ user, onBack }: Props) {
       setShowGenerate(false);
       setGenEmpEmail('');
       load();
+    } else if (res.alreadyExists && res.dtrId) {
+      // DTR already exists — close modal, focus the period, open existing record
+      setShowGenerate(false);
+      setGenEmpEmail('');
+      setFilterMonth(genMonth);
+      setFilterYear(genYear);
+      setFilterCutOff(genCutOff);
+      await load();
+      showToast('error', 'DTR already exists for this cut-off. Opening existing record…');
+      openDTR(res.dtrId);
     } else {
       showToast('error', res.message || 'Generation failed');
     }
