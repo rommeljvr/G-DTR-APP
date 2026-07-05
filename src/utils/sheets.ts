@@ -1050,6 +1050,130 @@ export async function saveMealAllowanceSettings(
   } catch (err) { return { success: false, message: String(err) }; }
 }
 
+// ─── WFH Frontend API Wrappers ────────────────────────────────────
+
+export async function getWFHStatus(email: string): Promise<import('../types').WFHStatusResult & { success: boolean }> {
+  const scriptUrl = getScriptUrl();
+  const fallback = { success: false, attendanceId: null, timeInTimestamp: null, wfhRecord: null, eodRequired: false, canTimeOut: true };
+  if (!scriptUrl) return fallback;
+  try {
+    const res = await fetch(`${scriptUrl}?action=getWFHStatus&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch { return fallback; }
+}
+
+export async function submitWFH(data: {
+  email: string; name: string; department: string; designation: string;
+  attendanceId: string; attendanceDate: string; timeIn: string;
+  workDescription: string; plannedTasks: string; expectedDeliverables: string;
+  additionalNotes?: string; remarks?: string;
+}): Promise<{ success: boolean; message: string; id?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'submitWFH', data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function submitWFHEOD(data: {
+  wfhId: string; email: string;
+  eodSummary: string; eodAccomplishments: string; eodIssues: string;
+  eodDeliverables: string; eodNextDayPlan?: string; eodRemarks?: string;
+  attachments: Array<{ fileName: string; fileData: string; mimeType: string }>;
+}): Promise<{ success: boolean; message: string; attachments?: import('../types').WFHAttachment[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'submitWFHEOD', folderId: getFolderId(), data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function resubmitWFH(data: {
+  wfhId: string; email: string;
+  workDescription?: string; plannedTasks?: string; expectedDeliverables?: string;
+  eodSummary?: string; eodAccomplishments?: string; eodIssues?: string;
+  eodDeliverables?: string; eodNextDayPlan?: string; eodRemarks?: string; remarks?: string;
+  attachments?: Array<{ fileName: string; fileData: string; mimeType: string }>;
+}): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'resubmitWFH', folderId: getFolderId(), data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getWFHHistory(email: string): Promise<{ success: boolean; records: import('../types').WFHRecord[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: true, records: [] };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getWFHHistory&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch { return { success: true, records: [] }; }
+}
+
+export async function getPendingWFHApprovals(approverEmail: string): Promise<{ success: boolean; records: import('../types').WFHRecord[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: true, records: [] };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getPendingWFHApprovals&email=${encodeURIComponent(approverEmail)}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch { return { success: true, records: [] }; }
+}
+
+export async function approveWFH(wfhId: string, approverEmail: string, comments?: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'approveWFH', id: wfhId, email: approverEmail, comments: comments || '' }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function rejectWFH(wfhId: string, approverEmail: string, reason: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'rejectWFH', id: wfhId, email: approverEmail, reason }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function requestWFHRevision(wfhId: string, approverEmail: string, comments: string): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'requestWFHRevision', id: wfhId, email: approverEmail, comments }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
 export const APPS_SCRIPT_TEMPLATE = `
@@ -1161,6 +1285,12 @@ function doPost(e) {
     if (data.action === 'resolveDTRIssue')   return resolveDTRIssue(data.issueId, data.email);
     if (data.action === 'submitMealAllowance')       return submitMealAllowance(data.data, data.folderId);
     if (data.action === 'saveMealAllowanceSettings') return saveMealAllowanceSettings(data.data, data.email);
+    if (data.action === 'submitWFH')          return submitWFH(data.data);
+    if (data.action === 'submitWFHEOD')       return submitWFHEOD(data.data, data.folderId);
+    if (data.action === 'resubmitWFH')        return resubmitWFH(data.data, data.folderId);
+    if (data.action === 'approveWFH')         return approveWFH(data.id, data.email, data.comments);
+    if (data.action === 'rejectWFH')          return rejectWFH(data.id, data.email, data.reason);
+    if (data.action === 'requestWFHRevision') return requestWFHRevision(data.id, data.email, data.comments);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1207,6 +1337,9 @@ function doGet(e) {
   if (action === 'getPendingTimeCorrectionApprovals') return email ? getPendingTimeCorrectionApprovals(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getMealAllowanceStatus')   return email ? getMealAllowanceStatus(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getMealAllowanceConfig')   return _json({ success: true, config: getMealAllowanceConfig() });
+  if (action === 'getWFHStatus')             return email ? getWFHStatus(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getWFHHistory')            return email ? getWFHHistory(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getPendingWFHApprovals')   return email ? getPendingWFHApprovals(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getDTRList')        return email ? getDTRList(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getEmployeeDTRList') return email ? getEmployeeDTRList(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getDTRById')        return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
@@ -4660,5 +4793,464 @@ function getMealAllowanceStatus(email) {
     submissions:     submissions,
     config:          cfg
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  WORK FROM HOME (WFH)
+// ══════════════════════════════════════════════════════════════════
+
+function initWFHSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('WorkFromHome');
+  if (!sheet) {
+    sheet = ss.insertSheet('WorkFromHome');
+    sheet.appendRow([
+      'ID','Attendance ID','Employee Email','Employee Name','Department','Designation',
+      'Attendance Date','Time In','Time Out','Work Description','Planned Tasks',
+      'Expected Deliverables','Additional Notes','Remarks',
+      'EOD Summary','EOD Accomplishments','EOD Issues','EOD Deliverables',
+      'EOD Next Day Plan','EOD Remarks','EOD Submitted At',
+      'Attachments JSON','Status','Approver Email','Approver Name',
+      'Approval Comments','Approved At','Revision Count',
+      'Submitted At','Updated At','Audit Trail JSON','Version'
+    ]);
+    var hdr = sheet.getRange(1, 1, 1, 32);
+    hdr.setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function buildWFHRecord(row, headers) {
+  function col(names) {
+    for (var n = 0; n < names.length; n++)
+      for (var c = 0; c < headers.length; c++)
+        if (String(headers[c]).trim().toLowerCase() === names[n].toLowerCase()) return c;
+    return -1;
+  }
+  function v(names) { var c = col(names); return c === -1 ? '' : String(row[c] || ''); }
+  function n(names) { var c = col(names); return c === -1 ? 0 : Number(row[c] || 0); }
+  var attachRaw = v(['Attachments JSON']);
+  var auditRaw  = v(['Audit Trail JSON']);
+  var attachments = [];
+  var audit       = [];
+  try { attachments = JSON.parse(attachRaw || '[]'); } catch(e) {}
+  try { audit       = JSON.parse(auditRaw  || '[]'); } catch(e) {}
+  return {
+    id:                   v(['ID']),
+    attendanceId:         v(['Attendance ID']),
+    employeeEmail:        v(['Employee Email']),
+    employeeName:         v(['Employee Name']),
+    department:           v(['Department']),
+    designation:          v(['Designation']),
+    attendanceDate:       v(['Attendance Date']),
+    timeIn:               v(['Time In']),
+    timeOut:              v(['Time Out']),
+    workDescription:      v(['Work Description']),
+    plannedTasks:         v(['Planned Tasks']),
+    expectedDeliverables: v(['Expected Deliverables']),
+    additionalNotes:      v(['Additional Notes']),
+    remarks:              v(['Remarks']),
+    eodSummary:           v(['EOD Summary']),
+    eodAccomplishments:   v(['EOD Accomplishments']),
+    eodIssues:            v(['EOD Issues']),
+    eodDeliverables:      v(['EOD Deliverables']),
+    eodNextDayPlan:       v(['EOD Next Day Plan']),
+    eodRemarks:           v(['EOD Remarks']),
+    eodSubmittedAt:       v(['EOD Submitted At']),
+    attachments:          attachments,
+    status:               v(['Status']),
+    approverEmail:        v(['Approver Email']),
+    approverName:         v(['Approver Name']),
+    approvalComments:     v(['Approval Comments']),
+    approvedAt:           v(['Approved At']),
+    revisionCount:        n(['Revision Count']),
+    submittedAt:          v(['Submitted At']),
+    updatedAt:            v(['Updated At']),
+    auditTrail:           audit,
+    version:              n(['Version'])
+  };
+}
+
+function findWFHRow(wfhId) {
+  var sheet = initWFHSheet();
+  if (sheet.getLastRow() <= 1) return null;
+  var rows    = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '') === String(wfhId)) return { sheet: sheet, rowIndex: i + 1, headers: headers, row: rows[i] };
+  }
+  return null;
+}
+
+function appendWFHAudit(existing, entry) {
+  var trail = [];
+  try { trail = JSON.parse(existing || '[]'); } catch(e) {}
+  trail.push(entry);
+  return JSON.stringify(trail);
+}
+
+function getWFHStatus(email) {
+  if (!email) return _json({ success: false, message: 'Email required' });
+  var emailLower = String(email).trim().toLowerCase();
+
+  var attSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Attendance');
+  var timeInId = null; var timeInTs = null;
+  if (attSheet && attSheet.getLastRow() > 1) {
+    var attRows = attSheet.getDataRange().getValues();
+    for (var i = attRows.length - 1; i >= 1; i--) {
+      if (String(attRows[i][3]).trim().toLowerCase() === emailLower) {
+        var act = String(attRows[i][4]).trim();
+        if (act === 'TIME_IN') { timeInId = String(attRows[i][0]); timeInTs = attRows[i][5]; }
+        break;
+      }
+    }
+  }
+
+  var wfhRecord = null;
+  if (timeInId) {
+    var wfhSheet = initWFHSheet();
+    if (wfhSheet.getLastRow() > 1) {
+      var wfhRows = wfhSheet.getDataRange().getValues();
+      var wfhHdrs = wfhRows[0];
+      for (var j = 1; j < wfhRows.length; j++) {
+        if (String(wfhRows[j][1]) === timeInId && String(wfhRows[j][2]).toLowerCase() === emailLower) {
+          wfhRecord = buildWFHRecord(wfhRows[j], wfhHdrs);
+          break;
+        }
+      }
+    }
+  }
+
+  var eodRequired = wfhRecord !== null && !wfhRecord.eodSubmittedAt;
+  var canTimeOut  = wfhRecord === null || !!wfhRecord.eodSubmittedAt;
+
+  return _json({
+    success: true,
+    attendanceId:    timeInId,
+    timeInTimestamp: timeInTs ? String(timeInTs) : null,
+    wfhRecord:       wfhRecord,
+    eodRequired:     eodRequired,
+    canTimeOut:      canTimeOut
+  });
+}
+
+function submitWFH(data) {
+  if (!data || !data.email || !data.attendanceId) return _json({ success: false, message: 'Missing required fields' });
+  var emailLower = String(data.email).trim().toLowerCase();
+  var sheet = initWFHSheet();
+
+  // Prevent duplicate WFH for same attendance record
+  if (sheet.getLastRow() > 1) {
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][1]) === String(data.attendanceId) && String(rows[i][2]).toLowerCase() === emailLower) {
+        return _json({ success: false, message: 'Work From Home already registered for this attendance record' });
+      }
+    }
+  }
+
+  var id  = Utilities.getUuid();
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var audit = JSON.stringify([{
+    action: 'WFH_SUBMITTED', by: data.email, byRole: 'Employee',
+    prevStatus: '', newStatus: 'Submitted', timestamp: now, comments: ''
+  }]);
+
+  sheet.appendRow([
+    id, data.attendanceId, data.email, data.name || '',
+    data.department || '', data.designation || '',
+    data.attendanceDate || '', data.timeIn || '', '',
+    data.workDescription || '', data.plannedTasks || '',
+    data.expectedDeliverables || '', data.additionalNotes || '', data.remarks || '',
+    '','','','','','','',
+    '[]', 'Submitted', '', '', '', '', 0, now, now, audit, 1
+  ]);
+
+  // Notify approver
+  var cfg = getSettingsForEmployee(emailLower);
+  var firstApprover = cfg ? ((cfg.workflowType === 'TWO_STEP' && cfg.teamLeadEmail) ? cfg.teamLeadEmail : cfg.approverEmail) : '';
+  if (firstApprover) {
+    // Update approver column
+    sheet.getRange(sheet.getLastRow(), 24).setValue(firstApprover);
+    var apprName = getApproverName(firstApprover);
+    sheet.getRange(sheet.getLastRow(), 25).setValue(apprName);
+    createNotification(firstApprover, 'WFH_SUBMITTED',
+      (data.name || data.email) + ' registered Work From Home for ' + (data.attendanceDate || 'today') + '. Planned: ' + (data.workDescription || '').substring(0, 100), id);
+  }
+
+  return _json({ success: true, message: 'Work From Home registered successfully', id: id });
+}
+
+function submitWFHEOD(data, clientFolderId) {
+  if (!data || !data.wfhId || !data.email) return _json({ success: false, message: 'Missing required fields' });
+  var found = findWFHRow(data.wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  if (String(found.row[2]).trim().toLowerCase() !== String(data.email).trim().toLowerCase())
+    return _json({ success: false, message: 'Unauthorized' });
+
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+
+  // Upload attachments
+  var existingRaw = String(found.row[21] || '[]');
+  var attachments = [];
+  try { attachments = JSON.parse(existingRaw); } catch(e) {}
+  var version = Number(found.row[31] || 1);
+
+  if (data.attachments && data.attachments.length > 0) {
+    var folder;
+    try { folder = DriveApp.getFolderById(folderId); } catch(e) { folder = DriveApp.getRootFolder(); }
+    var monthKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+    var subName  = 'WFH_DOCS_' + monthKey;
+    var subIter  = folder.getFoldersByName(subName);
+    var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
+
+    for (var a = 0; a < data.attachments.length; a++) {
+      try {
+        var att   = data.attachments[a];
+        var parts = att.fileData.split(',');
+        var mime  = att.mimeType || (parts[0].match(/:(.*?);/) ? parts[0].match(/:(.*?);/)[1] : 'application/octet-stream');
+        var bytes = Utilities.base64Decode(parts.length > 1 ? parts[1] : parts[0]);
+        var blob  = Utilities.newBlob(bytes, mime, att.fileName);
+        var file  = subFolder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        attachments.push({
+          fileId:     file.getId(),
+          fileName:   att.fileName,
+          fileUrl:    'https://drive.google.com/file/d/' + file.getId() + '/view',
+          uploadedAt: now,
+          version:    version
+        });
+      } catch(ae) { Logger.log('WFH attachment upload error: ' + ae); }
+    }
+  }
+
+  if (attachments.length === 0) return _json({ success: false, message: 'At least one supporting attachment is required' });
+
+  var prevStatus = String(found.row[22] || 'Submitted');
+  var newStatus  = 'Pending Review';
+  var auditJson  = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_EOD_SUBMITTED', by: data.email, byRole: 'Employee',
+    prevStatus: prevStatus, newStatus: newStatus, timestamp: now, comments: ''
+  });
+
+  var r = found.rowIndex;
+  var s = found.sheet;
+  s.getRange(r, 15).setValue(data.eodSummary || '');
+  s.getRange(r, 16).setValue(data.eodAccomplishments || '');
+  s.getRange(r, 17).setValue(data.eodIssues || '');
+  s.getRange(r, 18).setValue(data.eodDeliverables || '');
+  s.getRange(r, 19).setValue(data.eodNextDayPlan || '');
+  s.getRange(r, 20).setValue(data.eodRemarks || '');
+  s.getRange(r, 21).setValue(now);
+  s.getRange(r, 22).setValue(JSON.stringify(attachments));
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+
+  // Notify approver
+  var approverEmail = String(found.row[23] || '').trim();
+  if (approverEmail) {
+    createNotification(approverEmail, 'WFH_EOD_SUBMITTED',
+      (String(found.row[3] || data.email)) + ' submitted End-of-Day Report for WFH on ' + String(found.row[6] || '') + '. Ready for review.', data.wfhId);
+  }
+
+  return _json({ success: true, message: 'End-of-Day Report submitted successfully', attachments: attachments });
+}
+
+function resubmitWFH(data, clientFolderId) {
+  if (!data || !data.wfhId || !data.email) return _json({ success: false, message: 'Missing required fields' });
+  var found = findWFHRow(data.wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  var empEmail = String(found.row[2]).trim().toLowerCase();
+  if (empEmail !== String(data.email).trim().toLowerCase()) return _json({ success: false, message: 'Unauthorized' });
+
+  var status = String(found.row[22] || '');
+  if (status !== 'Revision Required' && status !== 'Rejected')
+    return _json({ success: false, message: 'Only Revision Required or Rejected records can be resubmitted' });
+
+  var now      = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var newStatus = 'Resubmitted';
+  var version   = Number(found.row[31] || 1) + 1;
+  var revCount  = Number(found.row[27] || 0) + 1;
+
+  // Handle new attachments if any
+  var existingRaw = String(found.row[21] || '[]');
+  var attachments = [];
+  try { attachments = JSON.parse(existingRaw); } catch(e) {}
+
+  if (data.attachments && data.attachments.length > 0) {
+    var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+    var folder;
+    try { folder = DriveApp.getFolderById(folderId); } catch(e) { folder = DriveApp.getRootFolder(); }
+    var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+    var subName   = 'WFH_DOCS_' + monthKey;
+    var subIter   = folder.getFoldersByName(subName);
+    var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
+    for (var a = 0; a < data.attachments.length; a++) {
+      try {
+        var att   = data.attachments[a];
+        var parts = att.fileData.split(',');
+        var mime  = att.mimeType || 'application/octet-stream';
+        var bytes = Utilities.base64Decode(parts.length > 1 ? parts[1] : parts[0]);
+        var blob  = Utilities.newBlob(bytes, mime, att.fileName);
+        var file  = subFolder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        attachments.push({ fileId: file.getId(), fileName: att.fileName, fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view', uploadedAt: now, version: version });
+      } catch(ae) { Logger.log('WFH resubmit attachment error: ' + ae); }
+    }
+  }
+
+  var auditJson = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_RESUBMITTED', by: data.email, byRole: 'Employee',
+    prevStatus: status, newStatus: newStatus, timestamp: now, comments: data.remarks || ''
+  });
+
+  var r = found.rowIndex; var s = found.sheet;
+  if (data.workDescription)      s.getRange(r, 10).setValue(data.workDescription);
+  if (data.plannedTasks)         s.getRange(r, 11).setValue(data.plannedTasks);
+  if (data.expectedDeliverables) s.getRange(r, 12).setValue(data.expectedDeliverables);
+  if (data.eodSummary)           s.getRange(r, 15).setValue(data.eodSummary);
+  if (data.eodAccomplishments)   s.getRange(r, 16).setValue(data.eodAccomplishments);
+  if (data.eodIssues)            s.getRange(r, 17).setValue(data.eodIssues);
+  if (data.eodDeliverables)      s.getRange(r, 18).setValue(data.eodDeliverables);
+  if (data.eodNextDayPlan)       s.getRange(r, 19).setValue(data.eodNextDayPlan);
+  if (data.eodRemarks)           s.getRange(r, 20).setValue(data.eodRemarks);
+  if (data.remarks)              s.getRange(r, 14).setValue(data.remarks);
+  s.getRange(r, 22).setValue(JSON.stringify(attachments));
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 28).setValue(revCount);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+  s.getRange(r, 32).setValue(version);
+
+  var approverEmail = String(found.row[23] || '').trim();
+  if (approverEmail) {
+    createNotification(approverEmail, 'WFH_RESUBMITTED',
+      (String(found.row[3] || data.email)) + ' resubmitted WFH record for ' + String(found.row[6] || '') + ' (Revision #' + revCount + '). Awaiting your review.', data.wfhId);
+  }
+  return _json({ success: true, message: 'WFH resubmitted successfully' });
+}
+
+function approveWFH(wfhId, approverEmail, comments) {
+  if (!wfhId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var found = findWFHRow(wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  var now      = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var prevStatus = String(found.row[22] || '');
+  var newStatus  = 'Approved';
+  var auditJson  = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_APPROVED', by: approverEmail, byRole: 'Approver',
+    prevStatus: prevStatus, newStatus: newStatus, timestamp: now, comments: comments || ''
+  });
+  var r = found.rowIndex; var s = found.sheet;
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 24).setValue(approverEmail);
+  s.getRange(r, 25).setValue(getApproverName(approverEmail));
+  s.getRange(r, 26).setValue(comments || '');
+  s.getRange(r, 27).setValue(now);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+  var empEmail = String(found.row[2] || '');
+  if (empEmail) createNotification(empEmail, 'WFH_APPROVED',
+    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Approved by ' + getApproverName(approverEmail) + (comments ? '. Comments: ' + comments : ''), wfhId);
+  return _json({ success: true, message: 'WFH approved successfully' });
+}
+
+function rejectWFH(wfhId, approverEmail, reason) {
+  if (!wfhId || !approverEmail || !reason) return _json({ success: false, message: 'Missing parameters' });
+  var found = findWFHRow(wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  var now      = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var prevStatus = String(found.row[22] || '');
+  var newStatus  = 'Rejected';
+  var auditJson  = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_REJECTED', by: approverEmail, byRole: 'Approver',
+    prevStatus: prevStatus, newStatus: newStatus, timestamp: now, comments: reason
+  });
+  var r = found.rowIndex; var s = found.sheet;
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 26).setValue(reason);
+  s.getRange(r, 27).setValue(now);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+  var empEmail = String(found.row[2] || '');
+  if (empEmail) createNotification(empEmail, 'WFH_REJECTED',
+    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Rejected. Reason: ' + reason, wfhId);
+  return _json({ success: true, message: 'WFH rejected' });
+}
+
+function requestWFHRevision(wfhId, approverEmail, comments) {
+  if (!wfhId || !approverEmail || !comments) return _json({ success: false, message: 'Missing parameters' });
+  var found = findWFHRow(wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  var now      = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var prevStatus = String(found.row[22] || '');
+  var newStatus  = 'Revision Required';
+  var auditJson  = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_REVISION_REQUESTED', by: approverEmail, byRole: 'Approver',
+    prevStatus: prevStatus, newStatus: newStatus, timestamp: now, comments: comments
+  });
+  var r = found.rowIndex; var s = found.sheet;
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 26).setValue(comments);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+  var empEmail = String(found.row[2] || '');
+  if (empEmail) createNotification(empEmail, 'WFH_REVISION_REQUESTED',
+    'Revision requested on your WFH for ' + String(found.row[6] || '') + '. Comments: ' + comments, wfhId);
+  return _json({ success: true, message: 'Revision requested' });
+}
+
+function getWFHHistory(email) {
+  if (!email) return _json({ success: false, message: 'Email required' });
+  var emailLower = String(email).trim().toLowerCase();
+  var sheet = initWFHSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][2] || '').trim().toLowerCase() !== emailLower) continue;
+    records.push(buildWFHRecord(rows[i], headers));
+  }
+  records.reverse();
+  return _json({ success: true, records: records });
+}
+
+function getPendingWFHApprovals(approverEmail) {
+  if (!approverEmail) return _json({ success: false, message: 'Email required' });
+  var approverLower = String(approverEmail).trim().toLowerCase();
+  var isAdmin = approverLower === ADMIN_EMAIL;
+  var sheet = initWFHSheet();
+  if (sheet.getLastRow() <= 1) return _json({ success: true, records: [] });
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var records = [];
+  var reviewable = ['Submitted','Pending Review','Resubmitted'];
+  for (var i = 1; i < rows.length; i++) {
+    var status = String(rows[i][22] || '').trim();
+    if (reviewable.indexOf(status) === -1) continue;
+    var recApprover = String(rows[i][23] || '').trim().toLowerCase();
+    if (!isAdmin && recApprover !== approverLower) {
+      var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+      var cfg = getSettingsForEmployee(empEmail);
+      if (!cfg) continue;
+      var tl   = cfg.teamLeadEmail;
+      var appr = cfg.approverEmail;
+      var wf   = cfg.workflowType;
+      var ok = false;
+      if (wf === 'TWO_STEP') {
+        if ((status === 'Submitted' || status === 'Resubmitted') && tl === approverLower) ok = true;
+        if (status === 'Pending Review' && appr === approverLower) ok = true;
+      } else {
+        if (appr === approverLower) ok = true;
+      }
+      if (!ok) continue;
+    }
+    records.push(buildWFHRecord(rows[i], headers));
+  }
+  return _json({ success: true, records: records });
 }
 `;

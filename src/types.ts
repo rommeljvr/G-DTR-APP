@@ -134,7 +134,14 @@ export type NotificationType =
   | 'TC_CANCELLED'
   | 'DTR_GENERATED'
   | 'DTR_REGENERATED'
-  | 'DTR_ISSUE_SUBMITTED';
+  | 'DTR_ISSUE_SUBMITTED'
+  | 'WFH_SUBMITTED'
+  | 'WFH_EOD_SUBMITTED'
+  | 'WFH_REVISION_REQUESTED'
+  | 'WFH_APPROVED'
+  | 'WFH_REJECTED'
+  | 'WFH_RESUBMITTED'
+  | 'WFH_PENDING_APPROVAL';
 
 export interface AppNotification {
   id: string;
@@ -305,6 +312,80 @@ export interface MealAllowanceStatus {
   hoursWorked: number;
   submissions: MealAllowanceRecord[];
   config: MealAllowanceConfig;
+}
+
+// ── Work From Home ────────────────────────────────────────────────
+
+export type WFHStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Pending Review'
+  | 'Revision Required'
+  | 'Resubmitted'
+  | 'Approved'
+  | 'Rejected'
+  | 'Closed';
+
+export interface WFHAuditEntry {
+  action: string;
+  by: string;
+  byRole: string;
+  prevStatus: string;
+  newStatus: string;
+  timestamp: string;
+  comments?: string;
+  deviceInfo?: string;
+}
+
+export interface WFHAttachment {
+  fileId: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedAt: string;
+  version: number;
+}
+
+export interface WFHRecord {
+  id: string;
+  attendanceId: string;
+  employeeEmail: string;
+  employeeName: string;
+  department: string;
+  designation: string;
+  attendanceDate: string;
+  timeIn: string;
+  timeOut?: string;
+  workDescription: string;
+  plannedTasks: string;
+  expectedDeliverables: string;
+  additionalNotes?: string;
+  remarks?: string;
+  eodSummary?: string;
+  eodAccomplishments?: string;
+  eodIssues?: string;
+  eodDeliverables?: string;
+  eodNextDayPlan?: string;
+  eodRemarks?: string;
+  eodSubmittedAt?: string;
+  attachments: WFHAttachment[];
+  status: WFHStatus;
+  approverEmail?: string;
+  approverName?: string;
+  approvalComments?: string;
+  approvedAt?: string;
+  revisionCount: number;
+  submittedAt: string;
+  updatedAt: string;
+  auditTrail: WFHAuditEntry[];
+  version: number;
+}
+
+export interface WFHStatusResult {
+  attendanceId: string | null;
+  timeInTimestamp: string | null;
+  wfhRecord: WFHRecord | null;
+  eodRequired: boolean;
+  canTimeOut: boolean;
 }
 
 export interface DTRRecord {

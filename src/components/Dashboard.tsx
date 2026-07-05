@@ -1,7 +1,7 @@
 /// <reference path="../pwa.d.ts" />
 import { useState, useEffect, useCallback } from 'react';
-import { User, AttendanceRecord, LocationData, MealAllowanceRecord, MealAllowanceConfig } from '../types';
-import { getLastAction, submitAttendance, getNotifications, getMealAllowanceStatus, submitMealAllowance } from '../utils/sheets';
+import { User, AttendanceRecord, LocationData, MealAllowanceRecord, MealAllowanceConfig, WFHRecord, WFHAttachment } from '../types';
+import { getLastAction, submitAttendance, getNotifications, getMealAllowanceStatus, submitMealAllowance, getWFHStatus } from '../utils/sheets';
 import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
@@ -22,6 +22,10 @@ import TimeCorrectionReport from './TimeCorrectionReport';
 import TimeCorrectionApproval from './TimeCorrectionApproval';
 import DTRManagement from './DTRManagement';
 import MealAllowanceSettings from './MealAllowanceSettings';
+import WFHRegistration from './WFHRegistration';
+import EODReport from './EODReport';
+import WFHHistory from './WFHHistory';
+import WFHApproval from './WFHApproval';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -48,6 +52,7 @@ import {
   Shield,
   FileText,
   UtensilsCrossed,
+  Home,
 } from 'lucide-react';
 
 interface Props {
@@ -57,7 +62,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management' | 'meal-allowance-settings';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management' | 'meal-allowance-settings' | 'wfh-history' | 'wfh-approval';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -86,6 +91,12 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const [showDrawer, setShowDrawer] = useState(false);
   const [shortcutNotice, setShortcutNotice] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // WFH state
+  const [wfhStatus, setWfhStatus] = useState<{ attendanceId: string | null; timeInTimestamp: string | null; wfhRecord: WFHRecord | null; eodRequired: boolean; canTimeOut: boolean } | null>(null);
+  const [wfhLoading, setWfhLoading] = useState(false);
+  const [showWFHRegistration, setShowWFHRegistration] = useState(false);
+  const [showEODReport, setShowEODReport] = useState(false);
 
   // Meal Allowance state
   const [maStatus, setMaStatus] = useState<{
@@ -132,12 +143,21 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     } catch { /* ignore */ } finally { setMaLoading(false); }
   };
 
+  const loadWFHStatus = async () => {
+    setWfhLoading(true);
+    try {
+      const res = await getWFHStatus(user.email);
+      if (res.success) setWfhStatus(res);
+    } catch { /* ignore */ } finally { setWfhLoading(false); }
+  };
+
   const loadRecords = async () => {
     const last = await getLastAction(user.email);
     console.log('[Dashboard] getLastAction returned:', last);
     console.log('[Dashboard] Record ID:', last?.id, '| Time:', last?.time, '| Date:', last?.date);
     setLastAction(last);
     await loadMealAllowanceStatus();
+    await loadWFHStatus();
   };
 
   useEffect(() => {
@@ -398,6 +418,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
       return;
     }
 
+    // Block Time-Out if WFH EOD not submitted
+    if (nextAction === 'TIME_OUT' && wfhStatus?.wfhRecord && !wfhStatus.canTimeOut) {
+      setNotification({
+        type: 'error',
+        message: 'You must submit your End-of-Day Report before clocking out.',
+      });
+      setShowEODReport(true);
+      return;
+    }
+
     // Proceed to camera immediately with validated location
     // Countdown is already running from validation
     setNotification(null);
@@ -426,6 +456,38 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'meal-allowance-settings') {
     if (!isSuperAdmin) return null;
     return <MealAllowanceSettings adminEmail={user.email} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'wfh-history') {
+    return <WFHHistory user={user} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'wfh-approval') {
+    return <WFHApproval user={user} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (showWFHRegistration && wfhStatus?.attendanceId && lastAction) {
+    return (
+      <WFHRegistration
+        user={user}
+        attendanceId={wfhStatus.attendanceId}
+        attendanceDate={lastAction.date}
+        timeIn={lastAction.time}
+        onSuccess={() => { setShowWFHRegistration(false); loadWFHStatus(); }}
+        onCancel={() => setShowWFHRegistration(false)}
+      />
+    );
+  }
+
+  if (showEODReport && wfhStatus?.wfhRecord) {
+    return (
+      <EODReport
+        user={{ email: user.email, name: user.name }}
+        wfhRecord={wfhStatus.wfhRecord}
+        onSuccess={(_atts: WFHAttachment[]) => { setShowEODReport(false); loadWFHStatus(); }}
+        onCancel={() => setShowEODReport(false)}
+      />
+    );
   }
 
   if (activeTab === 'history') {
@@ -884,6 +946,67 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           )}
         </div>
 
+        {/* ── WFH Section ─────────────────────────────── */}
+        {isClockedIn && (() => {
+          const wfhRec = wfhStatus?.wfhRecord;
+          const hasWfh = !!wfhRec;
+          const eodDone = hasWfh && !!wfhRec!.eodSubmittedAt;
+          const eodNeeded = hasWfh && !eodDone;
+          return (
+            <div className={`rounded-2xl border p-4 ${
+              eodNeeded ? 'bg-amber-500/8 border-amber-400/25'
+              : hasWfh   ? 'bg-sky-500/8 border-sky-400/20'
+              : 'bg-white/3 border-white/8'
+            }`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  eodNeeded ? 'bg-amber-500/20' : hasWfh ? 'bg-sky-500/20' : 'bg-white/8'
+                }`}>
+                  <Home className={`w-4 h-4 ${
+                    eodNeeded ? 'text-amber-400' : hasWfh ? 'text-sky-400' : 'text-white/30'
+                  }`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold">Work From Home</p>
+                  {hasWfh && (
+                    <p className={`text-[11px] ${
+                      eodNeeded ? 'text-amber-300' : 'text-sky-300/70'
+                    }`}>
+                      {eodNeeded ? '⚠ EOD Report required before clock-out' : '✓ EOD Report submitted'}
+                    </p>
+                  )}
+                  {!hasWfh && wfhLoading && <p className="text-white/30 text-[11px]">Loading…</p>}
+                  {!hasWfh && !wfhLoading && <p className="text-white/30 text-[11px]">Not registered for today</p>}
+                </div>
+              </div>
+              {!hasWfh && (
+                <button
+                  onClick={() => setShowWFHRegistration(true)}
+                  disabled={wfhLoading}
+                  className="w-full bg-sky-600/80 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  <Home className="w-4 h-4" />
+                  Register Work From Home
+                </button>
+              )}
+              {eodNeeded && (
+                <button
+                  onClick={() => setShowEODReport(true)}
+                  className="w-full bg-amber-600/80 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform mt-1"
+                >
+                  <FileText className="w-4 h-4" />
+                  Submit End-of-Day Report
+                </button>
+              )}
+              {hasWfh && eodDone && (
+                <div className="text-center">
+                  <p className="text-sky-300/60 text-[11px]">WFH: {wfhRec!.workDescription?.substring(0, 60)}{(wfhRec!.workDescription?.length ?? 0) > 60 ? '…' : ''}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
       </div>{/* end flex-1 content section */}
 
       {/* Meal Allowance remarks modal */}
@@ -1226,6 +1349,26 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
               <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
             </button>
           )}
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('wfh-history'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'wfh-history' ? 'bg-sky-500/20 text-sky-300 border border-sky-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <Home className="w-4 h-4 shrink-0" />
+            WFH History
+          </button>
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('wfh-approval'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'wfh-approval' ? 'bg-sky-500/20 text-sky-300 border border-sky-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <Home className="w-4 h-4 shrink-0" />
+            WFH Approvals
+          </button>
         </nav>
 
         {/* Drawer footer – logout */}
