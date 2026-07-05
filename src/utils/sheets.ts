@@ -5033,11 +5033,22 @@ function submitWFHEOD(data, clientFolderId) {
     var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
 
     for (var a = 0; a < data.attachments.length; a++) {
+      var att = data.attachments[a];
+      if (!att || !att.fileData) {
+        return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has no file data' });
+      }
+      var commaIdx = att.fileData.indexOf(',');
+      if (commaIdx === -1) {
+        return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has an invalid data format' });
+      }
+      var header    = att.fileData.substring(0, commaIdx);
+      var b64data   = att.fileData.substring(commaIdx + 1);
+      var mimeMatch = header.match(/:(.*?);/);
+      var mime      = (att.mimeType && att.mimeType !== 'application/octet-stream')
+                        ? att.mimeType
+                        : (mimeMatch ? mimeMatch[1] : 'application/octet-stream');
       try {
-        var att   = data.attachments[a];
-        var parts = att.fileData.split(',');
-        var mime  = att.mimeType || (parts[0].match(/:(.*?);/) ? parts[0].match(/:(.*?);/)[1] : 'application/octet-stream');
-        var bytes = Utilities.base64Decode(parts.length > 1 ? parts[1] : parts[0]);
+        var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -5048,7 +5059,10 @@ function submitWFHEOD(data, clientFolderId) {
           uploadedAt: now,
           version:    version
         });
-      } catch(ae) { Logger.log('WFH attachment upload error: ' + ae); }
+      } catch(ae) {
+        Logger.log('WFH attachment upload error: ' + ae);
+        return _json({ success: false, message: 'File upload failed: ' + ae.toString().substring(0, 120) });
+      }
     }
   }
 
@@ -5120,16 +5134,26 @@ function resubmitWFH(data, clientFolderId) {
     var subIter   = folder.getFoldersByName(subName);
     var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
     for (var a = 0; a < data.attachments.length; a++) {
+      var att = data.attachments[a];
+      if (!att || !att.fileData) return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has no file data' });
+      var commaIdx = att.fileData.indexOf(',');
+      if (commaIdx === -1) return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has an invalid data format' });
+      var header    = att.fileData.substring(0, commaIdx);
+      var b64data   = att.fileData.substring(commaIdx + 1);
+      var mimeMatch = header.match(/:(.*?);/);
+      var mime      = (att.mimeType && att.mimeType !== 'application/octet-stream')
+                        ? att.mimeType
+                        : (mimeMatch ? mimeMatch[1] : 'application/octet-stream');
       try {
-        var att   = data.attachments[a];
-        var parts = att.fileData.split(',');
-        var mime  = att.mimeType || 'application/octet-stream';
-        var bytes = Utilities.base64Decode(parts.length > 1 ? parts[1] : parts[0]);
+        var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({ fileId: file.getId(), fileName: att.fileName, fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view', uploadedAt: now, version: version });
-      } catch(ae) { Logger.log('WFH resubmit attachment error: ' + ae); }
+      } catch(ae) {
+        Logger.log('WFH resubmit attachment error: ' + ae);
+        return _json({ success: false, message: 'File upload failed: ' + ae.toString().substring(0, 120) });
+      }
     }
   }
 
