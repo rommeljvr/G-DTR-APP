@@ -17,20 +17,27 @@ interface Props {
 }
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
-  LEAVE_FILED:        { label: 'Leave Filed',            icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
-  LEAVE_SUBMITTED:    { label: 'Leave Submitted',        icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
-  PENDING_APPROVAL:   { label: 'Approval Required',      icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
-  LEAVE_ACKNOWLEDGED: { label: 'Acknowledged',           icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
-  LEAVE_APPROVED:     { label: 'Approved',               icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
-  LEAVE_REJECTED:     { label: 'Rejected',               icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
-  TC_FILED:           { label: 'TC Request Filed',       icon: '🕐', color: 'bg-cyan-500/15 border-cyan-400/20 text-cyan-300' },
-  TC_ACKNOWLEDGED:    { label: 'TC Acknowledged',        icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
-  TC_APPROVED:        { label: 'TC Approved',            icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
-  TC_REJECTED:        { label: 'TC Rejected',            icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
-  TC_CANCELLED:       { label: 'TC Cancelled',           icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
-  DTR_GENERATED:      { label: 'DTR Generated',          icon: '📄', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
-  DTR_REGENERATED:    { label: 'DTR Regenerated',        icon: '🔄', color: 'bg-orange-500/15 border-orange-400/20 text-orange-300' },
-  DTR_ISSUE_SUBMITTED:{ label: 'DTR Issue Reported',     icon: '⚠️', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  LEAVE_FILED:              { label: 'Leave Filed',            icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  LEAVE_SUBMITTED:          { label: 'Leave Submitted',        icon: '📋', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  PENDING_APPROVAL:         { label: 'Approval Required',      icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  LEAVE_ACKNOWLEDGED:       { label: 'Acknowledged',           icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
+  LEAVE_APPROVED:           { label: 'Approved',               icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  LEAVE_REJECTED:           { label: 'Rejected',               icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  TC_FILED:                 { label: 'TC Request Filed',       icon: '🕐', color: 'bg-cyan-500/15 border-cyan-400/20 text-cyan-300' },
+  TC_ACKNOWLEDGED:          { label: 'TC Acknowledged',        icon: '👁️', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
+  TC_APPROVED:              { label: 'TC Approved',            icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  TC_REJECTED:              { label: 'TC Rejected',            icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  TC_CANCELLED:             { label: 'TC Cancelled',           icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
+  DTR_GENERATED:            { label: 'DTR Generated',          icon: '📄', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
+  DTR_REGENERATED:          { label: 'DTR Regenerated',        icon: '🔄', color: 'bg-orange-500/15 border-orange-400/20 text-orange-300' },
+  DTR_ISSUE_SUBMITTED:      { label: 'DTR Issue Reported',     icon: '⚠️', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  WFH_SUBMITTED:            { label: 'WFH Registered',         icon: '🏠', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
+  WFH_EOD_SUBMITTED:        { label: 'EOD Report Submitted',   icon: '📝', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
+  WFH_APPROVED:             { label: 'WFH Approved',           icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  WFH_REJECTED:             { label: 'WFH Rejected',           icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  WFH_REVISION_REQUESTED:   { label: 'Revision Requested',     icon: '🔁', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  WFH_RESUBMITTED:          { label: 'WFH Resubmitted',        icon: '🔄', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
+  WFH_PENDING_APPROVAL:     { label: 'WFH Approval Required',  icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
 };
 
 function timeAgo(iso: string): string {
@@ -258,7 +265,8 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR 
 
         {!loading && items.map((n: AppNotification) => {
           const meta = TYPE_META[n.type] ?? { label: n.type, icon: '🔔', color: 'bg-white/10 border-white/10 text-white/60' };
-          const isPendingAction = n.type === 'PENDING_APPROVAL' && !!n.leaveId;
+          // PENDING_APPROVAL with leaveId = leave action; with wfhId = WFH action (no inline leave buttons)
+          const isPendingAction = n.type === 'PENDING_APPROVAL' && !!n.leaveId && !n.wfhId;
           const isActing = actingId === n.id;
 
           // Determine TC inline actions based on current status and the user's role
@@ -320,6 +328,16 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR 
                   >
                     {detailLoading === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
                     View TC Details
+                  </button>
+                )}
+                {/* View WFH — for WFH_ notifications and WFH PENDING_APPROVAL */}
+                {n.wfhId && (
+                  <button
+                    onClick={() => dismiss(n.id)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-sky-500/10 border border-sky-400/20 text-sky-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-sky-500/15"
+                  >
+                    <span>🏠</span>
+                    View in WFH History
                   </button>
                 )}
                 {/* View DTR — for DTR_ notifications */}

@@ -3178,14 +3178,34 @@ function getNotifications(email) {
       var isLegacy8Col = (col5 !== 'true' && col5 !== 'false' && col5 !== true && col5 !== false && String(col5).length > 0);
       var isReadVal  = isLegacy8Col ? rows[i][6] : col5;
       var createdVal = isLegacy8Col ? rows[i][7] : rows[i][6];
+      var refField = isLegacy8Col ? String(rows[i][5] || '') : '';
+      // Determine which typed ID field to populate based on type prefix or explicit refField
+      var leaveIdVal  = '';
+      var tcIdVal     = '';
+      var dtrIdVal    = '';
+      var wfhIdVal    = '';
+      if (refField === 'wfhId' || nType.indexOf('WFH_') === 0) {
+        wfhIdVal = String(refId);
+      } else if (refField === 'dtrId' || nType.indexOf('DTR_') === 0) {
+        dtrIdVal = String(refId);
+      } else if (nType.indexOf('TC_') === 0) {
+        tcIdVal = String(refId);
+      } else if (nType.indexOf('LEAVE_') === 0) {
+        leaveIdVal = String(refId);
+      } else if (nType === 'PENDING_APPROVAL') {
+        // Distinguish leave vs WFH PENDING_APPROVAL by refField when available
+        if (refField === 'wfhId') { wfhIdVal = String(refId); }
+        else { leaveIdVal = String(refId); }
+      }
       results.push({
         id:                 rows[i][0],
         userId:             rows[i][1],
         type:               nType,
         message:            rows[i][3],
-        leaveId:            nType.indexOf('LEAVE_') === 0 || nType === 'PENDING_APPROVAL' ? refId : '',
-        timeCorrectionId:   nType.indexOf('TC_') === 0 ? refId : '',
-        dtrId:              nType.indexOf('DTR_') === 0 ? refId : '',
+        leaveId:            leaveIdVal,
+        timeCorrectionId:   tcIdVal,
+        dtrId:              dtrIdVal,
+        wfhId:              wfhIdVal,
         isRead:             isReadVal === 'true' || isReadVal === true,
         createdAt:          createdVal
       });
@@ -4968,8 +4988,8 @@ function submitWFH(data) {
   ]);
 
   // Notify employee (confirmation)
-  createNotification(data.email, 'WFH_SUBMITTED',
-    'Your Work From Home registration for ' + (data.attendanceDate || 'today') + ' has been submitted and is pending approval.', id);
+  createNotificationRecord(data.email, 'WFH_SUBMITTED',
+    'Your Work From Home registration for ' + (data.attendanceDate || 'today') + ' has been submitted and is pending approval.', id, 'wfhId');
 
   // Notify approver
   var cfg = getSettingsForEmployee(emailLower);
@@ -4982,8 +5002,8 @@ function submitWFH(data) {
   sheet.getRange(sheet.getLastRow(), 24).setValue(firstApprover);
   var apprName = getApproverName(firstApprover);
   sheet.getRange(sheet.getLastRow(), 25).setValue(apprName);
-  createNotification(firstApprover, 'PENDING_APPROVAL',
-    (data.name || data.email) + ' registered Work From Home for ' + (data.attendanceDate || 'today') + '. Planned: ' + (data.workDescription || '').substring(0, 100), id);
+  createNotificationRecord(firstApprover, 'PENDING_APPROVAL',
+    (data.name || data.email) + ' registered Work From Home for ' + (data.attendanceDate || 'today') + '. Planned: ' + (data.workDescription || '').substring(0, 100), id, 'wfhId');
 
   return _json({ success: true, message: 'Work From Home registered successfully', id: id });
 }
@@ -5056,15 +5076,15 @@ function submitWFHEOD(data, clientFolderId) {
   s.getRange(r, 31).setValue(auditJson);
 
   // Notify employee (confirmation)
-  createNotification(data.email, 'WFH_SUBMITTED',
-    'Your End-of-Day Report for WFH on ' + String(found.row[6] || '') + ' has been submitted. You may now clock out.', data.wfhId);
+  createNotificationRecord(data.email, 'WFH_SUBMITTED',
+    'Your End-of-Day Report for WFH on ' + String(found.row[6] || '') + ' has been submitted. You may now clock out.', data.wfhId, 'wfhId');
 
   // Notify approver
   var approverEmail = String(found.row[23] || '').trim();
   if (!approverEmail) approverEmail = ADMIN_EMAIL;
   if (approverEmail) {
-    createNotification(approverEmail, 'PENDING_APPROVAL',
-      (String(found.row[3] || data.email)) + ' submitted End-of-Day Report for WFH on ' + String(found.row[6] || '') + '. Ready for review.', data.wfhId);
+    createNotificationRecord(approverEmail, 'PENDING_APPROVAL',
+      (String(found.row[3] || data.email)) + ' submitted End-of-Day Report for WFH on ' + String(found.row[6] || '') + '. Ready for review.', data.wfhId, 'wfhId');
   }
 
   return _json({ success: true, message: 'End-of-Day Report submitted successfully', attachments: attachments });
@@ -5139,8 +5159,8 @@ function resubmitWFH(data, clientFolderId) {
   var approverEmail = String(found.row[23] || '').trim();
   if (!approverEmail) approverEmail = ADMIN_EMAIL;
   if (approverEmail) {
-    createNotification(approverEmail, 'PENDING_APPROVAL',
-      (String(found.row[3] || data.email)) + ' resubmitted WFH record for ' + String(found.row[6] || '') + ' (Revision #' + revCount + '). Awaiting your review.', data.wfhId);
+    createNotificationRecord(approverEmail, 'PENDING_APPROVAL',
+      (String(found.row[3] || data.email)) + ' resubmitted WFH record for ' + String(found.row[6] || '') + ' (Revision #' + revCount + '). Awaiting your review.', data.wfhId, 'wfhId');
   }
   return _json({ success: true, message: 'WFH resubmitted successfully' });
 }
@@ -5165,8 +5185,8 @@ function approveWFH(wfhId, approverEmail, comments) {
   s.getRange(r, 30).setValue(now);
   s.getRange(r, 31).setValue(auditJson);
   var empEmail = String(found.row[2] || '');
-  if (empEmail) createNotification(empEmail, 'WFH_APPROVED',
-    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Approved by ' + getApproverName(approverEmail) + (comments ? '. Comments: ' + comments : ''), wfhId);
+  if (empEmail) createNotificationRecord(empEmail, 'WFH_APPROVED',
+    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Approved by ' + getApproverName(approverEmail) + (comments ? '. Comments: ' + comments : ''), wfhId, 'wfhId');
   return _json({ success: true, message: 'WFH approved successfully' });
 }
 
@@ -5188,8 +5208,8 @@ function rejectWFH(wfhId, approverEmail, reason) {
   s.getRange(r, 30).setValue(now);
   s.getRange(r, 31).setValue(auditJson);
   var empEmail = String(found.row[2] || '');
-  if (empEmail) createNotification(empEmail, 'WFH_REJECTED',
-    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Rejected. Reason: ' + reason, wfhId);
+  if (empEmail) createNotificationRecord(empEmail, 'WFH_REJECTED',
+    'Your WFH submission for ' + String(found.row[6] || '') + ' has been Rejected. Reason: ' + reason, wfhId, 'wfhId');
   return _json({ success: true, message: 'WFH rejected' });
 }
 
@@ -5210,8 +5230,8 @@ function requestWFHRevision(wfhId, approverEmail, comments) {
   s.getRange(r, 30).setValue(now);
   s.getRange(r, 31).setValue(auditJson);
   var empEmail = String(found.row[2] || '');
-  if (empEmail) createNotification(empEmail, 'WFH_REVISION_REQUESTED',
-    'Revision requested on your WFH for ' + String(found.row[6] || '') + '. Comments: ' + comments, wfhId);
+  if (empEmail) createNotificationRecord(empEmail, 'WFH_REVISION_REQUESTED',
+    'Revision requested on your WFH for ' + String(found.row[6] || '') + '. Comments: ' + comments, wfhId, 'wfhId');
   return _json({ success: true, message: 'Revision requested' });
 }
 

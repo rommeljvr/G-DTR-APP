@@ -151,6 +151,7 @@ export interface AppNotification {
   leaveId?: string;
   timeCorrectionId?: string;
   dtrId?: string;
+  wfhId?: string;
   isRead: boolean;
   createdAt: string;
 }
