@@ -930,62 +930,87 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
             <div className="grid grid-cols-2 gap-2">
               {/* 1st Meal Allowance */}
-              <div className={`rounded-xl border p-3 text-center ${
-                ma1Done
-                  ? 'bg-emerald-500/10 border-emerald-400/20'
-                  : ma1Eligible
-                  ? 'bg-amber-500/10 border-amber-400/20'
-                  : 'bg-white/3 border-white/8'
-              }`}>
-                <p className={`text-[10px] font-semibold mb-1.5 ${
-                  ma1Done ? 'text-emerald-300' : ma1Eligible ? 'text-amber-300' : 'text-white/30'
-                }`}>
-                  {ma1Done ? '✓ Submitted' : ma1Eligible ? 'Available' : maHours < ma1MinH ? `Eligible in ${(ma1MinH - maHours).toFixed(1)}h` : 'Not eligible'}
-                </p>
-                <p className="text-white text-xs font-medium mb-2">1st Meal</p>
-                {ma1Eligible && (
-                  <button
-                    onClick={() => handleMealAllowanceAction(1)}
-                    disabled={maProcessing}
-                    className="w-full bg-amber-500/20 text-amber-300 border border-amber-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    {maProcessing && maPending === 1 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
-                  </button>
-                )}
-              </div>
+              {(() => {
+                const sub1 = maStatus?.submissions?.find(s => s.sequence === 1);
+                return (
+                  <div className={`rounded-xl border p-3 text-center ${
+                    ma1Done
+                      ? 'bg-emerald-500/10 border-emerald-400/20'
+                      : ma1Eligible
+                      ? 'bg-amber-500/10 border-amber-400/20'
+                      : 'bg-white/3 border-white/8'
+                  }`}>
+                    <p className={`text-[10px] font-semibold mb-1.5 ${
+                      ma1Done ? 'text-emerald-300' : ma1Eligible ? 'text-amber-300' : 'text-white/30'
+                    }`}>
+                      {ma1Done ? '✓ Submitted' : ma1Eligible ? 'Available' : maHours < ma1MinH ? `Eligible in ${(ma1MinH - maHours).toFixed(1)}h` : 'Not eligible'}
+                    </p>
+                    <p className="text-white text-xs font-medium mb-2">1st Meal</p>
+                    {sub1?.imageUrl ? (
+                      <button
+                        onClick={() => setPreviewPhoto(sub1.imageUrl)}
+                        className="w-full rounded-lg overflow-hidden border border-emerald-400/20 active:scale-95 transition-transform"
+                      >
+                        <img src={sub1.imageUrl} alt="Meal 1 photo" className="w-full h-16 object-cover" />
+                        <p className="text-emerald-300/60 text-[9px] py-0.5">Tap to view</p>
+                      </button>
+                    ) : ma1Eligible ? (
+                      <button
+                        onClick={() => handleMealAllowanceAction(1)}
+                        disabled={maProcessing}
+                        className="w-full bg-amber-500/20 text-amber-300 border border-amber-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        {maProcessing && maPending === 1 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })()}
 
               {/* 2nd Meal Allowance */}
-              <div className={`rounded-xl border p-3 text-center ${
-                ma2Done
-                  ? 'bg-emerald-500/10 border-emerald-400/20'
-                  : ma2Eligible
-                  ? 'bg-violet-500/10 border-violet-400/20'
-                  : 'bg-white/3 border-white/8'
-              }`}>
-                <p className={`text-[10px] font-semibold mb-1.5 ${
-                  ma2Done ? 'text-emerald-300'
-                  : !(maStatus?.config.secondEnabled) ? 'text-white/20'
-                  : ma2Eligible ? 'text-violet-300'
-                  : !ma1Done ? 'text-white/30'
-                  : maHours < ma2MinH ? `text-white/30` : 'text-white/30'
-                }`}>
-                  {ma2Done ? '✓ Submitted'
-                    : !(maStatus?.config.secondEnabled) ? 'Disabled'
-                    : !ma1Done ? '1st required first'
-                    : ma2Eligible ? 'Available'
-                    : `Eligible in ${Math.max(0, ma2MinH - maHours).toFixed(1)}h`}
-                </p>
-                <p className="text-white text-xs font-medium mb-2">2nd Meal</p>
-                {ma2Eligible && (
-                  <button
-                    onClick={() => handleMealAllowanceAction(2)}
-                    disabled={maProcessing}
-                    className="w-full bg-violet-500/20 text-violet-300 border border-violet-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    {maProcessing && maPending === 2 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
-                  </button>
-                )}
-              </div>
+              {(() => {
+                const sub2 = maStatus?.submissions?.find(s => s.sequence === 2);
+                return (
+                  <div className={`rounded-xl border p-3 text-center ${
+                    ma2Done
+                      ? 'bg-emerald-500/10 border-emerald-400/20'
+                      : ma2Eligible
+                      ? 'bg-violet-500/10 border-violet-400/20'
+                      : 'bg-white/3 border-white/8'
+                  }`}>
+                    <p className={`text-[10px] font-semibold mb-1.5 ${
+                      ma2Done ? 'text-emerald-300'
+                      : !(maStatus?.config?.secondEnabled) ? 'text-white/20'
+                      : ma2Eligible ? 'text-violet-300'
+                      : 'text-white/30'
+                    }`}>
+                      {ma2Done ? '✓ Submitted'
+                        : !(maStatus?.config?.secondEnabled) ? 'Disabled'
+                        : !ma1Done ? '1st required first'
+                        : ma2Eligible ? 'Available'
+                        : `Eligible in ${Math.max(0, ma2MinH - maHours).toFixed(1)}h`}
+                    </p>
+                    <p className="text-white text-xs font-medium mb-2">2nd Meal</p>
+                    {sub2?.imageUrl ? (
+                      <button
+                        onClick={() => setPreviewPhoto(sub2.imageUrl)}
+                        className="w-full rounded-lg overflow-hidden border border-emerald-400/20 active:scale-95 transition-transform"
+                      >
+                        <img src={sub2.imageUrl} alt="Meal 2 photo" className="w-full h-16 object-cover" />
+                        <p className="text-emerald-300/60 text-[9px] py-0.5">Tap to view</p>
+                      </button>
+                    ) : ma2Eligible ? (
+                      <button
+                        onClick={() => handleMealAllowanceAction(2)}
+                        disabled={maProcessing}
+                        className="w-full bg-violet-500/20 text-violet-300 border border-violet-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        {maProcessing && maPending === 2 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
