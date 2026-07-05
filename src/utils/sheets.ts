@@ -4967,17 +4967,23 @@ function submitWFH(data) {
     '[]', 'Submitted', '', '', '', '', 0, now, now, audit, 1
   ]);
 
+  // Notify employee (confirmation)
+  createNotification(data.email, 'WFH_SUBMITTED',
+    'Your Work From Home registration for ' + (data.attendanceDate || 'today') + ' has been submitted and is pending approval.', id);
+
   // Notify approver
   var cfg = getSettingsForEmployee(emailLower);
   var firstApprover = cfg ? ((cfg.workflowType === 'TWO_STEP' && cfg.teamLeadEmail) ? cfg.teamLeadEmail : cfg.approverEmail) : '';
-  if (firstApprover) {
-    // Update approver column
-    sheet.getRange(sheet.getLastRow(), 24).setValue(firstApprover);
-    var apprName = getApproverName(firstApprover);
-    sheet.getRange(sheet.getLastRow(), 25).setValue(apprName);
-    createNotification(firstApprover, 'WFH_SUBMITTED',
-      (data.name || data.email) + ' registered Work From Home for ' + (data.attendanceDate || 'today') + '. Planned: ' + (data.workDescription || '').substring(0, 100), id);
+  if (!firstApprover) {
+    // Fallback: notify admin if no approver configured
+    firstApprover = ADMIN_EMAIL;
   }
+  // Update approver column
+  sheet.getRange(sheet.getLastRow(), 24).setValue(firstApprover);
+  var apprName = getApproverName(firstApprover);
+  sheet.getRange(sheet.getLastRow(), 25).setValue(apprName);
+  createNotification(firstApprover, 'PENDING_APPROVAL',
+    (data.name || data.email) + ' registered Work From Home for ' + (data.attendanceDate || 'today') + '. Planned: ' + (data.workDescription || '').substring(0, 100), id);
 
   return _json({ success: true, message: 'Work From Home registered successfully', id: id });
 }
@@ -5049,10 +5055,15 @@ function submitWFHEOD(data, clientFolderId) {
   s.getRange(r, 30).setValue(now);
   s.getRange(r, 31).setValue(auditJson);
 
+  // Notify employee (confirmation)
+  createNotification(data.email, 'WFH_SUBMITTED',
+    'Your End-of-Day Report for WFH on ' + String(found.row[6] || '') + ' has been submitted. You may now clock out.', data.wfhId);
+
   // Notify approver
   var approverEmail = String(found.row[23] || '').trim();
+  if (!approverEmail) approverEmail = ADMIN_EMAIL;
   if (approverEmail) {
-    createNotification(approverEmail, 'WFH_EOD_SUBMITTED',
+    createNotification(approverEmail, 'PENDING_APPROVAL',
       (String(found.row[3] || data.email)) + ' submitted End-of-Day Report for WFH on ' + String(found.row[6] || '') + '. Ready for review.', data.wfhId);
   }
 
@@ -5126,8 +5137,9 @@ function resubmitWFH(data, clientFolderId) {
   s.getRange(r, 32).setValue(version);
 
   var approverEmail = String(found.row[23] || '').trim();
+  if (!approverEmail) approverEmail = ADMIN_EMAIL;
   if (approverEmail) {
-    createNotification(approverEmail, 'WFH_RESUBMITTED',
+    createNotification(approverEmail, 'PENDING_APPROVAL',
       (String(found.row[3] || data.email)) + ' resubmitted WFH record for ' + String(found.row[6] || '') + ' (Revision #' + revCount + '). Awaiting your review.', data.wfhId);
   }
   return _json({ success: true, message: 'WFH resubmitted successfully' });
