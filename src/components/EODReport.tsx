@@ -10,13 +10,7 @@ interface Props {
   onCancel: () => void;
 }
 
-interface PendingFile {
-  fileName: string;
-  fileData: string;
-  mimeType: string;
-  size: number;
-}
-
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv';
 
 // Defined outside component — stable identity prevents textarea unmount/keyboard-dismiss on each keystroke
@@ -51,7 +45,10 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
     eodNextDayPlan: '',
     eodRemarks: '',
   });
-  const [files, setFiles] = useState<PendingFile[]>([]);
+  // TC Filing pattern: File ref set synchronously + documentData set by reader.onload
+  // Validation checks documentFile (sync) — never the async-loaded data
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentData, setDocumentData] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -64,21 +61,24 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
   const setField = (field: keyof typeof form) => (value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
+  // Mirrors TC Filing handleFileChange exactly
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files || []);
-    const MAX = 10 * 1024 * 1024;
-    picked.forEach(file => {
-      if (file.size > MAX) { showToast('error', `${file.name} exceeds 10 MB limit.`); return; }
+    const f = e.target.files?.[0] ?? null;
+    setDocumentFile(f);           // set synchronously — validation reads this
+    setDocumentData('');          // clear previous data while loading
+    if (f) {
+      if (f.size > MAX_FILE_SIZE) {
+        showToast('error', `${f.name} exceeds 10 MB limit.`);
+        setDocumentFile(null);
+        e.target.value = '';
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = () => {
-        setFiles(prev => [...prev, { fileName: file.name, fileData: reader.result as string, mimeType: file.type, size: file.size }]);
-      };
-      reader.readAsDataURL(file);
-    });
+      reader.onload = () => setDocumentData(reader.result as string);
+      reader.readAsDataURL(f);
+    }
     e.target.value = '';
   };
-
-  const removeFile = (idx: number) => setFiles(prev => prev.filter((_, i) => i !== idx));
 
   const formatSize = (bytes: number) => bytes < 1024 * 1024
     ? (bytes / 1024).toFixed(1) + ' KB'
@@ -89,9 +89,12 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
     if (!form.eodAccomplishments.trim()){ showToast('error', 'Accomplishments is required.'); return; }
     if (!form.eodIssues.trim())         { showToast('error', 'Issues Encountered is required.'); return; }
     if (!form.eodDeliverables.trim())   { showToast('error', 'Deliverables Completed is required.'); return; }
-    if (files.length === 0)             { showToast('error', 'At least one supporting attachment is required.'); return; }
+    // Validate against documentFile (synchronous ref) — same as TC Filing pattern
+    if (!documentFile)                  { showToast('error', 'A supporting attachment is required.'); return; }
+    if (!documentData)                  { showToast('error', 'File is still loading, please wait a moment.'); return; }
 
     setSaving(true);
+    const mime = documentFile.type || 'application/octet-stream';
     const res = await submitWFHEOD({
       wfhId:              wfhRecord.id,
       email:              user.email,
@@ -101,7 +104,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
       eodDeliverables:    form.eodDeliverables.trim(),
       eodNextDayPlan:     form.eodNextDayPlan.trim() || undefined,
       eodRemarks:         form.eodRemarks.trim() || undefined,
-      attachments:        files.map(f => ({ fileName: f.fileName, fileData: f.fileData, mimeType: f.mimeType })),
+      attachments:        [{ fileName: documentFile.name, fileData: documentData, mimeType: mime }],
     });
     setSaving(false);
     if (res.success) {
@@ -161,30 +164,31 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
             <label className="text-white/50 text-[11px] uppercase tracking-wider block mb-1.5">
               Supporting Attachments<span className="text-rose-400 ml-0.5">*</span>
             </label>
-            <input ref={fileRef} type="file" multiple accept={ACCEPTED} onChange={handleFileChange} className="hidden" />
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="w-full border border-dashed border-white/20 rounded-xl py-4 flex flex-col items-center gap-2 text-white/40 hover:bg-white/3 active:scale-[0.98] transition-transform"
-            >
-              <Upload className="w-5 h-5" />
-              <span className="text-xs">Tap to attach files</span>
-              <span className="text-[10px] text-white/20">PDF, Word, Excel, Images — max 10 MB each</span>
-            </button>
-
-            {files.length > 0 && (
-              <div className="mt-2 space-y-2">
-                {files.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2">
-                    <Paperclip className="w-3.5 h-3.5 text-white/40 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-xs truncate">{f.fileName}</p>
-                      <p className="text-white/30 text-[10px]">{formatSize(f.size)}</p>
-                    </div>
-                    <button onClick={() => removeFile(i)} className="w-6 h-6 flex items-center justify-center rounded-full bg-white/8 active:scale-90">
-                      <X className="w-3 h-3 text-white/50" />
-                    </button>
-                  </div>
-                ))}
+            <input ref={fileRef} type="file" accept={ACCEPTED} onChange={handleFileChange} className="hidden" />
+            {!documentFile ? (
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-full border border-dashed border-white/20 rounded-xl py-4 flex flex-col items-center gap-2 text-white/40 hover:bg-white/3 active:scale-[0.98] transition-transform"
+              >
+                <Upload className="w-5 h-5" />
+                <span className="text-xs">Tap to attach a file</span>
+                <span className="text-[10px] text-white/20">PDF, Word, Excel, Images — max 10 MB</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2">
+                <Paperclip className="w-3.5 h-3.5 text-white/40 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-xs truncate">{documentFile.name}</p>
+                  <p className="text-white/30 text-[10px]">
+                    {formatSize(documentFile.size)}{!documentData && ' — loading…'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setDocumentFile(null); setDocumentData(''); }}
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-white/8 active:scale-90"
+                >
+                  <X className="w-3 h-3 text-white/50" />
+                </button>
               </div>
             )}
           </div>
