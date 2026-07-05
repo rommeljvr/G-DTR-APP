@@ -1007,6 +1007,49 @@ export async function resolveDTRIssue(
   } catch (err) { return { success: false, message: String(err) }; }
 }
 
+export async function getMealAllowanceStatus(
+  email: string
+): Promise<{ success: boolean; attendanceId: string | null; timeInTimestamp: string | null; hoursWorked: number; submissions: import('../types').MealAllowanceRecord[]; config: import('../types').MealAllowanceConfig }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, attendanceId: null, timeInTimestamp: null, hoursWorked: 0, submissions: [], config: { enabled: true, secondEnabled: true, minHours1: 0, minHours2: 8, maxCount: 2 } };
+  try {
+    const res = await fetch(`${scriptUrl}?action=getMealAllowanceStatus&email=${encodeURIComponent(email)}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch { return { success: false, attendanceId: null, timeInTimestamp: null, hoursWorked: 0, submissions: [], config: { enabled: true, secondEnabled: true, minHours1: 0, minHours2: 8, maxCount: 2 } }; }
+}
+
+export async function submitMealAllowance(data: {
+  userEmail: string; userName: string; photo: string;
+  latitude: number; longitude: number; accuracy: number;
+  address: string; deviceInfo: string; remarks?: string;
+}): Promise<{ success: boolean; message: string; id?: string; sequence?: number; imageId?: string; imageUrl?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'submitMealAllowance', folderId: getFolderId(), data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function saveMealAllowanceSettings(
+  data: import('../types').MealAllowanceConfig, adminEmail: string
+): Promise<{ success: boolean; message: string; config?: import('../types').MealAllowanceConfig }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'saveMealAllowanceSettings', email: adminEmail, data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 // ─── Google Apps Script template (v4.0 – Employee validation) ─────
 
 export const APPS_SCRIPT_TEMPLATE = `
@@ -1116,6 +1159,8 @@ function doPost(e) {
     if (data.action === 'acknowledgeDTR')    return acknowledgeDTR(data.dtrId, data.email);
     if (data.action === 'reportDTRIssue')    return reportDTRIssue(data);
     if (data.action === 'resolveDTRIssue')   return resolveDTRIssue(data.issueId, data.email);
+    if (data.action === 'submitMealAllowance')       return submitMealAllowance(data.data, data.folderId);
+    if (data.action === 'saveMealAllowanceSettings') return saveMealAllowanceSettings(data.data, data.email);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1160,6 +1205,8 @@ function doGet(e) {
   if (action === 'getUnreadCount')       return email ? getUnreadCount(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getTimeCorrectionHistory')          return email ? getTimeCorrectionHistory(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getPendingTimeCorrectionApprovals') return email ? getPendingTimeCorrectionApprovals(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getMealAllowanceStatus')   return email ? getMealAllowanceStatus(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getMealAllowanceConfig')   return _json({ success: true, config: getMealAllowanceConfig() });
   if (action === 'getDTRList')        return email ? getDTRList(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getEmployeeDTRList') return email ? getEmployeeDTRList(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getDTRById')        return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
@@ -4381,5 +4428,237 @@ function createNotificationRecord(toEmail, type, message, refId, refField) {
   var sheet = getNotificationsSheet();
   var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
   sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', 'false', now]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MEAL ALLOWANCE
+// ══════════════════════════════════════════════════════════════════
+
+var MA_DEFAULTS = {
+  MEAL_ALLOWANCE_ENABLED:   'true',
+  MEAL_ALLOWANCE_2_ENABLED: 'true',
+  MEAL_ALLOWANCE_MIN_HOURS_1: '0',
+  MEAL_ALLOWANCE_MIN_HOURS_2: '8',
+  MEAL_ALLOWANCE_MAX_COUNT:   '2'
+};
+
+function getMealAllowanceSetting(key) {
+  var val = getSetting(key);
+  return val !== null ? val : MA_DEFAULTS[key];
+}
+
+function getMealAllowanceConfig() {
+  return {
+    enabled:       getMealAllowanceSetting('MEAL_ALLOWANCE_ENABLED')   === 'true',
+    secondEnabled: getMealAllowanceSetting('MEAL_ALLOWANCE_2_ENABLED') === 'true',
+    minHours1:     parseFloat(getMealAllowanceSetting('MEAL_ALLOWANCE_MIN_HOURS_1')) || 0,
+    minHours2:     parseFloat(getMealAllowanceSetting('MEAL_ALLOWANCE_MIN_HOURS_2')) || 8,
+    maxCount:      parseInt(getMealAllowanceSetting('MEAL_ALLOWANCE_MAX_COUNT'), 10) || 2
+  };
+}
+
+function saveMealAllowanceSettings(data, requesterEmail) {
+  if (!requesterEmail || requesterEmail.toLowerCase() !== ADMIN_EMAIL) {
+    return _json({ success: false, message: 'Unauthorized' });
+  }
+  var sheet = initSettingsSheet();
+  var rows  = sheet.getDataRange().getValues();
+  var keys = {
+    enabled:       'MEAL_ALLOWANCE_ENABLED',
+    secondEnabled: 'MEAL_ALLOWANCE_2_ENABLED',
+    minHours1:     'MEAL_ALLOWANCE_MIN_HOURS_1',
+    minHours2:     'MEAL_ALLOWANCE_MIN_HOURS_2',
+    maxCount:      'MEAL_ALLOWANCE_MAX_COUNT'
+  };
+  var updates = {};
+  updates[keys.enabled]       = String(data.enabled       !== false);
+  updates[keys.secondEnabled] = String(data.secondEnabled !== false);
+  updates[keys.minHours1]     = String(parseFloat(data.minHours1) || 0);
+  updates[keys.minHours2]     = String(parseFloat(data.minHours2) || 8);
+  updates[keys.maxCount]      = String(parseInt(data.maxCount, 10) || 2);
+  for (var i = 1; i < rows.length; i++) {
+    var k = String(rows[i][0]).trim();
+    if (updates.hasOwnProperty(k)) {
+      sheet.getRange(i + 1, 2).setValue(updates[k]);
+      delete updates[k];
+    }
+  }
+  for (var key in updates) {
+    sheet.appendRow([key, updates[key]]);
+  }
+  return _json({ success: true, message: 'Meal Allowance settings saved', config: getMealAllowanceConfig() });
+}
+
+function initMealAllowanceSheet() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('MealAllowance');
+  if (!sheet) {
+    sheet = ss.insertSheet('MealAllowance');
+    sheet.appendRow([
+      'ID', 'Attendance ID', 'Employee Email', 'Employee Name',
+      'Sequence', 'Timestamp', 'Latitude', 'Longitude', 'Accuracy',
+      'Address', 'Image ID', 'Image URL', 'Remarks', 'Device Info'
+    ]);
+    var hdr = sheet.getRange(1, 1, 1, 14);
+    hdr.setFontWeight('bold').setBackground('#7c3aed').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function submitMealAllowance(data, clientFolderId) {
+  if (!data.userEmail) return _json({ success: false, message: 'Email required' });
+
+  // -- Validate employee is currently timed-in --
+  var attSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Attendance');
+  if (!attSheet) return _json({ success: false, message: 'No attendance records found' });
+  var attRows   = attSheet.getDataRange().getValues();
+  var emailLower = String(data.userEmail).trim().toLowerCase();
+  var timeInId   = null;
+  var timeInTs   = null;
+  for (var i = attRows.length - 1; i >= 1; i--) {
+    if (String(attRows[i][3]).trim().toLowerCase() === emailLower) {
+      var act = String(attRows[i][4]).trim();
+      if (act === 'TIME_IN') {
+        timeInId = String(attRows[i][0]);
+        timeInTs = attRows[i][5];
+      }
+      break;
+    }
+  }
+  if (!timeInId) return _json({ success: false, message: 'No active Time In found. Please Time In first.' });
+
+  // -- Load config --
+  var cfg = getMealAllowanceConfig();
+  if (!cfg.enabled) return _json({ success: false, message: 'Meal Allowance is currently disabled.' });
+
+  // -- Check hours worked --
+  var now      = new Date();
+  var timeInDate = (timeInTs instanceof Date) ? timeInTs : new Date(timeInTs);
+  var hoursWorked = (now.getTime() - timeInDate.getTime()) / 3600000;
+
+  // -- Count existing submissions for this attendance record --
+  var maSheet = initMealAllowanceSheet();
+  var maRows  = maSheet.getDataRange().getValues();
+  var existing = [];
+  for (var j = 1; j < maRows.length; j++) {
+    if (String(maRows[j][1]) === timeInId && String(maRows[j][2]).toLowerCase() === emailLower) {
+      existing.push({ sequence: Number(maRows[j][4]) });
+    }
+  }
+
+  var nextSeq = existing.length + 1;
+  if (nextSeq > cfg.maxCount) {
+    return _json({ success: false, message: 'Maximum Meal Allowance submissions (' + cfg.maxCount + ') already reached.' });
+  }
+
+  // -- Check minimum hours for each sequence --
+  if (nextSeq === 1 && hoursWorked < cfg.minHours1) {
+    return _json({ success: false, message: 'Not yet eligible for Meal Allowance. Minimum hours required: ' + cfg.minHours1 + 'h.' });
+  }
+  if (nextSeq === 2) {
+    if (!cfg.secondEnabled) return _json({ success: false, message: 'Second Meal Allowance is not enabled.' });
+    if (hoursWorked < cfg.minHours2) {
+      return _json({ success: false, message: 'Not yet eligible for Second Meal Allowance. Minimum hours required: ' + cfg.minHours2 + 'h.' });
+    }
+  }
+
+  // -- Upload photo --
+  var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  var imageUrl = '';
+  var imageId  = '';
+  try {
+    if (data.photo && String(data.photo).indexOf('base64,') > -1) {
+      var uploadResult = uploadImageToDrive({ photo: data.photo, userName: data.userName || data.userEmail, action: 'MEAL_' + nextSeq }, folderId);
+      imageUrl = uploadResult.url;
+      imageId  = uploadResult.id;
+    }
+  } catch (err) {
+    Logger.log('Meal allowance drive upload error: ' + err.toString());
+  }
+
+  // -- Write record --
+  var nowTs = Utilities.formatDate(now, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var id    = Utilities.getUuid();
+  maSheet.appendRow([
+    id, timeInId, emailLower, data.userName || emailLower,
+    nextSeq, nowTs,
+    data.latitude || '', data.longitude || '', data.accuracy || '',
+    data.address  || '', imageId, imageUrl,
+    data.remarks  || '', data.deviceInfo || ''
+  ]);
+
+  return _json({
+    success:    true,
+    message:    'Meal Allowance ' + nextSeq + ' submitted successfully.',
+    id:         id,
+    sequence:   nextSeq,
+    imageId:    imageId,
+    imageUrl:   imageUrl,
+    hoursWorked:hoursWorked
+  });
+}
+
+function getMealAllowanceStatus(email) {
+  if (!email) return _json({ success: false, message: 'Email required' });
+  var emailLower = String(email).trim().toLowerCase();
+  var cfg        = getMealAllowanceConfig();
+
+  // Find latest TIME_IN (not followed by TIME_OUT) from Attendance sheet
+  var attSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Attendance');
+  var timeInId = null;
+  var timeInTs = null;
+  if (attSheet && attSheet.getLastRow() > 1) {
+    var attRows = attSheet.getDataRange().getValues();
+    for (var i = attRows.length - 1; i >= 1; i--) {
+      if (String(attRows[i][3]).trim().toLowerCase() === emailLower) {
+        var act = String(attRows[i][4]).trim();
+        if (act === 'TIME_IN') { timeInId = String(attRows[i][0]); timeInTs = attRows[i][5]; }
+        break;
+      }
+    }
+  }
+
+  var hoursWorked = 0;
+  if (timeInTs) {
+    var tin = (timeInTs instanceof Date) ? timeInTs : new Date(timeInTs);
+    hoursWorked = (new Date().getTime() - tin.getTime()) / 3600000;
+  }
+
+  // Find meal allowance submissions for this attendance record
+  var submissions = [];
+  if (timeInId) {
+    var maSheet = initMealAllowanceSheet();
+    var maRows  = maSheet.getDataRange().getValues();
+    for (var j = 1; j < maRows.length; j++) {
+      if (String(maRows[j][1]) === timeInId && String(maRows[j][2]).toLowerCase() === emailLower) {
+        submissions.push({
+          id:          String(maRows[j][0]),
+          attendanceId:String(maRows[j][1]),
+          employeeEmail:String(maRows[j][2]),
+          employeeName: String(maRows[j][3]),
+          sequence:    Number(maRows[j][4]),
+          timestamp:   String(maRows[j][5]),
+          latitude:    Number(maRows[j][6]),
+          longitude:   Number(maRows[j][7]),
+          accuracy:    Number(maRows[j][8]),
+          address:     String(maRows[j][9]),
+          imageId:     String(maRows[j][10]),
+          imageUrl:    String(maRows[j][11]),
+          remarks:     String(maRows[j][12]),
+          deviceInfo:  String(maRows[j][13])
+        });
+      }
+    }
+  }
+
+  return _json({
+    success:         true,
+    attendanceId:    timeInId,
+    timeInTimestamp: timeInTs ? String(timeInTs) : null,
+    hoursWorked:     hoursWorked,
+    submissions:     submissions,
+    config:          cfg
+  });
 }
 `;

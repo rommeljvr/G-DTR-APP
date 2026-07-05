@@ -1,11 +1,13 @@
 import { LocationData } from '../types';
 import { getConfig } from './config';
 
+export type AttendanceAction = 'TIME_IN' | 'TIME_OUT' | 'MEAL_ALLOWANCE_1' | 'MEAL_ALLOWANCE_2';
+
 export async function createCompositeImage(
   photoDataUrl: string,
   location: LocationData,
   deviceInfo: string,
-  action: 'TIME_IN' | 'TIME_OUT' = 'TIME_IN'
+  action: AttendanceAction = 'TIME_IN'
 ): Promise<string> {
   const config = getConfig();
 
@@ -52,18 +54,22 @@ export async function createCompositeImage(
       const logoY = bannerH + canvas.height * 0.02;
       await drawLogoWatermarkAt(ctx, logoX, logoY, logoSize);
 
-      // ── Action badge (TIME IN / TIME OUT) ──────────────────
-      const isTimeIn = action === 'TIME_IN';
-      const badgeLabel = isTimeIn ? '▶  TIME IN' : '◼  TIME OUT';
+      // ── Action badge ────────────────────────────────────────
+      const BADGE_CONFIG: Record<AttendanceAction, { label: string; bg: string }> = {
+        TIME_IN:          { label: '▶  TIME IN',         bg: 'rgba(16,185,129,0.92)'  },
+        TIME_OUT:         { label: '◼  TIME OUT',        bg: 'rgba(239,68,68,0.92)'   },
+        MEAL_ALLOWANCE_1: { label: '🍽  MEAL ALLOWANCE 1', bg: 'rgba(245,158,11,0.92)' },
+        MEAL_ALLOWANCE_2: { label: '🍽  MEAL ALLOWANCE 2', bg: 'rgba(168,85,247,0.92)' },
+      };
+      const { label: badgeLabel, bg: badgeBg } = BADGE_CONFIG[action] ?? BADGE_CONFIG.TIME_IN;
       const badgeFontSize = Math.max(14, Math.floor(canvas.width / 22));
       ctx.font = `900 ${badgeFontSize}px 'Inter', Arial, sans-serif`;
       const badgePadX = badgeFontSize * 1.1;
       const badgePadY = badgeFontSize * 0.55;
       const badgeW = ctx.measureText(badgeLabel).width + badgePadX * 2;
       const badgeH = badgeFontSize + badgePadY * 2;
-      const badgeX = logoX + logoSize + canvas.width * 0.025;  // Right of logo
-      const badgeY = logoY + (logoSize - badgeH) / 2;          // Center aligned with logo
-      const badgeBg = isTimeIn ? 'rgba(16,185,129,0.92)' : 'rgba(239,68,68,0.92)';
+      const badgeX = logoX + logoSize + canvas.width * 0.025;
+      const badgeY = logoY + (logoSize - badgeH) / 2;
       const badgeRadius = badgeH * 0.35;
 
       // Shadow

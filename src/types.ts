@@ -272,6 +272,41 @@ export interface DTRAuditEntry {
   note?: string;
 }
 
+// ── Meal Allowance ─────────────────────────────────────────────────
+
+export interface MealAllowanceConfig {
+  enabled: boolean;
+  secondEnabled: boolean;
+  minHours1: number;
+  minHours2: number;
+  maxCount: number;
+}
+
+export interface MealAllowanceRecord {
+  id: string;
+  attendanceId: string;
+  employeeEmail: string;
+  employeeName: string;
+  sequence: number;
+  imageId: string;
+  imageUrl: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  address: string;
+  timestamp: string;
+  remarks: string;
+  deviceInfo: string;
+}
+
+export interface MealAllowanceStatus {
+  attendanceId: string | null;
+  timeInTimestamp: string | null;
+  hoursWorked: number;
+  submissions: MealAllowanceRecord[];
+  config: MealAllowanceConfig;
+}
+
 export interface DTRRecord {
   id: string;
   version: number;

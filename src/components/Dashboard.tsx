@@ -21,6 +21,9 @@ import TimeCorrectionFiling from './TimeCorrectionFiling';
 import TimeCorrectionReport from './TimeCorrectionReport';
 import TimeCorrectionApproval from './TimeCorrectionApproval';
 import DTRManagement from './DTRManagement';
+import MealAllowanceSettings from './MealAllowanceSettings';
+import { getMealAllowanceStatus, submitMealAllowance } from '../utils/sheets';
+import { MealAllowanceRecord, MealAllowanceConfig } from '../types';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -46,6 +49,7 @@ import {
   Bell,
   Shield,
   FileText,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 interface Props {
@@ -55,7 +59,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management' | 'meal-allowance-settings';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -85,6 +89,20 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   const [shortcutNotice, setShortcutNotice] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Meal Allowance state
+  const [maStatus, setMaStatus] = useState<{
+    attendanceId: string | null;
+    timeInTimestamp: string | null;
+    hoursWorked: number;
+    submissions: MealAllowanceRecord[];
+    config: MealAllowanceConfig;
+  } | null>(null);
+  const [maLoading, setMaLoading] = useState(false);
+  const [maPending, setMaPending] = useState<1 | 2 | null>(null);
+  const [maRemarks, setMaRemarks] = useState('');
+  const [showMaRemarks, setShowMaRemarks] = useState(false);
+  const [maProcessing, setMaProcessing] = useState(false);
+
   const ADMIN_EMAIL = 'rommeljvr@gmail.com';
 
   const isSuperAdmin =
@@ -106,6 +124,59 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleMealAllowanceAction = (seq: 1 | 2) => {
+    if (!locationValidated || !validatedLocation) {
+      setNotification({ type: 'error', message: 'Please validate your location first.' });
+      return;
+    }
+    setMaPending(seq);
+    setMaRemarks('');
+    setShowMaRemarks(true);
+  };
+
+  const handleMealAllowanceCapture = async (photoDataUrl: string) => {
+    setShowCamera(false);
+    setMaProcessing(true);
+    setNotification(null);
+    const loc = validatedLocation;
+    if (!loc || maPending === null) { setMaProcessing(false); return; }
+    try {
+      const deviceInfo = getDeviceString();
+      const compositePhoto = await createCompositeImage(
+        photoDataUrl, loc, deviceInfo,
+        maPending === 1 ? 'MEAL_ALLOWANCE_1' : 'MEAL_ALLOWANCE_2'
+      );
+      setCompositePreview(compositePhoto);
+      const result = await submitMealAllowance({
+        userEmail:  user.email,
+        userName:   user.name,
+        photo:      compositePhoto,
+        latitude:   loc.latitude,
+        longitude:  loc.longitude,
+        accuracy:   loc.accuracy,
+        address:    loc.address,
+        deviceInfo,
+        remarks:    maRemarks.trim() || undefined,
+      });
+      if (result.success) {
+        setNotification({ type: 'success', message: result.message + (result.imageId ? '\n📷 Photo saved to Drive' : '') });
+        setLocationValidated(false);
+        setValidatedLocation(null);
+        setIsCountingDown(false);
+        setCountdown(null);
+        await loadMealAllowanceStatus();
+      } else {
+        setNotification({ type: 'error', message: result.message });
+      }
+    } catch (err) {
+      console.error('Meal allowance error:', err);
+      setNotification({ type: 'error', message: 'Failed to submit. Please try again.' });
+    } finally {
+      setMaProcessing(false);
+      setMaPending(null);
+    }
+  };
 
   useEffect(() => {
     requestNotificationPermission();
@@ -141,11 +212,20 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     }
   }, [isCountingDown, countdown]);
 
+  const loadMealAllowanceStatus = async () => {
+    setMaLoading(true);
+    try {
+      const res = await getMealAllowanceStatus(user.email);
+      if (res.success) setMaStatus(res as typeof maStatus);
+    } catch { /* ignore */ } finally { setMaLoading(false); }
+  };
+
   const loadRecords = async () => {
     const last = await getLastAction(user.email);
     console.log('[Dashboard] getLastAction returned:', last);
     console.log('[Dashboard] Record ID:', last?.id, '| Time:', last?.time, '| Date:', last?.date);
     setLastAction(last);
+    loadMealAllowanceStatus();
   };
 
   const refreshLocationForValidation = async () => {
@@ -332,10 +412,15 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (showCamera) {
     return (
       <CameraCapture
-        onCapture={handleCameraCapture}
-        onCancel={() => setShowCamera(false)}
+        onCapture={maPending !== null ? handleMealAllowanceCapture : handleCameraCapture}
+        onCancel={() => { setShowCamera(false); setMaPending(null); }}
       />
     );
+  }
+
+  if (activeTab === 'meal-allowance-settings') {
+    if (!isSuperAdmin) return null;
+    return <MealAllowanceSettings adminEmail={user.email} onBack={() => setActiveTab('home')} />;
   }
 
   if (activeTab === 'history') {
@@ -392,6 +477,20 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'dtr-management') {
     return <DTRManagement user={user} onBack={() => setActiveTab('home')} />;
   }
+
+  // Derived meal allowance display state
+  const maEnabled = maStatus?.config.enabled ?? false;
+  const isClockedIn = lastAction?.action === 'TIME_IN';
+  const maCount = maStatus?.submissions.length ?? 0;
+  const maMax = maStatus?.config.maxCount ?? 2;
+  const maHours = maStatus?.hoursWorked ?? 0;
+  const ma1Done = maStatus?.submissions.some(s => s.sequence === 1) ?? false;
+  const ma2Done = maStatus?.submissions.some(s => s.sequence === 2) ?? false;
+  const ma1MinH = maStatus?.config.minHours1 ?? 0;
+  const ma2MinH = maStatus?.config.minHours2 ?? 8;
+  const ma1Eligible = isClockedIn && maEnabled && !ma1Done && maHours >= ma1MinH && maCount < maMax;
+  const ma2Eligible = isClockedIn && maEnabled && (maStatus?.config.secondEnabled ?? false) && ma1Done && !ma2Done && maHours >= ma2MinH && maCount < maMax;
+  const showMaSection = maEnabled && isClockedIn;
 
   // ── Main render ──────────────────────────────────────────
 
@@ -780,7 +879,119 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           )}
         </div>
 
-      </div>
+      </div>{/* end flex-1 content section */}
+
+      {/* Meal Allowance remarks modal */}
+      {showMaRemarks && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-6 w-full max-w-sm border border-white/10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <UtensilsCrossed className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-base">Meal Allowance {maPending}</h3>
+                <p className="text-white/40 text-xs">Add optional remarks</p>
+              </div>
+            </div>
+            <textarea
+              value={maRemarks}
+              onChange={e => setMaRemarks(e.target.value)}
+              placeholder="Optional: reason or notes…"
+              rows={3}
+              className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none resize-none placeholder-white/30 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowMaRemarks(false); setMaPending(null); }}
+                className="flex-1 bg-white/10 text-white/70 font-medium py-2.5 rounded-xl active:scale-95 transition-transform text-sm"
+              >Cancel</button>
+              <button
+                onClick={() => { setShowMaRemarks(false); setCompositePreview(null); setShowCamera(true); }}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold py-2.5 rounded-xl active:scale-95 transition-transform text-sm flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" /> Take Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Meal Allowance section ────────────────────── */}
+      {showMaSection && (
+        <div className="px-4 space-y-2">
+          <div className="bg-white/5 border border-white/8 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Meal Allowance</span>
+              </div>
+              {maLoading && <Loader2 className="w-3.5 h-3.5 text-white/30 animate-spin" />}
+              <span className="text-white/30 text-[10px]">{maCount}/{maMax} used · {maHours.toFixed(1)}h worked</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* 1st Meal Allowance */}
+              <div className={`rounded-xl border p-3 text-center ${
+                ma1Done
+                  ? 'bg-emerald-500/10 border-emerald-400/20'
+                  : ma1Eligible
+                  ? 'bg-amber-500/10 border-amber-400/20'
+                  : 'bg-white/3 border-white/8'
+              }`}>
+                <p className={`text-[10px] font-semibold mb-1.5 ${
+                  ma1Done ? 'text-emerald-300' : ma1Eligible ? 'text-amber-300' : 'text-white/30'
+                }`}>
+                  {ma1Done ? '✓ Submitted' : ma1Eligible ? 'Available' : maHours < ma1MinH ? `Eligible in ${(ma1MinH - maHours).toFixed(1)}h` : 'Not eligible'}
+                </p>
+                <p className="text-white text-xs font-medium mb-2">1st Meal</p>
+                {ma1Eligible && (
+                  <button
+                    onClick={() => handleMealAllowanceAction(1)}
+                    disabled={maProcessing}
+                    className="w-full bg-amber-500/20 text-amber-300 border border-amber-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {maProcessing && maPending === 1 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
+                  </button>
+                )}
+              </div>
+
+              {/* 2nd Meal Allowance */}
+              <div className={`rounded-xl border p-3 text-center ${
+                ma2Done
+                  ? 'bg-emerald-500/10 border-emerald-400/20'
+                  : ma2Eligible
+                  ? 'bg-violet-500/10 border-violet-400/20'
+                  : 'bg-white/3 border-white/8'
+              }`}>
+                <p className={`text-[10px] font-semibold mb-1.5 ${
+                  ma2Done ? 'text-emerald-300'
+                  : !(maStatus?.config.secondEnabled) ? 'text-white/20'
+                  : ma2Eligible ? 'text-violet-300'
+                  : !ma1Done ? 'text-white/30'
+                  : maHours < ma2MinH ? `text-white/30` : 'text-white/30'
+                }`}>
+                  {ma2Done ? '✓ Submitted'
+                    : !(maStatus?.config.secondEnabled) ? 'Disabled'
+                    : !ma1Done ? '1st required first'
+                    : ma2Eligible ? 'Available'
+                    : `Eligible in ${Math.max(0, ma2MinH - maHours).toFixed(1)}h`}
+                </p>
+                <p className="text-white text-xs font-medium mb-2">2nd Meal</p>
+                {ma2Eligible && (
+                  <button
+                    onClick={() => handleMealAllowanceAction(2)}
+                    disabled={maProcessing}
+                    className="w-full bg-violet-500/20 text-violet-300 border border-violet-400/20 text-[10px] font-semibold py-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {maProcessing && maPending === 2 ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Claim'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Drawer overlay backdrop ───────────────────── */}
       {showDrawer && (
@@ -972,6 +1183,19 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
               <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
             </button>
           )}
+
+          {isSuperAdmin && (
+            <button
+              onClick={() => { setShowDrawer(false); setActiveTab('meal-allowance-settings'); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+                activeTab === 'meal-allowance-settings' ? 'bg-violet-500/20 text-violet-300 border border-violet-400/20' : 'text-white/70 hover:bg-white/8'
+              }`}
+            >
+              <UtensilsCrossed className="w-4.5 h-4.5 shrink-0" />
+              Meal Allowance Settings
+              <span className="ml-auto text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/20 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+            </button>
+          )}
         </nav>
 
         {/* Drawer footer – logout */}
@@ -1038,3 +1262,4 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     </div>
   );
 }
+
