@@ -1,7 +1,7 @@
 /// <reference path="../pwa.d.ts" />
 import { useState, useEffect, useCallback } from 'react';
-import { User, AttendanceRecord, LocationData } from '../types';
-import { getLastAction, submitAttendance, getNotifications } from '../utils/sheets';
+import { User, AttendanceRecord, LocationData, MealAllowanceRecord, MealAllowanceConfig } from '../types';
+import { getLastAction, submitAttendance, getNotifications, getMealAllowanceStatus, submitMealAllowance } from '../utils/sheets';
 import { requestNotificationPermission, checkAndFirePushNotifications } from '../utils/pushNotification';
 import { getLocationData, validateAddressCoordinates } from '../utils/location';
 import { getDeviceString } from '../utils/device';
@@ -22,8 +22,6 @@ import TimeCorrectionReport from './TimeCorrectionReport';
 import TimeCorrectionApproval from './TimeCorrectionApproval';
 import DTRManagement from './DTRManagement';
 import MealAllowanceSettings from './MealAllowanceSettings';
-import { getMealAllowanceStatus, submitMealAllowance } from '../utils/sheets';
-import { MealAllowanceRecord, MealAllowanceConfig } from '../types';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -119,6 +117,22 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   const formatDisplayTime = (val: string): string => val || '';
 
+  const loadMealAllowanceStatus = async () => {
+    setMaLoading(true);
+    try {
+      const res = await getMealAllowanceStatus(user.email);
+      if (res.success) setMaStatus(res as typeof maStatus);
+    } catch { /* ignore */ } finally { setMaLoading(false); }
+  };
+
+  const loadRecords = async () => {
+    const last = await getLastAction(user.email);
+    console.log('[Dashboard] getLastAction returned:', last);
+    console.log('[Dashboard] Record ID:', last?.id, '| Time:', last?.time, '| Date:', last?.date);
+    setLastAction(last);
+    loadMealAllowanceStatus();
+  };
+
   useEffect(() => {
     loadRecords();
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -211,22 +225,6 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
       });
     }
   }, [isCountingDown, countdown]);
-
-  const loadMealAllowanceStatus = async () => {
-    setMaLoading(true);
-    try {
-      const res = await getMealAllowanceStatus(user.email);
-      if (res.success) setMaStatus(res as typeof maStatus);
-    } catch { /* ignore */ } finally { setMaLoading(false); }
-  };
-
-  const loadRecords = async () => {
-    const last = await getLastAction(user.email);
-    console.log('[Dashboard] getLastAction returned:', last);
-    console.log('[Dashboard] Record ID:', last?.id, '| Time:', last?.time, '| Date:', last?.date);
-    setLastAction(last);
-    loadMealAllowanceStatus();
-  };
 
   const refreshLocationForValidation = async () => {
     setValidatingLocation(true);
