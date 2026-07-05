@@ -3172,13 +3172,12 @@ function getNotifications(email) {
     if (String(rows[i][1] || '').trim().toLowerCase() === emailLower) {
       var nType = String(rows[i][2] || '');
       var refId  = rows[i][4] || '';
-      // Legacy rows had 8 cols: [id,email,type,msg,refId,refField,isRead,createdAt]
-      // Detect by checking if col 5 is a boolean-like value vs a string label like 'dtrId'
-      var col5   = rows[i][5];
-      var isLegacy8Col = (col5 !== 'true' && col5 !== 'false' && col5 !== true && col5 !== false && String(col5).length > 0);
-      var isReadVal  = isLegacy8Col ? rows[i][6] : col5;
-      var createdVal = isLegacy8Col ? rows[i][7] : rows[i][6];
-      var refField = isLegacy8Col ? String(rows[i][5] || '') : '';
+      // 8-col format (createNotificationRecord): [id,email,type,msg,refId,refField,isRead,createdAt]
+      // 7-col format (createNotification legacy): [id,email,type,msg,refId,isRead,createdAt]
+      var is8Col = rows[i].length >= 8 && rows[i][7] !== undefined && rows[i][7] !== '';
+      var refField   = is8Col ? String(rows[i][5] || '') : '';
+      var isReadVal  = is8Col ? rows[i][6] : rows[i][5];
+      var createdVal = is8Col ? rows[i][7] : rows[i][6];
       // Determine which typed ID field to populate based on type prefix or explicit refField
       var leaveIdVal  = '';
       var tcIdVal     = '';
@@ -4580,7 +4579,9 @@ function resolveDTRIssue(issueId, adminEmail) {
 function createNotificationRecord(toEmail, type, message, refId, refField) {
   var sheet = getNotificationsSheet();
   var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
-  sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', 'false', now]);
+  // 8-col format: [id, email, type, msg, refId, refField, isRead, createdAt]
+  // The getNotifications reader detects this by checking col5 is not boolean-like
+  sheet.appendRow([Utilities.getUuid(), toEmail, type, message, refId || '', refField || '', 'false', now]);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -5009,6 +5010,7 @@ function submitWFH(data) {
 }
 
 function submitWFHEOD(data, clientFolderId) {
+  try {
   if (!data || !data.wfhId || !data.email) return _json({ success: false, message: 'Missing required fields' });
   var found = findWFHRow(data.wfhId);
   if (!found) return _json({ success: false, message: 'WFH record not found' });
@@ -5102,6 +5104,10 @@ function submitWFHEOD(data, clientFolderId) {
   }
 
   return _json({ success: true, message: 'End-of-Day Report submitted successfully', attachments: attachments });
+  } catch(topErr) {
+    Logger.log('submitWFHEOD top-level error: ' + topErr);
+    return _json({ success: false, message: 'Server error: ' + topErr.toString().substring(0, 200) });
+  }
 }
 
 function resubmitWFH(data, clientFolderId) {
