@@ -121,7 +121,7 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
     setMaLoading(true);
     try {
       const res = await getMealAllowanceStatus(user.email);
-      if (res.success) setMaStatus(res as typeof maStatus);
+      if (res.success && res.config) setMaStatus(res as typeof maStatus);
     } catch { /* ignore */ } finally { setMaLoading(false); }
   };
 
@@ -477,17 +477,17 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   }
 
   // Derived meal allowance display state
-  const maEnabled = maStatus?.config.enabled ?? false;
+  const maEnabled = maStatus?.config?.enabled ?? false;
   const isClockedIn = lastAction?.action === 'TIME_IN';
-  const maCount = maStatus?.submissions.length ?? 0;
-  const maMax = maStatus?.config.maxCount ?? 2;
+  const maCount = maStatus?.submissions?.length ?? 0;
+  const maMax = maStatus?.config?.maxCount ?? 2;
   const maHours = maStatus?.hoursWorked ?? 0;
-  const ma1Done = maStatus?.submissions.some(s => s.sequence === 1) ?? false;
-  const ma2Done = maStatus?.submissions.some(s => s.sequence === 2) ?? false;
-  const ma1MinH = maStatus?.config.minHours1 ?? 0;
-  const ma2MinH = maStatus?.config.minHours2 ?? 8;
+  const ma1Done = maStatus?.submissions?.some(s => s.sequence === 1) ?? false;
+  const ma2Done = maStatus?.submissions?.some(s => s.sequence === 2) ?? false;
+  const ma1MinH = maStatus?.config?.minHours1 ?? 0;
+  const ma2MinH = maStatus?.config?.minHours2 ?? 8;
   const ma1Eligible = isClockedIn && maEnabled && !ma1Done && maHours >= ma1MinH && maCount < maMax;
-  const ma2Eligible = isClockedIn && maEnabled && (maStatus?.config.secondEnabled ?? false) && ma1Done && !ma2Done && maHours >= ma2MinH && maCount < maMax;
+  const ma2Eligible = isClockedIn && maEnabled && (maStatus?.config?.secondEnabled ?? false) && ma1Done && !ma2Done && maHours >= ma2MinH && maCount < maMax;
   const showMaSection = maEnabled && isClockedIn;
 
   // ── Main render ──────────────────────────────────────────
