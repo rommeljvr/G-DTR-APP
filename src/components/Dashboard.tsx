@@ -117,6 +117,13 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
 
   const formatDisplayTime = (val: string): string => val || '';
 
+  const getDriveThumbnailUrl = (url: string, size = 400): string => {
+    if (!url || !url.includes('drive.google.com')) return url;
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w${size}`;
+    return url;
+  };
+
   const loadMealAllowanceStatus = async () => {
     setMaLoading(true);
     try {
@@ -948,10 +955,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
                     <p className="text-white text-xs font-medium mb-2">1st Meal</p>
                     {sub1?.imageUrl ? (
                       <button
-                        onClick={() => setPreviewPhoto(sub1.imageUrl)}
+                        onClick={() => setPreviewPhoto(getDriveThumbnailUrl(sub1.imageUrl, 1200))}
                         className="w-full rounded-lg overflow-hidden border border-emerald-400/20 active:scale-95 transition-transform"
                       >
-                        <img src={sub1.imageUrl} alt="Meal 1 photo" className="w-full h-16 object-cover" />
+                        <img src={getDriveThumbnailUrl(sub1.imageUrl)} alt="Meal 1 photo" className="w-full h-16 object-cover" />
                         <p className="text-emerald-300/60 text-[9px] py-0.5">Tap to view</p>
                       </button>
                     ) : ma1Eligible ? (
@@ -993,10 +1000,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
                     <p className="text-white text-xs font-medium mb-2">2nd Meal</p>
                     {sub2?.imageUrl ? (
                       <button
-                        onClick={() => setPreviewPhoto(sub2.imageUrl)}
+                        onClick={() => setPreviewPhoto(getDriveThumbnailUrl(sub2.imageUrl, 1200))}
                         className="w-full rounded-lg overflow-hidden border border-emerald-400/20 active:scale-95 transition-transform"
                       >
-                        <img src={sub2.imageUrl} alt="Meal 2 photo" className="w-full h-16 object-cover" />
+                        <img src={getDriveThumbnailUrl(sub2.imageUrl)} alt="Meal 2 photo" className="w-full h-16 object-cover" />
                         <p className="text-emerald-300/60 text-[9px] py-0.5">Tap to view</p>
                       </button>
                     ) : ma2Eligible ? (
