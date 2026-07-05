@@ -1098,6 +1098,24 @@ export async function submitWFHEOD(data: {
   } catch (err) { return { success: false, message: String(err) }; }
 }
 
+export async function resubmitWFHEOD(data: {
+  wfhId: string; email: string;
+  eodSummary: string; eodAccomplishments: string; eodIssues: string;
+  eodDeliverables: string; eodNextDayPlan?: string; eodRemarks?: string;
+  attachments: Array<{ fileName: string; fileData: string; mimeType: string }>;
+}): Promise<{ success: boolean; message: string; attachments?: import('../types').WFHAttachment[] }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'resubmitWFHEOD', folderId: getFolderId(), data }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 export async function resubmitWFH(data: {
   wfhId: string; email: string;
   workDescription?: string; plannedTasks?: string; expectedDeliverables?: string;
@@ -1287,6 +1305,7 @@ function doPost(e) {
     if (data.action === 'saveMealAllowanceSettings') return saveMealAllowanceSettings(data.data, data.email);
     if (data.action === 'submitWFH')          return submitWFH(data.data);
     if (data.action === 'submitWFHEOD')       return submitWFHEOD(data.data, data.folderId);
+    if (data.action === 'resubmitWFHEOD')     return resubmitWFHEOD(data.data, data.folderId);
     if (data.action === 'resubmitWFH')        return resubmitWFH(data.data, data.folderId);
     if (data.action === 'approveWFH')         return approveWFH(data.id, data.email, data.comments);
     if (data.action === 'rejectWFH')          return rejectWFH(data.id, data.email, data.reason);
@@ -1503,6 +1522,27 @@ function submitAttendance(data, clientFolderId) {
 
   try { sheet.autoResizeColumns(1, 17); } catch (ex) {}
   initSettingsSheet();
+
+  // Update WFH Time Out when clocking out
+  if (data.action === 'TIME_OUT') {
+    try {
+      var wfhSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('WorkFromHome');
+      if (wfhSheet && wfhSheet.getLastRow() > 1) {
+        var wfhData = wfhSheet.getDataRange().getValues();
+        // Scan WFH rows for matching email + empty timeOut (most recent open record)
+        var emailLow = String(data.userEmail || '').trim().toLowerCase();
+        for (var wj = 1; wj < wfhData.length; wj++) {
+          var wfhEmail = String(wfhData[wj][2] || '').trim().toLowerCase();
+          var wfhTimeOut = String(wfhData[wj][8] || '').trim();
+          if (wfhEmail === emailLow && !wfhTimeOut) {
+            wfhSheet.getRange(wj + 1, 9).setValue(data.time || '');
+            wfhSheet.getRange(wj + 1, 30).setValue(data.timestamp || new Date().toISOString());
+            break;
+          }
+        }
+      }
+    } catch(wfhErr) { Logger.log('WFH time-out update error: ' + wfhErr); }
+  }
 
   return _json({
     success: true,
@@ -5053,7 +5093,7 @@ function submitWFHEOD(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        
         attachments.push({
           fileId:     file.getId(),
           fileName:   att.fileName,
@@ -5154,7 +5194,7 @@ function resubmitWFH(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        
         attachments.push({ fileId: file.getId(), fileName: att.fileName, fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view', uploadedAt: now, version: version });
       } catch(ae) {
         Logger.log('WFH resubmit attachment error: ' + ae);
@@ -5193,6 +5233,100 @@ function resubmitWFH(data, clientFolderId) {
       (String(found.row[3] || data.email)) + ' resubmitted WFH record for ' + String(found.row[6] || '') + ' (Revision #' + revCount + '). Awaiting your review.', data.wfhId, 'wfhId');
   }
   return _json({ success: true, message: 'WFH resubmitted successfully' });
+}
+
+function resubmitWFHEOD(data, clientFolderId) {
+  try {
+  if (!data || !data.wfhId || !data.email) return _json({ success: false, message: 'Missing required fields' });
+  var found = findWFHRow(data.wfhId);
+  if (!found) return _json({ success: false, message: 'WFH record not found' });
+  if (String(found.row[2]).trim().toLowerCase() !== String(data.email).trim().toLowerCase())
+    return _json({ success: false, message: 'Unauthorized' });
+
+  var status = String(found.row[22] || '');
+  if (status !== 'Revision Required' && status !== 'Pending Review')
+    return _json({ success: false, message: 'EOD can only be revised when status is Revision Required or Pending Review' });
+
+  var now      = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+  var version  = Number(found.row[31] || 1) + 1;
+
+  // Handle attachment — replace or keep existing
+  var existingRaw = String(found.row[21] || '[]');
+  var attachments = [];
+  try { attachments = JSON.parse(existingRaw); } catch(e) {}
+
+  if (data.attachments && data.attachments.length > 0) {
+    var folder;
+    try { folder = DriveApp.getFolderById(folderId); } catch(e) { folder = DriveApp.getRootFolder(); }
+    var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+    var subName   = 'WFH_DOCS_' + monthKey;
+    var subIter   = folder.getFoldersByName(subName);
+    var subFolder = subIter.hasNext() ? subIter.next() : folder.createFolder(subName);
+    for (var a = 0; a < data.attachments.length; a++) {
+      var att = data.attachments[a];
+      if (!att || !att.fileData) return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has no file data' });
+      var commaIdx = att.fileData.indexOf(',');
+      if (commaIdx === -1) return _json({ success: false, message: 'Attachment ' + (a + 1) + ' has an invalid data format' });
+      var header    = att.fileData.substring(0, commaIdx);
+      var b64data   = att.fileData.substring(commaIdx + 1);
+      var mimeMatch = header.match(/:(.*?);/);
+      var mime      = (att.mimeType && att.mimeType !== 'application/octet-stream')
+                        ? att.mimeType : (mimeMatch ? mimeMatch[1] : 'application/octet-stream');
+      try {
+        var bytes = Utilities.base64Decode(b64data);
+        var blob  = Utilities.newBlob(bytes, mime, att.fileName);
+        var file  = subFolder.createFile(blob);
+        attachments.push({ fileId: file.getId(), fileName: att.fileName,
+          fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
+          uploadedAt: now, version: version });
+      } catch(ae) {
+        Logger.log('resubmitWFHEOD attachment error: ' + ae);
+        return _json({ success: false, message: 'File upload failed: ' + ae.toString().substring(0, 120) });
+      }
+    }
+  }
+
+  if (attachments.length === 0) return _json({ success: false, message: 'At least one supporting attachment is required' });
+
+  var prevStatus = status;
+  var newStatus  = 'Pending Review';
+  var revCount   = Number(found.row[27] || 0) + 1;
+  var auditJson  = appendWFHAudit(String(found.row[30] || '[]'), {
+    action: 'WFH_EOD_RESUBMITTED', by: data.email, byRole: 'Employee',
+    prevStatus: prevStatus, newStatus: newStatus, timestamp: now, comments: ''
+  });
+
+  var r = found.rowIndex; var s = found.sheet;
+  s.getRange(r, 15).setValue(data.eodSummary || '');
+  s.getRange(r, 16).setValue(data.eodAccomplishments || '');
+  s.getRange(r, 17).setValue(data.eodIssues || '');
+  s.getRange(r, 18).setValue(data.eodDeliverables || '');
+  s.getRange(r, 19).setValue(data.eodNextDayPlan || '');
+  s.getRange(r, 20).setValue(data.eodRemarks || '');
+  s.getRange(r, 21).setValue(now);
+  s.getRange(r, 22).setValue(JSON.stringify(attachments));
+  s.getRange(r, 23).setValue(newStatus);
+  s.getRange(r, 28).setValue(revCount);
+  s.getRange(r, 30).setValue(now);
+  s.getRange(r, 31).setValue(auditJson);
+  s.getRange(r, 32).setValue(version);
+
+  createNotificationRecord(data.email, 'WFH_SUBMITTED',
+    'Your revised EOD Report for WFH on ' + String(found.row[6] || '') + ' has been resubmitted successfully.', data.wfhId, 'wfhId');
+
+  var approverEmail = String(found.row[23] || '').trim();
+  if (!approverEmail) approverEmail = ADMIN_EMAIL;
+  if (approverEmail) {
+    createNotificationRecord(approverEmail, 'PENDING_APPROVAL',
+      String(found.row[3] || data.email) + ' resubmitted revised EOD Report for WFH on ' + String(found.row[6] || '') + '. Ready for review.', data.wfhId, 'wfhId');
+  }
+
+  return _json({ success: true, message: 'EOD Report resubmitted successfully', attachments: attachments });
+  } catch(topErr) {
+    Logger.log('resubmitWFHEOD top-level error: ' + topErr);
+    return _json({ success: false, message: 'Server error: ' + topErr.toString().substring(0, 200) });
+  }
 }
 
 function approveWFH(wfhId, approverEmail, comments) {

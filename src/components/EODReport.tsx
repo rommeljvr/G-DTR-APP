@@ -1,13 +1,14 @@
 import { useState, useRef } from 'react';
 import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Paperclip, X, FileText, Upload } from 'lucide-react';
 import { WFHRecord, WFHAttachment } from '../types';
-import { submitWFHEOD } from '../utils/sheets';
+import { submitWFHEOD, resubmitWFHEOD } from '../utils/sheets';
 
 interface Props {
   user: { email: string; name: string };
   wfhRecord: WFHRecord;
   onSuccess: (attachments: WFHAttachment[]) => void;
   onCancel: () => void;
+  revisionMode?: boolean;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -36,14 +37,14 @@ function EODField({
   );
 }
 
-export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Props) {
+export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisionMode = false }: Props) {
   const [form, setForm] = useState({
-    eodSummary: '',
-    eodAccomplishments: '',
-    eodIssues: '',
-    eodDeliverables: '',
-    eodNextDayPlan: '',
-    eodRemarks: '',
+    eodSummary:         revisionMode ? (wfhRecord.eodSummary         || '') : '',
+    eodAccomplishments: revisionMode ? (wfhRecord.eodAccomplishments || '') : '',
+    eodIssues:          revisionMode ? (wfhRecord.eodIssues          || '') : '',
+    eodDeliverables:    revisionMode ? (wfhRecord.eodDeliverables    || '') : '',
+    eodNextDayPlan:     revisionMode ? (wfhRecord.eodNextDayPlan     || '') : '',
+    eodRemarks:         revisionMode ? (wfhRecord.eodRemarks         || '') : '',
   });
   // TC Filing pattern: File ref set synchronously + documentData set by reader.onload
   // Validation checks documentFile (sync) — never the async-loaded data
@@ -95,7 +96,8 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
 
     setSaving(true);
     const mime = documentFile.type || 'application/octet-stream';
-    const res = await submitWFHEOD({
+    const submitFn = revisionMode ? resubmitWFHEOD : submitWFHEOD;
+    const res = await submitFn({
       wfhId:              wfhRecord.id,
       email:              user.email,
       eodSummary:         form.eodSummary.trim(),
@@ -108,7 +110,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
     });
     setSaving(false);
     if (res.success) {
-      showToast('success', 'End-of-Day Report submitted! You may now clock out.');
+      showToast('success', revisionMode ? 'Revised EOD Report submitted successfully!' : 'End-of-Day Report submitted! You may now clock out.');
       setTimeout(() => onSuccess(res.attachments || []), 1500);
     } else {
       showToast('error', res.message || 'Submission failed. Please try again.');
@@ -137,7 +139,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
               <FileText className="w-4 h-4 text-emerald-400" />
               <h1 className="text-white font-bold text-base">End-of-Day Report</h1>
             </div>
-            <p className="text-emerald-200/50 text-[11px] mt-0.5">Required before clocking out</p>
+            <p className="text-emerald-200/50 text-[11px] mt-0.5">{revisionMode ? 'Revise and resubmit your EOD report' : 'Required before clocking out'}</p>
           </div>
         </div>
       </div>
@@ -151,6 +153,14 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
             <p className="font-semibold text-amber-300 mb-0.5">WFH: {wfhRecord.attendanceDate}</p>
             <p className="text-amber-200/50 truncate">{wfhRecord.workDescription}</p>
           </div>
+
+          {/* Revision banner */}
+          {revisionMode && wfhRecord.approvalComments && (
+            <div className="bg-orange-500/10 border border-orange-400/25 rounded-xl px-4 py-3">
+              <p className="text-orange-300 text-[11px] font-semibold uppercase tracking-wider mb-1">Revision Requested</p>
+              <p className="text-orange-200/70 text-xs">{wfhRecord.approvalComments}</p>
+            </div>
+          )}
 
           <EODField label="Summary of Completed Work" value={form.eodSummary} onChange={setField('eodSummary')} placeholder="Summarise what you accomplished today…" required rows={3} />
           <EODField label="Accomplishments" value={form.eodAccomplishments} onChange={setField('eodAccomplishments')} placeholder="List your key accomplishments…" required rows={4} />
@@ -199,7 +209,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel }: Prop
             className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.97] transition-transform disabled:opacity-60 shadow-lg"
           >
             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-            {saving ? 'Submitting EOD Report…' : 'Submit End-of-Day Report'}
+            {saving ? 'Submitting…' : revisionMode ? 'Resubmit Revised EOD Report' : 'Submit End-of-Day Report'}
           </button>
 
         </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Loader2, Search, X, ExternalLink, ChevronDown, ChevronUp, Home, FileText, Paperclip } from 'lucide-react';
+import { ArrowLeft, Loader2, Search, X, ExternalLink, ChevronDown, ChevronUp, Home, Paperclip, RefreshCw } from 'lucide-react';
 import { User, WFHRecord } from '../types';
 import { getWFHHistory } from '../utils/sheets';
+import EODReport from './EODReport';
 
 interface Props {
   user: User;
@@ -36,6 +37,7 @@ export default function WFHHistory({ user, onBack }: Props) {
   const [search, setSearch]     = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [revisionTarget, setRevisionTarget] = useState<WFHRecord | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +47,18 @@ export default function WFHHistory({ user, onBack }: Props) {
   }, [user.email]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (revisionTarget) {
+    return (
+      <EODReport
+        user={{ email: user.email, name: user.name }}
+        wfhRecord={revisionTarget}
+        revisionMode
+        onSuccess={() => { setRevisionTarget(null); load(); }}
+        onCancel={() => setRevisionTarget(null)}
+      />
+    );
+  }
 
   const filtered = records.filter(r => {
     const q = search.toLowerCase();
@@ -191,9 +205,20 @@ export default function WFHHistory({ user, onBack }: Props) {
                     <div className="bg-white/3 rounded-xl p-3 text-[11px] space-y-0.5">
                       <p className="text-white/30 uppercase tracking-wider">Approver</p>
                       <p className="text-white font-medium">{rec.approverName}</p>
-                      {rec.approvalComments && <p className="text-white/50 mt-1">{rec.approvalComments}</p>}
+                      {rec.approvalComments && <p className="text-orange-200/60 mt-1 text-xs">{rec.approvalComments}</p>}
                       {rec.approvedAt && <p className="text-white/25">{fmtDateTime(rec.approvedAt)}</p>}
                     </div>
+                  )}
+
+                  {/* Revise EOD button */}
+                  {rec.status === 'Revision Required' && (
+                    <button
+                      onClick={() => setRevisionTarget(rec)}
+                      className="w-full bg-orange-600/80 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Revise &amp; Resubmit EOD Report
+                    </button>
                   )}
 
                   {/* Audit trail */}
