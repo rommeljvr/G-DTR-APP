@@ -48,6 +48,8 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisi
   });
   // TC Filing pattern: File ref set synchronously + documentData set by reader.onload
   // Validation checks documentFile (sync) — never the async-loaded data
+  const existingAttachments = revisionMode ? (wfhRecord.attachments || []) : [];
+  const [keepExisting, setKeepExisting] = useState(existingAttachments.length > 0);
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentData, setDocumentData] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisi
     const f = e.target.files?.[0] ?? null;
     setDocumentFile(f);           // set synchronously — validation reads this
     setDocumentData('');          // clear previous data while loading
+    if (f) setKeepExisting(false); // selecting a new file always replaces existing
     if (f) {
       if (f.size > MAX_FILE_SIZE) {
         showToast('error', `${f.name} exceeds 10 MB limit.`);
@@ -90,13 +93,17 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisi
     if (!form.eodAccomplishments.trim()){ showToast('error', 'Accomplishments is required.'); return; }
     if (!form.eodIssues.trim())         { showToast('error', 'Issues Encountered is required.'); return; }
     if (!form.eodDeliverables.trim())   { showToast('error', 'Deliverables Completed is required.'); return; }
-    // Validate against documentFile (synchronous ref) — same as TC Filing pattern
-    if (!documentFile)                  { showToast('error', 'A supporting attachment is required.'); return; }
-    if (!documentData)                  { showToast('error', 'File is still loading, please wait a moment.'); return; }
+    // In revision mode: attachment required only when existing was cleared
+    const needsNewFile = !revisionMode || !keepExisting;
+    if (needsNewFile && !documentFile)  { showToast('error', 'A supporting attachment is required.'); return; }
+    if (needsNewFile && !documentData)  { showToast('error', 'File is still loading, please wait a moment.'); return; }
 
     setSaving(true);
-    const mime = documentFile.type || 'application/octet-stream';
     const submitFn = revisionMode ? resubmitWFHEOD : submitWFHEOD;
+    // Send new file when provided; empty array signals backend to keep existing attachments
+    const attachments = (needsNewFile && documentFile)
+      ? [{ fileName: documentFile.name, fileData: documentData, mimeType: documentFile.type || 'application/octet-stream' }]
+      : [];
     const res = await submitFn({
       wfhId:              wfhRecord.id,
       email:              user.email,
@@ -106,7 +113,7 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisi
       eodDeliverables:    form.eodDeliverables.trim(),
       eodNextDayPlan:     form.eodNextDayPlan.trim() || undefined,
       eodRemarks:         form.eodRemarks.trim() || undefined,
-      attachments:        [{ fileName: documentFile.name, fileData: documentData, mimeType: mime }],
+      attachments,
     });
     setSaving(false);
     if (res.success) {
@@ -172,34 +179,67 @@ export default function EODReport({ user, wfhRecord, onSuccess, onCancel, revisi
           {/* Attachments */}
           <div>
             <label className="text-white/50 text-[11px] uppercase tracking-wider block mb-1.5">
-              Supporting Attachments<span className="text-rose-400 ml-0.5">*</span>
+              Supporting Attachments{(!revisionMode || !keepExisting) && <span className="text-rose-400 ml-0.5">*</span>}
             </label>
             <input ref={fileRef} type="file" accept={ACCEPTED} onChange={handleFileChange} className="hidden" />
-            {!documentFile ? (
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="w-full border border-dashed border-white/20 rounded-xl py-4 flex flex-col items-center gap-2 text-white/40 hover:bg-white/3 active:scale-[0.98] transition-transform"
-              >
-                <Upload className="w-5 h-5" />
-                <span className="text-xs">Tap to attach a file</span>
-                <span className="text-[10px] text-white/20">PDF, Word, Excel, Images — max 10 MB</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2">
-                <Paperclip className="w-3.5 h-3.5 text-white/40 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-xs truncate">{documentFile.name}</p>
-                  <p className="text-white/30 text-[10px]">
-                    {formatSize(documentFile.size)}{!documentData && ' — loading…'}
-                  </p>
-                </div>
+
+            {/* Existing attachment chip (revision mode only) */}
+            {revisionMode && existingAttachments.length > 0 && keepExisting && (
+              <div className="mb-2 space-y-1.5">
+                {existingAttachments.map((att, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-sky-500/8 border border-sky-400/20 rounded-xl px-3 py-2">
+                    <Paperclip className="w-3.5 h-3.5 text-sky-400/60 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sky-200 text-xs truncate">{att.fileName}</p>
+                      <p className="text-sky-300/40 text-[10px]">Existing attachment — kept</p>
+                    </div>
+                    <button
+                      onClick={() => { setKeepExisting(false); setDocumentFile(null); setDocumentData(''); }}
+                      className="w-6 h-6 flex items-center justify-center rounded-full bg-white/8 active:scale-90"
+                      title="Remove and replace"
+                    >
+                      <X className="w-3 h-3 text-white/50" />
+                    </button>
+                  </div>
+                ))}
                 <button
-                  onClick={() => { setDocumentFile(null); setDocumentData(''); }}
-                  className="w-6 h-6 flex items-center justify-center rounded-full bg-white/8 active:scale-90"
+                  onClick={() => fileRef.current?.click()}
+                  className="w-full border border-dashed border-sky-400/20 rounded-xl py-2.5 flex items-center justify-center gap-2 text-sky-300/40 text-xs active:scale-[0.98] transition-transform"
                 >
-                  <X className="w-3 h-3 text-white/50" />
+                  <Upload className="w-4 h-4" />
+                  Replace with a different file
                 </button>
               </div>
+            )}
+
+            {/* New file picker (always shown when no existing kept, or to replace) */}
+            {(!revisionMode || !keepExisting) && (
+              !documentFile ? (
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="w-full border border-dashed border-white/20 rounded-xl py-4 flex flex-col items-center gap-2 text-white/40 hover:bg-white/3 active:scale-[0.98] transition-transform"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span className="text-xs">Tap to attach a file</span>
+                  <span className="text-[10px] text-white/20">PDF, Word, Excel, Images — max 10 MB</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2">
+                  <Paperclip className="w-3.5 h-3.5 text-white/40 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs truncate">{documentFile.name}</p>
+                    <p className="text-white/30 text-[10px]">
+                      {formatSize(documentFile.size)}{!documentData && ' — loading…'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setDocumentFile(null); setDocumentData(''); }}
+                    className="w-6 h-6 flex items-center justify-center rounded-full bg-white/8 active:scale-90"
+                  >
+                    <X className="w-3 h-3 text-white/50" />
+                  </button>
+                </div>
+              )
             )}
           </div>
 

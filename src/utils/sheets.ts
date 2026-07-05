@@ -5251,12 +5251,14 @@ function resubmitWFHEOD(data, clientFolderId) {
   var folderId = clientFolderId || getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
   var version  = Number(found.row[31] || 1) + 1;
 
-  // Handle attachment — replace or keep existing
+  // Handle attachment — upload new file(s) or keep existing ones
   var existingRaw = String(found.row[21] || '[]');
   var attachments = [];
   try { attachments = JSON.parse(existingRaw); } catch(e) {}
 
   if (data.attachments && data.attachments.length > 0) {
+    // Employee chose to replace — upload new file(s), discarding old ones
+    attachments = [];
     var folder;
     try { folder = DriveApp.getFolderById(folderId); } catch(e) { folder = DriveApp.getRootFolder(); }
     var monthKey  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
@@ -5286,6 +5288,7 @@ function resubmitWFHEOD(data, clientFolderId) {
       }
     }
   }
+  // Empty data.attachments means employee kept existing — attachments already loaded from sheet above
 
   if (attachments.length === 0) return _json({ success: false, message: 'At least one supporting attachment is required' });
 
