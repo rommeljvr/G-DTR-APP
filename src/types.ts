@@ -417,3 +417,100 @@ export interface DTRRecord {
   issues?: DTRIssue[];
   auditTrail?: DTRAuditEntry[];
 }
+
+// ── DTR Validation ──────────────────────────────────────────────────
+
+export type ValidationStatus = 'Pending' | 'Validated' | 'Flagged';
+
+export interface DTRValidationAudit {
+  action: string;
+  by: string;
+  timestamp: string;
+  field?: string;
+  previousValue?: string;
+  updatedValue?: string;
+  remarks?: string;
+}
+
+export interface DTRValidationMealAllowance {
+  id: string;
+  sequence: number;
+  imageUrl?: string;
+  imageId?: string;
+  address?: string;
+  timestamp: string;
+  remarks?: string;
+}
+
+export interface DTRValidationTimeCorrection {
+  id: string;
+  status: string;
+  reason: string;
+  originalTimeIn: string;
+  originalTimeOut: string;
+  correctedTimeIn: string;
+  correctedTimeOut: string;
+  documentUrl?: string;
+}
+
+export interface DTRValidationLeave {
+  id: string;
+  leaveType: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason?: string;
+}
+
+export interface DTRValidationWFH {
+  id: string;
+  status: string;
+  workDescription: string;
+  eodSummary?: string;
+  eodSubmittedAt?: string;
+  attachments?: WFHAttachment[];
+}
+
+export interface DTRValidationDay {
+  date: string;
+  dayOfWeek: string;
+  timeIn?: string;
+  timeOut?: string;
+  workingHours: number;
+  attendanceStatus: AttendanceStatus;
+  timeInImageId?: string;
+  timeInImageUrl?: string;
+  timeOutImageId?: string;
+  timeOutImageUrl?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  deviceInfo?: string;
+  timeInTimestamp?: string;
+  timeOutTimestamp?: string;
+  validationStatus: ValidationStatus;
+  validationRemarks?: string;
+  validatedBy?: string;
+  validatedAt?: string;
+  mealAllowances: DTRValidationMealAllowance[];
+  timeCorrections: DTRValidationTimeCorrection[];
+  leaves: DTRValidationLeave[];
+  wfh: DTRValidationWFH[];
+}
+
+export interface DTRValidationData {
+  dtrId: string;
+  employeeEmail: string;
+  employeeName: string;
+  employeeImage?: string;
+  department?: string;
+  designation?: string;
+  month: number;
+  year: number;
+  cutOff: DTRCutOff;
+  coverageStart: string;
+  coverageEnd: string;
+  days: DTRValidationDay[];
+  auditTrail: DTRValidationAudit[];
+}
