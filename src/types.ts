@@ -473,6 +473,7 @@ export interface GeneratedDTRDay {
   totalHoursWorked: number;
   actualOT: number;
   approvedOT: number;
+  validatedOT: number;
   mealEligibility: boolean;
   attendanceClassification: AttendanceClassification;
   attendanceRemarks: string;
@@ -557,6 +558,7 @@ export interface GeneratedDTRSummary {
   totalLateMinutes: number;
   totalApprovedOT: number;
   totalActualOT: number;
+  totalValidatedOT: number;
   mealEligibleDays: number;
 }
 
@@ -620,6 +622,10 @@ export interface LinkedOT {
   totalRequestedHours: number;
   approvedHours?: number;
   reason: string;
+  approverEmail?: string;
+  approverName?: string;
+  approvedAt?: string;
+  attachmentUrl?: string;
 }
 
 export interface GeneratedDTRAuditEntry {

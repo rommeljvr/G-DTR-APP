@@ -5384,14 +5384,26 @@ function generateNewDTR(data) {
       if (!otByDate[otD]) otByDate[otD] = [];
       var otAudit = [];
       try { otAudit = JSON.parse(String(otRows2[oi][24] || '[]')); } catch(e) {}
+      var otApprovedHrs = otRows2[oi][18] !== '' ? Number(otRows2[oi][18]) : Number(otRows2[oi][11] || 0);
+      var otApprovedAt = '';
+      try {
+        var otAudit2 = JSON.parse(String(otRows2[oi][24] || '[]'));
+        for (var oax = otAudit2.length - 1; oax >= 0; oax--) {
+          if (otAudit2[oax].action === 'APPROVED') { otApprovedAt = otAudit2[oax].at || ''; break; }
+        }
+      } catch(e) {}
       otByDate[otD].push({
         id: String(otRows2[oi][0]), otType: String(otRows2[oi][6]),
         status: 'Approved',
         preShiftStart: String(otRows2[oi][7] || ''), preShiftEnd: String(otRows2[oi][8] || ''),
         postShiftStart: String(otRows2[oi][9] || ''), postShiftEnd: String(otRows2[oi][10] || ''),
         totalRequestedHours: Number(otRows2[oi][11] || 0),
-        approvedHours: otRows2[oi][18] !== '' ? Number(otRows2[oi][18]) : Number(otRows2[oi][11] || 0),
-        reason: String(otRows2[oi][12] || '')
+        approvedHours: otApprovedHrs,
+        reason: String(otRows2[oi][12] || ''),
+        approverEmail: String(otRows2[oi][16] || ''),
+        approverName:  String(otRows2[oi][17] || ''),
+        approvedAt:    otApprovedAt,
+        attachmentUrl: String(otRows2[oi][13] || '')
       });
     }
   }
@@ -5400,7 +5412,7 @@ function generateNewDTR(data) {
   var days = [];
   var summary = { presentDays: 0, absentDays: 0, holidays: 0, restDays: 0, leaveDays: 0,
     officialBusinessDays: 0, wfhDays: 0, totalHoursWorked: 0, totalLateHours: 0,
-    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, mealEligibleDays: 0 };
+    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, totalValidatedOT: 0, mealEligibleDays: 0 };
 
   // 1. Rows for attendance pairs
   for (var pi2 = 0; pi2 < pairs.length; pi2++) {
@@ -5437,13 +5449,15 @@ function generateNewDTR(data) {
     for (var oi2 = 0; oi2 < dayOTs.length; oi2++) { approvedOTHours += Number(dayOTs[oi2].approvedHours || 0); }
     // actualOT = hours worked beyond standard 8h shift (only if positive)
     var actualOTHours = workHours > 8 ? Math.round((workHours - 8) * 100) / 100 : 0;
-    summary.totalApprovedOT += approvedOTHours;
-    summary.totalActualOT   += actualOTHours;
+    summary.totalApprovedOT  += approvedOTHours;
+    summary.totalActualOT    += actualOTHours;
+    summary.totalValidatedOT += approvedOTHours;
 
     days.push({
       date: tin.date, dayOfWeek: dayNames[dow],
       timeIn: tin.time, timeOut: tout ? tout.time : '',
       totalHoursWorked: workHours, actualOT: actualOTHours, approvedOT: approvedOTHours,
+      validatedOT: approvedOTHours,
       mealEligibility: hasMeal, attendanceClassification: classification, attendanceRemarks: '',
       lateHours: 0, lateMinutes: 0,
       originalRecord: {
@@ -5481,11 +5495,13 @@ function generateNewDTR(data) {
     var dayOTs2 = otByDate[dKey2] || [];
     var approvedOTHours2 = 0;
     for (var oi3 = 0; oi3 < dayOTs2.length; oi3++) { approvedOTHours2 += Number(dayOTs2[oi3].approvedHours || 0); }
-    summary.totalApprovedOT += approvedOTHours2;
+    summary.totalApprovedOT  += approvedOTHours2;
+    summary.totalValidatedOT += approvedOTHours2;
 
     days.push({
       date: dKey2, dayOfWeek: dayNames[dow2],
       timeIn: '', timeOut: '', totalHoursWorked: 0, actualOT: 0, approvedOT: approvedOTHours2,
+      validatedOT: approvedOTHours2,
       mealEligibility: false, attendanceClassification: classification2, attendanceRemarks: '',
       lateHours: 0, lateMinutes: 0,
       originalRecord: { timeIn: '', timeOut: '' },
@@ -5659,7 +5675,7 @@ function updateDTRDayField(data) {
         updatedDay = days[d];
 
         // If field is numeric
-        if (data.field === 'lateHours' || data.field === 'lateMinutes' || data.field === 'totalHoursWorked' || data.field === 'actualOT' || data.field === 'approvedOT') {
+        if (data.field === 'lateHours' || data.field === 'lateMinutes' || data.field === 'totalHoursWorked' || data.field === 'actualOT' || data.field === 'approvedOT' || data.field === 'validatedOT') {
           days[d][data.field] = Number(data.value) || 0;
           updatedDay = days[d];
         }
@@ -5697,7 +5713,7 @@ function updateDTRDayField(data) {
 function recomputeDTRSummary(days) {
   var s = { presentDays: 0, absentDays: 0, holidays: 0, restDays: 0, leaveDays: 0,
     officialBusinessDays: 0, wfhDays: 0, totalHoursWorked: 0, totalLateHours: 0,
-    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, mealEligibleDays: 0 };
+    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, totalValidatedOT: 0, mealEligibleDays: 0 };
   for (var i = 0; i < days.length; i++) {
     var c = days[i].attendanceClassification || '';
     if (c === 'Present' || c === 'Late') s.presentDays++;
@@ -5713,6 +5729,7 @@ function recomputeDTRSummary(days) {
     s.totalLateMinutes += (days[i].lateMinutes || 0);
     s.totalApprovedOT += (days[i].approvedOT || 0);
     s.totalActualOT += (days[i].actualOT || 0);
+    s.totalValidatedOT += (days[i].validatedOT != null ? days[i].validatedOT : (days[i].approvedOT || 0));
     if (days[i].mealEligibility) s.mealEligibleDays++;
   }
   s.totalHoursWorked = Math.round(s.totalHoursWorked * 100) / 100;
@@ -6292,7 +6309,6 @@ function submitWFHEOD(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({
           fileId:     file.getId(),
           fileName:   att.fileName,
@@ -6393,7 +6409,6 @@ function resubmitWFH(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({ fileId: file.getId(), fileName: att.fileName, fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view', uploadedAt: now, version: version });
       } catch(ae) {
         Logger.log('WFH resubmit attachment error: ' + ae);
@@ -6478,7 +6493,6 @@ function resubmitWFHEOD(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({ fileId: file.getId(), fileName: att.fileName,
           fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
           uploadedAt: now, version: version });

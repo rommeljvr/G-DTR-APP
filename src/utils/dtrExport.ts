@@ -18,6 +18,7 @@ function escapeCSV(val: string): string {
 export function exportDTRToCSV(dtr: GeneratedDTR): void {
   const headers = [
     'Date', 'Day', 'Time In', 'Time Out', 'Hours Worked',
+    'Actual OT', 'Approved OT', 'Validated OT (Payroll)',
     'Classification', 'Late (hrs)', 'Late (mins)', 'Remarks',
   ];
 
@@ -27,6 +28,9 @@ export function exportDTRToCSV(dtr: GeneratedDTR): void {
     day.timeIn || '',
     day.timeOut || '',
     day.totalHoursWorked.toFixed(2),
+    day.actualOT ? day.actualOT.toFixed(2) : '',
+    day.approvedOT ? day.approvedOT.toFixed(2) : '',
+    (day.validatedOT != null ? day.validatedOT : day.approvedOT) ? (day.validatedOT ?? day.approvedOT).toFixed(2) : '',
     day.attendanceClassification,
     String(day.lateHours),
     String(day.lateMinutes),
@@ -45,7 +49,9 @@ export function exportDTRToCSV(dtr: GeneratedDTR): void {
   rows.push(['WFH Days', String(dtr.summary.wfhDays)]);
   rows.push(['Total Hours Worked', dtr.summary.totalHoursWorked.toFixed(2)]);
   rows.push(['Total Late', `${dtr.summary.totalLateHours}h ${dtr.summary.totalLateMinutes}m`]);
+  rows.push(['Total Actual OT', dtr.summary.totalActualOT?.toFixed(2) ?? '0.00']);
   rows.push(['Total Approved OT', dtr.summary.totalApprovedOT.toFixed(2)]);
+  rows.push(['Total Validated OT (Payroll)', (dtr.summary.totalValidatedOT ?? dtr.summary.totalApprovedOT).toFixed(2)]);
   rows.push(['Meal Eligible Days', String(dtr.summary.mealEligibleDays)]);
 
   const csvContent = [
@@ -88,18 +94,31 @@ function fmtTime(val: string): string {
 export function exportDTRToPrint(dtr: GeneratedDTR): void {
   const period = `${MONTHS[dtr.month - 1]} ${dtr.year} (${dtr.cutOff} Cut-Off)`;
 
-  const dayRows = dtr.days.map(day => `
+  const fmtOTHrs = (h: number | undefined | null): string => {
+    if (!h) return '';
+    const hrs = Math.floor(h), mins = Math.round((h - hrs) * 60);
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  };
+
+  const dayRows = dtr.days.map(day => {
+    const valOT = day.validatedOT != null ? day.validatedOT : day.approvedOT;
+    const hasOT = day.approvedOT > 0 || day.actualOT > 0;
+    return `
     <tr>
       <td>${day.date}</td>
       <td>${day.dayOfWeek.substring(0, 3)}</td>
       <td>${day.timeIn ? fmtTime(day.originalRecord?.timeIn || day.timeIn) : ''}</td>
       <td>${day.timeOut ? fmtTime(day.originalRecord?.timeOut || day.timeOut) : ''}</td>
       <td class="num">${day.totalHoursWorked ? day.totalHoursWorked.toFixed(2) : ''}</td>
+      <td class="num ot-actual">${hasOT ? fmtOTHrs(day.actualOT) : ''}</td>
+      <td class="num ot-approved">${day.approvedOT ? fmtOTHrs(day.approvedOT) : ''}</td>
+      <td class="num ot-validated">${valOT ? fmtOTHrs(valOT) : ''}</td>
       <td><span class="cls cls-${day.attendanceClassification.toLowerCase().replace(/\s+/g, '-')}">${day.attendanceClassification}</span></td>
       <td class="num">${day.lateHours || day.lateMinutes ? `${day.lateHours}:${String(day.lateMinutes).padStart(2, '0')}` : ''}</td>
       <td>${day.attendanceRemarks || ''}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const html = `<!DOCTYPE html>
 <html>
@@ -129,6 +148,18 @@ export function exportDTRToPrint(dtr: GeneratedDTR): void {
     .cls-official-business { background: #bee3f8; color: #2a4365; }
     .cls-work-from-home { background: #c3dafe; color: #3c366b; }
     .cls-half-day { background: #feebc8; color: #7b341e; }
+    .ot-actual { color: #666; }
+    .ot-approved { color: #276749; font-weight: 600; }
+    .ot-validated { color: #553c9a; font-weight: 700; }
+    .ot-section { margin-bottom: 16px; padding: 10px 12px; background: #faf5ff; border: 1px solid #d6bcfa; border-radius: 6px; }
+    .ot-section h3 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #553c9a; margin-bottom: 8px; }
+    .ot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .ot-item { text-align: center; }
+    .ot-item .val { font-size: 16px; font-weight: 700; }
+    .ot-item .lbl { font-size: 9px; color: #718096; text-transform: uppercase; }
+    .ot-actual-val { color: #4a5568; }
+    .ot-approved-val { color: #276749; }
+    .ot-validated-val { color: #553c9a; }
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
     .summary-item { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; text-align: center; }
     .summary-item .num { font-size: 16px; font-weight: 700; color: #2d3748; }
@@ -166,6 +197,16 @@ export function exportDTRToPrint(dtr: GeneratedDTR): void {
     <div class="summary-item"><div class="num">${dtr.summary.holidays}</div><div class="lbl">Holidays</div></div>
     <div class="summary-item"><div class="num">${dtr.summary.mealEligibleDays}</div><div class="lbl">Meal Days</div></div>
   </div>
+  ${dtr.summary.totalApprovedOT > 0 ? `
+  <div class="ot-section">
+    <h3>Overtime Summary</h3>
+    <div class="ot-grid">
+      <div class="ot-item"><div class="val ot-actual-val">${fmtOTHrs(dtr.summary.totalActualOT) || '—'}</div><div class="lbl">Actual OT</div></div>
+      <div class="ot-item"><div class="val ot-approved-val">${fmtOTHrs(dtr.summary.totalApprovedOT) || '—'}</div><div class="lbl">Approved OT</div></div>
+      <div class="ot-item"><div class="val ot-validated-val">${fmtOTHrs(dtr.summary.totalValidatedOT ?? dtr.summary.totalApprovedOT) || '—'}</div><div class="lbl">Payroll OT</div></div>
+    </div>
+  </div>
+  ` : ''}
 
   <table>
     <thead>
@@ -175,6 +216,9 @@ export function exportDTRToPrint(dtr: GeneratedDTR): void {
         <th>Time In</th>
         <th>Time Out</th>
         <th>Hours</th>
+        <th>Act OT</th>
+        <th>Apr OT</th>
+        <th style="color:#d6bcfa">Val OT</th>
         <th>Classification</th>
         <th>Late</th>
         <th>Remarks</th>
