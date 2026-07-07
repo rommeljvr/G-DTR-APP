@@ -94,6 +94,19 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 // ── Expandable Day Row ───────────────────────────────────────────────────────
+function fmtOTDate(val: string): string {
+  if (!val) return '—';
+  // M/D/YYYY format from dateKey()
+  const slashMatch = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(slashMatch[1], 10) - 1]} ${parseInt(slashMatch[2], 10)}, ${slashMatch[3]}`;
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return val;
+}
+
 function DayRow({
   day, dtrId, userEmail, locked, onDayUpdated,
 }: {
@@ -113,6 +126,11 @@ function DayRow({
   const [localValidatedOT, setLocalValidatedOT] = useState(String(day.validatedOT ?? day.approvedOT ?? 0));
   const [otReason, setOtReason] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
+
+  // Sync localValidatedOT whenever the day prop is updated from outside (e.g. after save)
+  useEffect(() => {
+    setLocalValidatedOT(String(day.validatedOT ?? day.approvedOT ?? 0));
+  }, [day.validatedOT, day.approvedOT]);
 
   const isEditable = !locked;
   const orig = day.originalRecord;
@@ -402,37 +420,45 @@ function DayRow({
 
             {/* ── LINKED: OVERTIME ──────────────────────── */}
             {day.overtimes && day.overtimes.length > 0 && (
-              <div className="bg-violet-500/5 border border-violet-400/15 rounded-xl p-3 space-y-2">
-                <p className="text-violet-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <div className="bg-amber-500/5 border border-amber-400/15 rounded-xl p-3 space-y-3">
+                <p className="text-amber-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
                   <Zap className="w-3 h-3" /> Overtime ({day.overtimes.length})
                 </p>
+
+                {/* OT reference records (read-only) */}
                 {day.overtimes.map(ot => (
-                  <div key={ot.id} className="bg-white/5 rounded-lg p-2 text-[10px] space-y-1">
+                  <div key={ot.id} className="bg-white/5 border border-amber-400/10 rounded-lg p-2.5 text-[10px] space-y-2">
+                    {/* Header row */}
                     <div className="flex items-center gap-2">
                       <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 text-[8px] font-semibold px-1.5 py-0.5 rounded-full">Approved</span>
-                      <span className="text-white/60 font-medium">{ot.otType}</span>
-                      <span className="text-white/40 ml-auto">{ot.approvedHours != null ? fmtHours(ot.approvedHours) : '—'} approved</span>
+                      <span className="text-amber-200/80 font-semibold">{ot.otType}</span>
                     </div>
-                    {ot.otType === 'Pre-Shift' && (ot.preShiftStart || ot.preShiftEnd) && (
-                      <div className="grid grid-cols-2 gap-1">
-                        <div><span className="text-white/30">Start:</span> <span className="text-white/60">{fmtTime(ot.preShiftStart || '')}</span></div>
-                        <div><span className="text-white/30">End:</span> <span className="text-white/60">{fmtTime(ot.preShiftEnd || '')}</span></div>
-                      </div>
-                    )}
-                    {ot.otType === 'Post-Shift' && (ot.postShiftStart || ot.postShiftEnd) && (
-                      <div className="grid grid-cols-2 gap-1">
-                        <div><span className="text-white/30">Start:</span> <span className="text-white/60">{fmtTime(ot.postShiftStart || '')}</span></div>
-                        <div><span className="text-white/30">End:</span> <span className="text-white/60">{fmtTime(ot.postShiftEnd || '')}</span></div>
-                      </div>
-                    )}
-                    {ot.reason && <p className="text-white/40 italic">{ot.reason}</p>}
-                    <div className="flex items-center justify-between text-[9px] text-white/25">
-                      {ot.approverName && <span>Approved by: <span className="text-white/40">{ot.approverName}</span></span>}
-                      {ot.approvedAt && <span>{fmtDate(ot.approvedAt)}</span>}
+
+                    {/* OT detail grid */}
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      <div><span className="text-white/30">OT Date:</span> <span className="text-white/70">{fmtOTDate(ot.otDate || day.date)}</span></div>
+                      <div><span className="text-white/30">OT Type:</span> <span className="text-white/70">{ot.otType}</span></div>
+                      {ot.otType === 'Pre-Shift' && (<>
+                        <div><span className="text-white/30">Start:</span> <span className="text-white/70">{fmtTime(ot.preShiftStart || '') || '—'}</span></div>
+                        <div><span className="text-white/30">End:</span> <span className="text-white/70">{fmtTime(ot.preShiftEnd || '') || '—'}</span></div>
+                      </>)}
+                      {ot.otType === 'Post-Shift' && (<>
+                        <div><span className="text-white/30">Start:</span> <span className="text-white/70">{fmtTime(ot.postShiftStart || '') || '—'}</span></div>
+                        <div><span className="text-white/30">End:</span> <span className="text-white/70">{fmtTime(ot.postShiftEnd || '') || '—'}</span></div>
+                      </>)}
+                      <div><span className="text-white/30">Requested:</span> <span className="text-white/60">{ot.totalRequestedHours ? fmtHours(ot.totalRequestedHours) : '—'}</span></div>
+                      <div><span className="text-white/30">Approved:</span> <span className="text-emerald-300/90 font-semibold">{ot.approvedHours != null ? fmtHours(ot.approvedHours) : '—'}</span></div>
+                      <div><span className="text-white/30">Actual OT:</span> <span className="text-white/60">{day.actualOT ? fmtHours(day.actualOT) : '—'}</span></div>
+                      {ot.approverName && <div><span className="text-white/30">Approver:</span> <span className="text-white/60">{ot.approverName}</span></div>}
+                      {ot.approvedAt && <div><span className="text-white/30">Approval Date:</span> <span className="text-white/60">{fmtDate(ot.approvedAt)}</span></div>}
                     </div>
+
+                    {ot.reason && (
+                      <div><span className="text-white/30">Remarks:</span> <span className="text-white/50 italic"> {ot.reason}</span></div>
+                    )}
                     {ot.attachmentUrl && (
                       <a href={ot.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-violet-300 underline text-[9px]">
+                        className="inline-flex items-center gap-1 text-amber-300/80 underline text-[9px]">
                         <FileText className="w-2.5 h-2.5" /> Supporting Document
                       </a>
                     )}
@@ -441,22 +467,26 @@ function DayRow({
 
                 {/* ── OT ADJUSTMENT (admin only while not locked) ── */}
                 {isEditable && (
-                  <div className="border-t border-violet-400/10 pt-2 space-y-2 mt-1">
-                    <p className="text-violet-300/60 text-[10px] font-semibold uppercase tracking-wider">Payroll OT Adjustment</p>
+                  <div className="border-t border-amber-400/10 pt-3 space-y-2">
+                    <p className="text-amber-300/60 text-[10px] font-semibold uppercase tracking-wider">Payroll OT Adjustment</p>
+
+                    {/* Reference values */}
                     <div className="grid grid-cols-3 gap-2 text-[10px]">
                       <div className="bg-white/5 rounded-lg p-2 text-center">
                         <p className="text-white/30 text-[9px] mb-0.5">Actual OT</p>
-                        <p className="text-white/70 font-semibold">{day.actualOT ? fmtHours(day.actualOT) : '—'}</p>
+                        <p className="text-white/60 font-semibold">{day.actualOT ? fmtHours(day.actualOT) : '—'}</p>
                       </div>
-                      <div className="bg-white/5 rounded-lg p-2 text-center">
+                      <div className="bg-emerald-500/8 rounded-lg p-2 text-center border border-emerald-400/10">
                         <p className="text-white/30 text-[9px] mb-0.5">Approved OT</p>
-                        <p className="text-emerald-300/80 font-semibold">{day.approvedOT ? fmtHours(day.approvedOT) : '—'}</p>
+                        <p className="text-emerald-300 font-semibold">{day.approvedOT ? fmtHours(day.approvedOT) : '—'}</p>
                       </div>
-                      <div className="bg-violet-500/10 rounded-lg p-2 text-center">
-                        <p className="text-violet-300/60 text-[9px] mb-0.5">Validated OT</p>
+                      <div className="bg-violet-500/10 rounded-lg p-2 text-center border border-violet-400/15">
+                        <p className="text-violet-300/60 text-[9px] mb-0.5">Payroll OT</p>
                         <p className="text-violet-300 font-semibold">{fmtHours(Number(localValidatedOT) || 0)}</p>
                       </div>
                     </div>
+
+                    {/* Input row */}
                     <div className="flex items-center gap-2">
                       <span className="text-white/40 text-[10px] shrink-0">Payroll OT (hrs):</span>
                       <input
@@ -465,12 +495,15 @@ function DayRow({
                         className="w-20 bg-slate-800 border border-violet-400/30 text-white text-xs rounded-lg px-2 py-1.5 text-center outline-none"
                       />
                     </div>
+
+                    {/* Reason (required) */}
                     <input
                       type="text" value={otReason}
                       onChange={e => setOtReason(e.target.value)}
                       placeholder="Reason for OT adjustment (required)..."
                       className="w-full bg-slate-800/50 border border-white/5 text-white/60 text-[10px] rounded-lg px-3 py-1.5 outline-none placeholder-white/20"
                     />
+
                     <button
                       onClick={handleValidatedOTSave} disabled={saving || !otReason.trim()}
                       className="flex items-center gap-1.5 bg-violet-500/20 text-violet-300 border border-violet-400/20 text-[10px] font-semibold px-3 py-1.5 rounded-xl disabled:opacity-40 active:scale-95 transition-transform"

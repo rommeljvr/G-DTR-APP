@@ -5380,20 +5380,16 @@ function generateNewDTR(data) {
     for (var oi = 1; oi < otRows2.length; oi++) {
       if (String(otRows2[oi][1]).trim().toLowerCase() !== empEmail) continue;
       if (String(otRows2[oi][15]) !== 'Approved') continue;
-      var otD = String(otRows2[oi][5]);
+      var otDateRaw = otRows2[oi][5];
+      var otD = otDateRaw instanceof Date ? dateKey(otDateRaw) : dateKey(new Date(String(otDateRaw)));
+      if (!otD) continue;
       if (!otByDate[otD]) otByDate[otD] = [];
-      var otAudit = [];
-      try { otAudit = JSON.parse(String(otRows2[oi][24] || '[]')); } catch(e) {}
-      var otApprovedHrs = otRows2[oi][18] !== '' ? Number(otRows2[oi][18]) : Number(otRows2[oi][11] || 0);
-      var otApprovedAt = '';
-      try {
-        var otAudit2 = JSON.parse(String(otRows2[oi][24] || '[]'));
-        for (var oax = otAudit2.length - 1; oax >= 0; oax--) {
-          if (otAudit2[oax].action === 'APPROVED') { otApprovedAt = otAudit2[oax].at || ''; break; }
-        }
-      } catch(e) {}
+      var otApprovedHrs = otRows2[oi][18] !== '' && otRows2[oi][18] !== null ? Number(otRows2[oi][18]) : Number(otRows2[oi][11] || 0);
+      var otApprovedAt = String(otRows2[oi][19] || '');
       otByDate[otD].push({
-        id: String(otRows2[oi][0]), otType: String(otRows2[oi][6]),
+        id: String(otRows2[oi][0]),
+        otDate: otD,
+        otType: String(otRows2[oi][6]),
         status: 'Approved',
         preShiftStart: String(otRows2[oi][7] || ''), preShiftEnd: String(otRows2[oi][8] || ''),
         postShiftStart: String(otRows2[oi][9] || ''), postShiftEnd: String(otRows2[oi][10] || ''),

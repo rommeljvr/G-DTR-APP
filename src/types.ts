@@ -613,6 +613,7 @@ export interface OTRequest {
 
 export interface LinkedOT {
   id: string;
+  otDate: string;
   otType: OTType;
   status: OTStatus;
   preShiftStart?: string;
