@@ -144,7 +144,13 @@ export type NotificationType =
   | 'WFH_APPROVED'
   | 'WFH_REJECTED'
   | 'WFH_RESUBMITTED'
-  | 'WFH_PENDING_APPROVAL';
+  | 'WFH_PENDING_APPROVAL'
+  | 'OT_SUBMITTED'
+  | 'OT_REQUIRES_APPROVAL'
+  | 'OT_APPROVED'
+  | 'OT_RETURNED'
+  | 'OT_REJECTED'
+  | 'OT_CANCELLED';
 
 export interface AppNotification {
   id: string;
@@ -155,6 +161,7 @@ export interface AppNotification {
   timeCorrectionId?: string;
   dtrId?: string;
   wfhId?: string;
+  otId?: string;
   isRead: boolean;
   createdAt: string;
 }
@@ -490,6 +497,7 @@ export interface GeneratedDTRDay {
   timeCorrections: LinkedTimeCorrection[];
   leaves: LinkedLeave[];
   wfh: LinkedWFH[];
+  overtimes: LinkedOT[];
 
   // Validation metadata
   lastModifiedBy?: string;
@@ -550,6 +558,68 @@ export interface GeneratedDTRSummary {
   totalApprovedOT: number;
   totalActualOT: number;
   mealEligibleDays: number;
+}
+
+// ── Overtime Filing ───────────────────────────────────────────────
+
+export type OTType = 'Pre-Shift' | 'Post-Shift' | 'Both';
+
+export type OTStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Pending Approval'
+  | 'Returned for Revision'
+  | 'Approved'
+  | 'Rejected'
+  | 'Cancelled';
+
+export interface OTAuditEntry {
+  action: string;
+  by: string;
+  at: string;
+  remarks?: string;
+}
+
+export interface OTRequest {
+  id: string;
+  employeeEmail: string;
+  employeeName: string;
+  employeeImage?: string;
+  department: string;
+  designation: string;
+  otDate: string;
+  otType: OTType;
+  preShiftStart?: string;
+  preShiftEnd?: string;
+  postShiftStart?: string;
+  postShiftEnd?: string;
+  totalRequestedHours: number;
+  reason: string;
+  attachmentUrl?: string;
+  attachmentId?: string;
+  status: OTStatus;
+  approverEmail?: string;
+  approverName?: string;
+  approvedHours?: number;
+  approvedAt?: string;
+  returnRemarks?: string;
+  rejectionReason?: string;
+  submittedAt?: string;
+  createdAt: string;
+  auditTrail: OTAuditEntry[];
+}
+
+export interface LinkedOT {
+  id: string;
+  otType: OTType;
+  status: OTStatus;
+  preShiftStart?: string;
+  preShiftEnd?: string;
+  postShiftStart?: string;
+  postShiftEnd?: string;
+  totalRequestedHours: number;
+  approvedHours?: number;
+  reason: string;
 }
 
 export interface GeneratedDTRAuditEntry {

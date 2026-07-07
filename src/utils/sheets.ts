@@ -1109,6 +1109,125 @@ export async function reopenDTR(
   } catch (err) { return { success: false, message: String(err) }; }
 }
 
+// ── Overtime Filing API ───────────────────────────────────────────────────
+
+export async function submitOT(
+  params: Omit<import('../types').OTRequest, 'id' | 'status' | 'auditTrail' | 'createdAt'> & { isDraft?: boolean }
+): Promise<{ success: boolean; message: string; otId?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'submitOT', data: params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function updateOTDraft(
+  params: { otId: string; email: string; submit?: boolean; remarks?: string;
+    otDate?: string; otType?: string; preShiftStart?: string; preShiftEnd?: string;
+    postShiftStart?: string; postShiftEnd?: string; reason?: string;
+    attachmentUrl?: string; attachmentId?: string; }
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'updateOTDraft', data: params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function approveOT(
+  otId: string, email: string, approvedHours?: number
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'approveOT', otId, email, approvedHours }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function returnOT(
+  otId: string, email: string, remarks: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'returnOT', otId, email, remarks }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function rejectOT(
+  otId: string, email: string, reason: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'rejectOT', otId, email, reason }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function cancelOT(
+  otId: string, email: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cancelOT', otId, email }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getOTList(
+  email: string
+): Promise<{ success: boolean; records?: import('../types').OTRequest[]; message?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const params = new URLSearchParams({ action: 'getOTList', email });
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getOTById(
+  otId: string, email: string
+): Promise<{ success: boolean; data?: import('../types').OTRequest; message?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const params = new URLSearchParams({ action: 'getOTById', otId, email });
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
 export async function getMealAllowanceStatus(
   email: string
 ): Promise<{ success: boolean; attendanceId: string | null; timeInTimestamp: string | null; hoursWorked: number; submissions: import('../types').MealAllowanceRecord[]; config: import('../types').MealAllowanceConfig }> {
@@ -1418,6 +1537,12 @@ function doPost(e) {
     if (data.action === 'sendDTRForReview') return sendDTRForReview(data.dtrId, data.email);
     if (data.action === 'acknowledgeDTRNew') return acknowledgeDTRNew(data.dtrId, data.email);
     if (data.action === 'reopenDTR')        return reopenDTRRecord(data.dtrId, data.email, data.reason);
+    if (data.action === 'submitOT')         return submitOTRequest(data.data);
+    if (data.action === 'updateOTDraft')    return updateOTDraft(data.data);
+    if (data.action === 'approveOT')        return approveOTRequest(data.otId, data.email, data.approvedHours);
+    if (data.action === 'returnOT')         return returnOTRequest(data.otId, data.email, data.remarks);
+    if (data.action === 'rejectOT')         return rejectOTRequest(data.otId, data.email, data.reason);
+    if (data.action === 'cancelOT')         return cancelOTRequest(data.otId, data.email);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1474,6 +1599,8 @@ function doGet(e) {
   if (action === 'getGeneratedDTR')      return p.dtrId ? getGeneratedDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
   if (action === 'getGeneratedDTRList')  return email ? getGeneratedDTRListGAS(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getEmployeesForDTR') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getEmployeeList() : _json({ success: false, message: 'Unauthorized' });
+  if (action === 'getOTList')          return email ? getOTListGAS(email) : _json({ success: false, message: 'Email required' });
+  if (action === 'getOTById')          return p.otId ? getOTByIdGAS(p.otId, email) : _json({ success: false, message: 'otId required' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
   return _json({ success: true, message: 'Smart DTR System API ready' });
@@ -5245,6 +5372,30 @@ function generateNewDTR(data) {
     });
   }
 
+  // Load approved OT records for this employee
+  var otByDate = {};
+  var otSheet2 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('OvertimeFiling');
+  if (otSheet2) {
+    var otRows2 = otSheet2.getDataRange().getValues();
+    for (var oi = 1; oi < otRows2.length; oi++) {
+      if (String(otRows2[oi][1]).trim().toLowerCase() !== empEmail) continue;
+      if (String(otRows2[oi][15]) !== 'Approved') continue;
+      var otD = String(otRows2[oi][5]);
+      if (!otByDate[otD]) otByDate[otD] = [];
+      var otAudit = [];
+      try { otAudit = JSON.parse(String(otRows2[oi][24] || '[]')); } catch(e) {}
+      otByDate[otD].push({
+        id: String(otRows2[oi][0]), otType: String(otRows2[oi][6]),
+        status: 'Approved',
+        preShiftStart: String(otRows2[oi][7] || ''), preShiftEnd: String(otRows2[oi][8] || ''),
+        postShiftStart: String(otRows2[oi][9] || ''), postShiftEnd: String(otRows2[oi][10] || ''),
+        totalRequestedHours: Number(otRows2[oi][11] || 0),
+        approvedHours: otRows2[oi][18] !== '' ? Number(otRows2[oi][18]) : Number(otRows2[oi][11] || 0),
+        reason: String(otRows2[oi][12] || '')
+      });
+    }
+  }
+
   // Build day records — NO automatic late computation
   var days = [];
   var summary = { presentDays: 0, absentDays: 0, holidays: 0, restDays: 0, leaveDays: 0,
@@ -5280,10 +5431,19 @@ function generateNewDTR(data) {
     summary.totalHoursWorked += workHours;
     if (hasMeal) summary.mealEligibleDays++;
 
+    // Compute approvedOT and actualOT for this day
+    var dayOTs = otByDate[tin.date] || [];
+    var approvedOTHours = 0;
+    for (var oi2 = 0; oi2 < dayOTs.length; oi2++) { approvedOTHours += Number(dayOTs[oi2].approvedHours || 0); }
+    // actualOT = hours worked beyond standard 8h shift (only if positive)
+    var actualOTHours = workHours > 8 ? Math.round((workHours - 8) * 100) / 100 : 0;
+    summary.totalApprovedOT += approvedOTHours;
+    summary.totalActualOT   += actualOTHours;
+
     days.push({
       date: tin.date, dayOfWeek: dayNames[dow],
       timeIn: tin.time, timeOut: tout ? tout.time : '',
-      totalHoursWorked: workHours, actualOT: 0, approvedOT: 0,
+      totalHoursWorked: workHours, actualOT: actualOTHours, approvedOT: approvedOTHours,
       mealEligibility: hasMeal, attendanceClassification: classification, attendanceRemarks: '',
       lateHours: 0, lateMinutes: 0,
       originalRecord: {
@@ -5292,11 +5452,13 @@ function generateNewDTR(data) {
         deviceInfo: tin.deviceInfo, timeInImageId: tin.imageId, timeInImageUrl: tin.imageUrl,
         timeOutImageId: tout ? tout.imageId : '', timeOutImageUrl: tout ? tout.imageUrl : ''
       },
-      sourceAttendanceIds: [], sourceMealAllowanceIds: (maByDate[tin.date] || []).map(function(m) { return m.id; }),
+      sourceAttendanceIds: [], sourceOTId: dayOTs.length > 0 ? dayOTs[0].id : '',
+      sourceMealAllowanceIds: (maByDate[tin.date] || []).map(function(m) { return m.id; }),
       mealAllowances: maByDate[tin.date] || [],
       timeCorrections: tcByDate[tin.date] || [],
       leaves: leaveByDate[tin.date] || [],
-      wfh: wfhByDate[tin.date] || []
+      wfh: wfhByDate[tin.date] || [],
+      overtimes: dayOTs
     });
   }
 
@@ -5316,17 +5478,24 @@ function generateNewDTR(data) {
     else if (hasWfh2) { classification2 = 'Work From Home'; summary.wfhDays++; }
     else { classification2 = 'Absent'; summary.absentDays++; }
 
+    var dayOTs2 = otByDate[dKey2] || [];
+    var approvedOTHours2 = 0;
+    for (var oi3 = 0; oi3 < dayOTs2.length; oi3++) { approvedOTHours2 += Number(dayOTs2[oi3].approvedHours || 0); }
+    summary.totalApprovedOT += approvedOTHours2;
+
     days.push({
       date: dKey2, dayOfWeek: dayNames[dow2],
-      timeIn: '', timeOut: '', totalHoursWorked: 0, actualOT: 0, approvedOT: 0,
+      timeIn: '', timeOut: '', totalHoursWorked: 0, actualOT: 0, approvedOT: approvedOTHours2,
       mealEligibility: false, attendanceClassification: classification2, attendanceRemarks: '',
       lateHours: 0, lateMinutes: 0,
       originalRecord: { timeIn: '', timeOut: '' },
-      sourceAttendanceIds: [], sourceMealAllowanceIds: [],
+      sourceAttendanceIds: [], sourceOTId: dayOTs2.length > 0 ? dayOTs2[0].id : '',
+      sourceMealAllowanceIds: [],
       mealAllowances: maByDate[dKey2] || [],
       timeCorrections: tcByDate[dKey2] || [],
       leaves: leaveByDate[dKey2] || [],
-      wfh: wfhByDate[dKey2] || []
+      wfh: wfhByDate[dKey2] || [],
+      overtimes: dayOTs2
     });
   }
 
@@ -6481,5 +6650,284 @@ function getPendingWFHApprovals(approverEmail) {
     records.push(buildWFHRecord(rows[i], headers));
   }
   return _json({ success: true, records: records });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  OVERTIME FILING MODULE
+// ══════════════════════════════════════════════════════════════════
+
+function initOTSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('OvertimeFiling');
+  if (!sheet) {
+    sheet = ss.insertSheet('OvertimeFiling');
+    sheet.appendRow([
+      'ID', 'Employee Email', 'Employee Name', 'Department', 'Designation',
+      'OT Date', 'OT Type',
+      'Pre-Shift Start', 'Pre-Shift End',
+      'Post-Shift Start', 'Post-Shift End',
+      'Total Requested Hours', 'Reason',
+      'Attachment URL', 'Attachment ID',
+      'Status', 'Approver Email', 'Approver Name',
+      'Approved Hours', 'Approved At',
+      'Return Remarks', 'Rejection Reason',
+      'Submitted At', 'Created At',
+      'Audit Trail JSON'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function computeOTHours(start, end) {
+  if (!start || !end) return 0;
+  var s = new Date(start), e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+  var diff = (e.getTime() - s.getTime()) / (1000 * 3600);
+  return Math.max(0, Math.round(diff * 100) / 100);
+}
+
+function submitOTRequest(data) {
+  if (!data || !data.employeeEmail || !data.otDate || !data.otType)
+    return _json({ success: false, message: 'Missing required fields' });
+  var sheet = initOTSheet();
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+  var id = Utilities.getUuid();
+  var totalHours = 0;
+  if (data.otType === 'Pre-Shift' || data.otType === 'Both')
+    totalHours += computeOTHours(data.preShiftStart, data.preShiftEnd);
+  if (data.otType === 'Post-Shift' || data.otType === 'Both')
+    totalHours += computeOTHours(data.postShiftStart, data.postShiftEnd);
+  var status = data.isDraft ? 'Draft' : 'Submitted';
+  var audit = [{ action: status === 'Draft' ? 'CREATED_DRAFT' : 'SUBMITTED', by: data.employeeEmail, at: now, remarks: '' }];
+  // Look up approver
+  var approverEmail = '';
+  var approverName = '';
+  var approverCfg = getApproverSettings();
+  if (approverCfg && approverCfg.approverEmail) {
+    approverEmail = approverCfg.approverEmail;
+    approverName  = approverCfg.approverName || '';
+  }
+  sheet.appendRow([
+    id, data.employeeEmail, data.employeeName || '', data.department || '', data.designation || '',
+    data.otDate, data.otType,
+    data.preShiftStart || '', data.preShiftEnd || '',
+    data.postShiftStart || '', data.postShiftEnd || '',
+    totalHours, data.reason || '',
+    data.attachmentUrl || '', data.attachmentId || '',
+    status, approverEmail, approverName,
+    '', '', '', '', status !== 'Draft' ? now : '', now,
+    JSON.stringify(audit)
+  ]);
+  if (status === 'Submitted') {
+    createNotificationRecord(approverEmail, 'OT_REQUIRES_APPROVAL', (data.employeeName || data.employeeEmail) + ' filed an OT request for ' + data.otDate + '.', id, 'otId');
+    createNotificationRecord(data.employeeEmail, 'OT_SUBMITTED', 'Your OT request for ' + data.otDate + ' has been submitted.', id, 'otId');
+  }
+  return _json({ success: true, message: status === 'Draft' ? 'OT draft saved' : 'OT request submitted', otId: id });
+}
+
+function updateOTDraft(data) {
+  if (!data || !data.otId || !data.email) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(data.otId)) continue;
+    var email = String(rows[i][1]).trim().toLowerCase();
+    if (email !== data.email.toLowerCase()) return _json({ success: false, message: 'Unauthorized' });
+    var status = String(rows[i][15]);
+    if (status !== 'Draft' && status !== 'Returned for Revision')
+      return _json({ success: false, message: 'OT request cannot be edited in status: ' + status });
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var totalHours = 0;
+    var otType = data.otType || String(rows[i][6]);
+    if (otType === 'Pre-Shift' || otType === 'Both') totalHours += computeOTHours(data.preShiftStart || String(rows[i][7]), data.preShiftEnd || String(rows[i][8]));
+    if (otType === 'Post-Shift' || otType === 'Both') totalHours += computeOTHours(data.postShiftStart || String(rows[i][9]), data.postShiftEnd || String(rows[i][10]));
+    var newStatus = data.submit ? 'Submitted' : status;
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
+    audit.push({ action: data.submit ? 'SUBMITTED' : 'UPDATED', by: data.email, at: now, remarks: data.remarks || '' });
+    var rowRef = sheet.getRange(i + 1, 1, 1, 25);
+    var vals = rowRef.getValues()[0];
+    vals[5]  = data.otDate        || vals[5];
+    vals[6]  = data.otType        || vals[6];
+    vals[7]  = data.preShiftStart || vals[7];
+    vals[8]  = data.preShiftEnd   || vals[8];
+    vals[9]  = data.postShiftStart|| vals[9];
+    vals[10] = data.postShiftEnd  || vals[10];
+    vals[11] = totalHours;
+    vals[12] = data.reason        || vals[12];
+    vals[13] = data.attachmentUrl || vals[13];
+    vals[14] = data.attachmentId  || vals[14];
+    vals[15] = newStatus;
+    vals[22] = newStatus === 'Submitted' && !vals[22] ? now : vals[22];
+    vals[24] = JSON.stringify(audit);
+    rowRef.setValues([vals]);
+    if (data.submit) {
+      var approverEmail2 = String(rows[i][16]);
+      createNotificationRecord(approverEmail2, 'OT_REQUIRES_APPROVAL', (String(rows[i][2]) || data.email) + ' filed an OT request for ' + (data.otDate || String(rows[i][5])) + '.', data.otId, 'otId');
+      createNotificationRecord(data.email, 'OT_SUBMITTED', 'Your OT request for ' + (data.otDate || String(rows[i][5])) + ' has been submitted.', data.otId, 'otId');
+    }
+    return _json({ success: true, message: data.submit ? 'OT request submitted' : 'OT draft updated' });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+function approveOTRequest(otId, approverEmail, approvedHours) {
+  if (!otId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(otId)) continue;
+    var status = String(rows[i][15]);
+    if (status !== 'Submitted' && status !== 'Pending Approval')
+      return _json({ success: false, message: 'Cannot approve OT in status: ' + status });
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
+    var hrs = approvedHours != null ? Number(approvedHours) : Number(rows[i][11]);
+    audit.push({ action: 'APPROVED', by: approverEmail, at: now, remarks: 'Approved hours: ' + hrs });
+    sheet.getRange(i + 1, 16).setValue('Approved');
+    sheet.getRange(i + 1, 19).setValue(hrs);
+    sheet.getRange(i + 1, 20).setValue(now);
+    sheet.getRange(i + 1, 25).setValue(JSON.stringify(audit));
+    var empEmail = String(rows[i][1]);
+    createNotificationRecord(empEmail, 'OT_APPROVED', 'Your OT request for ' + String(rows[i][5]) + ' has been approved (' + hrs + ' hrs).', otId, 'otId');
+    return _json({ success: true, message: 'OT request approved' });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+function returnOTRequest(otId, approverEmail, remarks) {
+  if (!otId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(otId)) continue;
+    var status = String(rows[i][15]);
+    if (status !== 'Submitted' && status !== 'Pending Approval')
+      return _json({ success: false, message: 'Cannot return OT in status: ' + status });
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
+    audit.push({ action: 'RETURNED', by: approverEmail, at: now, remarks: remarks || '' });
+    sheet.getRange(i + 1, 16).setValue('Returned for Revision');
+    sheet.getRange(i + 1, 21).setValue(remarks || '');
+    sheet.getRange(i + 1, 25).setValue(JSON.stringify(audit));
+    var empEmail = String(rows[i][1]);
+    createNotificationRecord(empEmail, 'OT_RETURNED', 'Your OT request for ' + String(rows[i][5]) + ' was returned for revision. Remarks: ' + (remarks || ''), otId, 'otId');
+    return _json({ success: true, message: 'OT request returned for revision' });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+function rejectOTRequest(otId, approverEmail, reason) {
+  if (!otId || !approverEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(otId)) continue;
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
+    audit.push({ action: 'REJECTED', by: approverEmail, at: now, remarks: reason || '' });
+    sheet.getRange(i + 1, 16).setValue('Rejected');
+    sheet.getRange(i + 1, 22).setValue(reason || '');
+    sheet.getRange(i + 1, 25).setValue(JSON.stringify(audit));
+    var empEmail = String(rows[i][1]);
+    createNotificationRecord(empEmail, 'OT_REJECTED', 'Your OT request for ' + String(rows[i][5]) + ' was rejected. Reason: ' + (reason || ''), otId, 'otId');
+    return _json({ success: true, message: 'OT request rejected' });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+function cancelOTRequest(otId, employeeEmail) {
+  if (!otId || !employeeEmail) return _json({ success: false, message: 'Missing parameters' });
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(otId)) continue;
+    var email = String(rows[i][1]).trim().toLowerCase();
+    if (email !== employeeEmail.toLowerCase() && !isAdminRole(employeeEmail))
+      return _json({ success: false, message: 'Unauthorized' });
+    var status = String(rows[i][15]);
+    if (status === 'Approved' || status === 'Cancelled')
+      return _json({ success: false, message: 'Cannot cancel OT in status: ' + status });
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
+    audit.push({ action: 'CANCELLED', by: employeeEmail, at: now, remarks: '' });
+    sheet.getRange(i + 1, 16).setValue('Cancelled');
+    sheet.getRange(i + 1, 25).setValue(JSON.stringify(audit));
+    createNotificationRecord(ADMIN_EMAIL, 'OT_CANCELLED', (String(rows[i][2]) || email) + ' cancelled their OT request for ' + String(rows[i][5]) + '.', otId, 'otId');
+    return _json({ success: true, message: 'OT request cancelled' });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+function buildOTRecord(row) {
+  var audit = [];
+  try { audit = JSON.parse(String(row[24] || '[]')); } catch(e) {}
+  return {
+    id: String(row[0]), employeeEmail: String(row[1]), employeeName: String(row[2]),
+    department: String(row[3]), designation: String(row[4]),
+    otDate: String(row[5]), otType: String(row[6]),
+    preShiftStart: String(row[7] || ''), preShiftEnd: String(row[8] || ''),
+    postShiftStart: String(row[9] || ''), postShiftEnd: String(row[10] || ''),
+    totalRequestedHours: Number(row[11] || 0), reason: String(row[12] || ''),
+    attachmentUrl: String(row[13] || ''), attachmentId: String(row[14] || ''),
+    status: String(row[15]), approverEmail: String(row[16] || ''), approverName: String(row[17] || ''),
+    approvedHours: row[18] !== '' ? Number(row[18]) : null,
+    approvedAt: String(row[19] || ''), returnRemarks: String(row[20] || ''),
+    rejectionReason: String(row[21] || ''), submittedAt: String(row[22] || ''),
+    createdAt: String(row[23] || ''), auditTrail: audit
+  };
+}
+
+function getOTListGAS(email) {
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  var imgMap = getEmpImageMap();
+  var isAdmin = isAdminRole(email);
+  var emailLower = email.toLowerCase();
+  var records = [];
+  for (var i = 1; i < rows.length; i++) {
+    var rowEmail = String(rows[i][1] || '').trim().toLowerCase();
+    if (!isAdmin && rowEmail !== emailLower) continue;
+    var rec = buildOTRecord(rows[i]);
+    rec.employeeImage = imgMap[rowEmail] || '';
+    records.push(rec);
+  }
+  records.reverse();
+  return _json({ success: true, records: records });
+}
+
+function getOTByIdGAS(otId, requesterEmail) {
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  var imgMap = getEmpImageMap();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(otId)) continue;
+    var rowEmail = String(rows[i][1]).trim().toLowerCase();
+    if (rowEmail !== requesterEmail.toLowerCase() && !isAdminRole(requesterEmail))
+      return _json({ success: false, message: 'Unauthorized' });
+    var rec = buildOTRecord(rows[i]);
+    rec.employeeImage = imgMap[rowEmail] || '';
+    return _json({ success: true, data: rec });
+  }
+  return _json({ success: false, message: 'OT request not found' });
+}
+
+// Exposed for generateNewDTR integration
+function getApprovedOTByDate(empEmail, dateKey) {
+  var sheet = initOTSheet();
+  var rows = sheet.getDataRange().getValues();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][1]).trim().toLowerCase() !== empEmail.toLowerCase()) continue;
+    if (String(rows[i][15]) !== 'Approved') continue;
+    if (String(rows[i][5]) !== dateKey) continue;
+    result.push(buildOTRecord(rows[i]));
+  }
+  return result;
 }
 `;

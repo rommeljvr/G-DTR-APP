@@ -163,6 +163,8 @@ function DayRow({
           <div className="w-24 text-[9px] text-white/70 text-center shrink-0 leading-tight">{fmtTime(day.timeIn || '')}</div>
           <div className="w-24 text-[9px] text-white/70 text-center shrink-0 leading-tight">{fmtTime(day.timeOut || '')}</div>
           <div className="w-12 text-[10px] text-white/50 text-center shrink-0">{day.totalHoursWorked ? fmtHours(day.totalHoursWorked) : '—'}</div>
+          <div className="w-10 text-[9px] text-white/50 text-center shrink-0">{day.actualOT ? fmtHours(day.actualOT) : '—'}</div>
+          <div className="w-10 text-[9px] text-emerald-400/70 text-center shrink-0">{day.approvedOT ? fmtHours(day.approvedOT) : '—'}</div>
           <div className="w-6 text-center shrink-0">
             {day.mealEligibility ? <span className="text-[9px] text-amber-300">YES</span> : <span className="text-[9px] text-white/20">—</span>}
           </div>
@@ -662,6 +664,8 @@ export default function DTRValidation({ user, onBack }: Props) {
                 <span className="w-24 text-center">TIME IN</span>
                 <span className="w-24 text-center">TIME OUT</span>
                 <span className="w-12 text-center">HOURS</span>
+                <span className="w-10 text-center">ACT OT</span>
+                <span className="w-10 text-center">APR OT</span>
                 <span className="w-6 text-center">MEAL</span>
                 <span className="flex-1 text-center">REMARKS</span>
                 <span className="w-3" />

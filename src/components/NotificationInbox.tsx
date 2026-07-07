@@ -15,6 +15,7 @@ interface Props {
   onRead: () => void;
   onNavigateDTR?: () => void;
   onNavigateMyDTR?: () => void;
+  onNavigateOT?: () => void;
 }
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
@@ -42,6 +43,12 @@ const TYPE_META: Record<NotificationType, { label: string; icon: string; color: 
   WFH_REVISION_REQUESTED:   { label: 'Revision Requested',     icon: '🔁', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
   WFH_RESUBMITTED:          { label: 'WFH Resubmitted',        icon: '🔄', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
   WFH_PENDING_APPROVAL:     { label: 'WFH Approval Required',  icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  OT_SUBMITTED:             { label: 'OT Submitted',            icon: '⏱️', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  OT_REQUIRES_APPROVAL:     { label: 'OT Approval Required',    icon: '⏳', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  OT_APPROVED:              { label: 'OT Approved',             icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  OT_RETURNED:              { label: 'OT Returned',             icon: '🔁', color: 'bg-orange-500/15 border-orange-400/20 text-orange-300' },
+  OT_REJECTED:              { label: 'OT Rejected',             icon: '❌', color: 'bg-red-500/15 border-red-400/20 text-red-300' },
+  OT_CANCELLED:             { label: 'OT Cancelled',            icon: '🚫', color: 'bg-slate-500/15 border-slate-400/20 text-slate-300' },
 };
 
 function timeAgo(iso: string): string {
@@ -56,7 +63,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR, onNavigateMyDTR }: Props) {
+export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR, onNavigateMyDTR, onNavigateOT }: Props) {
   const [items, setItems]           = useState<AppNotification[]>([]);
   const [loading, setLoading]       = useState(true);
   const [actingId, setActingId]     = useState<string | null>(null);
@@ -362,6 +369,16 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR,
                   >
                     <FileText className="w-3.5 h-3.5" />
                     Review My DTR
+                  </button>
+                )}
+                {/* OT notifications */}
+                {n.otId && onNavigateOT && (
+                  <button
+                    onClick={async () => { await dismiss(n.id); onNavigateOT(); }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-amber-500/15"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    View OT Request
                   </button>
                 )}
                 {/* Acknowledge + Reject for PENDING_APPROVAL (Leave) */}
