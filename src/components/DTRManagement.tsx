@@ -6,7 +6,7 @@ import {
   Calendar, Building2, Briefcase, ChevronDown, User as UserIcon,
 } from 'lucide-react';
 import { User, DTRRecord, DTRStatus, DTRCutOff } from '../types';
-import { generateDTR, regenerateDTR, getDTRList, getEmployeeDTRList, resolveDTRIssue, getDTRById, getEmployees, EmployeeRecord } from '../utils/sheets';
+import { generateDTR, generateNewDTR, regenerateDTR, getDTRList, getEmployeeDTRList, resolveDTRIssue, getDTRById, getEmployees, EmployeeRecord } from '../utils/sheets';
 import DTRView from './DTRView';
 import EmployeeAvatar from './EmployeeAvatar';
 
@@ -322,11 +322,19 @@ export default function DTRManagement({ user, onBack }: Props) {
       return;
     }
     setGenerating(true);
-    const res = await generateDTR({
-      adminEmail: user.email,
-      employeeEmail: genEmpEmail.trim(),
-      month: genMonth, year: genYear, cutOff: genCutOff,
-    });
+    // Generate both legacy DTR and new Generated DTR
+    const [res] = await Promise.all([
+      generateDTR({
+        adminEmail: user.email,
+        employeeEmail: genEmpEmail.trim(),
+        month: genMonth, year: genYear, cutOff: genCutOff,
+      }),
+      generateNewDTR({
+        adminEmail: user.email,
+        employeeEmail: genEmpEmail.trim(),
+        month: genMonth, year: genYear, cutOff: genCutOff,
+      }),
+    ]);
     setGenerating(false);
     if (res.success && res.dtrId) {
       setShowGenerate(false);

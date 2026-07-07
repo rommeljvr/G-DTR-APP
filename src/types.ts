@@ -418,21 +418,82 @@ export interface DTRRecord {
   auditTrail?: DTRAuditEntry[];
 }
 
-// ── DTR Validation ──────────────────────────────────────────────────
+// ── Generated DTR (New Workflow) ─────────────────────────────────────
 
-export type ValidationStatus = 'Pending' | 'Validated' | 'Flagged';
+export type GeneratedDTRStatus =
+  | 'Generated'
+  | 'Under Validation'
+  | 'Ready for Review'
+  | 'Acknowledged'
+  | 'Reopened';
 
-export interface DTRValidationAudit {
-  action: string;
-  by: string;
-  timestamp: string;
-  field?: string;
-  previousValue?: string;
-  updatedValue?: string;
-  remarks?: string;
+export type AttendanceClassification =
+  | 'Present'
+  | 'Late'
+  | 'Absent'
+  | 'Holiday'
+  | 'Rest Day'
+  | 'Approved Leave'
+  | 'Official Business'
+  | 'Work From Home'
+  | 'Half Day';
+
+export interface OriginalRecordSnapshot {
+  timeIn?: string;
+  timeOut?: string;
+  timeInTimestamp?: string;
+  timeOutTimestamp?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  deviceInfo?: string;
+  timeInImageId?: string;
+  timeInImageUrl?: string;
+  timeOutImageId?: string;
+  timeOutImageUrl?: string;
 }
 
-export interface DTRValidationMealAllowance {
+export interface GeneratedDTRDay {
+  date: string;
+  dayOfWeek: string;
+
+  // Working copy (editable during validation)
+  timeIn?: string;
+  timeOut?: string;
+  totalHoursWorked: number;
+  actualOT: number;
+  approvedOT: number;
+  mealEligibility: boolean;
+  attendanceClassification: AttendanceClassification;
+  attendanceRemarks: string;
+
+  // Manual late (editable)
+  lateHours: number;
+  lateMinutes: number;
+
+  // Original record snapshot (read-only reference)
+  originalRecord: OriginalRecordSnapshot;
+
+  // Source references
+  sourceAttendanceIds: string[];
+  sourceLeaveId?: string;
+  sourceWFHId?: string;
+  sourceOBId?: string;
+  sourceOTId?: string;
+  sourceMealAllowanceIds: string[];
+
+  // Linked details for display
+  mealAllowances: LinkedMealAllowance[];
+  timeCorrections: LinkedTimeCorrection[];
+  leaves: LinkedLeave[];
+  wfh: LinkedWFH[];
+
+  // Validation metadata
+  lastModifiedBy?: string;
+  lastModifiedAt?: string;
+}
+
+export interface LinkedMealAllowance {
   id: string;
   sequence: number;
   imageUrl?: string;
@@ -442,7 +503,7 @@ export interface DTRValidationMealAllowance {
   remarks?: string;
 }
 
-export interface DTRValidationTimeCorrection {
+export interface LinkedTimeCorrection {
   id: string;
   status: string;
   reason: string;
@@ -453,7 +514,7 @@ export interface DTRValidationTimeCorrection {
   documentUrl?: string;
 }
 
-export interface DTRValidationLeave {
+export interface LinkedLeave {
   id: string;
   leaveType: string;
   status: string;
@@ -463,7 +524,7 @@ export interface DTRValidationLeave {
   reason?: string;
 }
 
-export interface DTRValidationWFH {
+export interface LinkedWFH {
   id: string;
   status: string;
   workDescription: string;
@@ -472,45 +533,55 @@ export interface DTRValidationWFH {
   attachments?: WFHAttachment[];
 }
 
-export interface DTRValidationDay {
-  date: string;
-  dayOfWeek: string;
-  timeIn?: string;
-  timeOut?: string;
-  workingHours: number;
-  attendanceStatus: AttendanceStatus;
-  timeInImageId?: string;
-  timeInImageUrl?: string;
-  timeOutImageId?: string;
-  timeOutImageUrl?: string;
-  latitude?: number;
-  longitude?: number;
-  address?: string;
-  deviceInfo?: string;
-  timeInTimestamp?: string;
-  timeOutTimestamp?: string;
-  validationStatus: ValidationStatus;
-  validationRemarks?: string;
-  validatedBy?: string;
-  validatedAt?: string;
-  mealAllowances: DTRValidationMealAllowance[];
-  timeCorrections: DTRValidationTimeCorrection[];
-  leaves: DTRValidationLeave[];
-  wfh: DTRValidationWFH[];
+export interface GeneratedDTRSummary {
+  presentDays: number;
+  absentDays: number;
+  holidays: number;
+  restDays: number;
+  leaveDays: number;
+  officialBusinessDays: number;
+  wfhDays: number;
+  totalHoursWorked: number;
+  totalLateHours: number;
+  totalLateMinutes: number;
+  totalApprovedOT: number;
+  totalActualOT: number;
+  mealEligibleDays: number;
 }
 
-export interface DTRValidationData {
-  dtrId: string;
+export interface GeneratedDTRAuditEntry {
+  id: string;
+  date: string;
+  field: string;
+  originalValue: string;
+  updatedValue: string;
+  modifiedBy: string;
+  modifiedAt: string;
+  remarks?: string;
+}
+
+export interface GeneratedDTR {
+  id: string;
+  version: number;
   employeeEmail: string;
   employeeName: string;
+  employeeId?: string;
   employeeImage?: string;
-  department?: string;
-  designation?: string;
+  department: string;
+  designation: string;
   month: number;
   year: number;
   cutOff: DTRCutOff;
   coverageStart: string;
   coverageEnd: string;
-  days: DTRValidationDay[];
-  auditTrail: DTRValidationAudit[];
+  status: GeneratedDTRStatus;
+  generatedBy: string;
+  generatedAt: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  reopenedBy?: string;
+  reopenedAt?: string;
+  days: GeneratedDTRDay[];
+  summary: GeneratedDTRSummary;
+  auditTrail: GeneratedDTRAuditEntry[];
 }

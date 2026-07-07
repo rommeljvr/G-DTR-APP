@@ -27,6 +27,7 @@ import EODReport from './EODReport';
 import WFHHistory from './WFHHistory';
 import WFHApproval from './WFHApproval';
 import DTRValidation from './DTRValidation';
+import DTRAcknowledgement from './DTRAcknowledgement';
 import {
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -64,7 +65,7 @@ interface Props {
   isInstalled?: boolean;
 }
 
-type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management' | 'dtr-validation' | 'meal-allowance-settings' | 'wfh-history' | 'wfh-approval';
+type Tab = 'home' | 'history' | 'leave' | 'leave-report' | 'setup' | 'employees' | 'attendance-monitor' | 'leave-approval' | 'approver-settings' | 'notifications' | 'time-correction' | 'time-correction-report' | 'time-correction-approval' | 'dtr-management' | 'dtr-validation' | 'dtr-acknowledgement' | 'meal-allowance-settings' | 'wfh-history' | 'wfh-approval';
 
 export default function Dashboard({ user, onLogout, installPrompt, isInstalled }: Props) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -550,6 +551,10 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
   if (activeTab === 'dtr-validation') {
     if (!isAdmin) return null;
     return <DTRValidation user={user} onBack={() => setActiveTab('home')} />;
+  }
+
+  if (activeTab === 'dtr-acknowledgement') {
+    return <DTRAcknowledgement user={user} onBack={() => setActiveTab('home')} />;
   }
 
   // Derived meal allowance display state
@@ -1329,6 +1334,16 @@ export default function Dashboard({ user, onLogout, installPrompt, isInstalled }
           >
             <FileText className="w-4.5 h-4.5 shrink-0" />
             DTR Management
+          </button>
+
+          <button
+            onClick={() => { setShowDrawer(false); setActiveTab('dtr-acknowledgement'); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98] ${
+              activeTab === 'dtr-acknowledgement' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/20' : 'text-white/70 hover:bg-white/8'
+            }`}
+          >
+            <CheckCircle2 className="w-4.5 h-4.5 shrink-0" />
+            My DTR
           </button>
 
           {isAdmin && (

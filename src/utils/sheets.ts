@@ -1007,28 +1007,103 @@ export async function resolveDTRIssue(
   } catch (err) { return { success: false, message: String(err) }; }
 }
 
-export async function getDTRValidationData(
-  dtrId: string, adminEmail: string
-): Promise<{ success: boolean; data?: import('../types').DTRValidationData; message?: string }> {
-  const scriptUrl = getScriptUrl();
-  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
-  try {
-    const params = new URLSearchParams({ action: 'getDTRValidationData', dtrId, email: adminEmail });
-    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
-    return await res.json();
-  } catch (err) { return { success: false, message: String(err) }; }
-}
+// ── Generated DTR Workflow API ───────────────────────────────────────────
 
-export async function validateDTRDay(params: {
-  dtrId: string; date: string; adminEmail: string; validationStatus: string; remarks?: string;
-}): Promise<{ success: boolean; message: string; validationStatus?: string; validatedBy?: string; validatedAt?: string }> {
+export async function generateNewDTR(params: {
+  adminEmail: string; employeeEmail: string; month: number; year: number; cutOff: string;
+}): Promise<{ success: boolean; message: string; dtrId?: string }> {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) return { success: false, message: 'No script URL configured' };
   try {
     const res = await fetch(scriptUrl, {
       method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'validateDTRDay', data: params }),
+      body: JSON.stringify({ action: 'generateNewDTR', data: params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getGeneratedDTR(
+  dtrId: string, userEmail: string
+): Promise<{ success: boolean; data?: import('../types').GeneratedDTR; message?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const params = new URLSearchParams({ action: 'getGeneratedDTR', dtrId, email: userEmail });
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function getGeneratedDTRList(
+  userEmail: string
+): Promise<{ success: boolean; records?: import('../types').GeneratedDTR[]; message?: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const params = new URLSearchParams({ action: 'getGeneratedDTRList', email: userEmail });
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { method: 'GET', redirect: 'follow' });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function updateDTRDay(params: {
+  dtrId: string; date: string; userEmail: string;
+  field: string; value: string; remarks?: string;
+}): Promise<{ success: boolean; message: string; day?: import('../types').GeneratedDTRDay }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'updateDTRDay', data: params }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function sendDTRForReview(
+  dtrId: string, adminEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'sendDTRForReview', dtrId, email: adminEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function acknowledgeDTRNew(
+  dtrId: string, employeeEmail: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'acknowledgeDTRNew', dtrId, email: employeeEmail }),
+    });
+    return await res.json();
+  } catch (err) { return { success: false, message: String(err) }; }
+}
+
+export async function reopenDTR(
+  dtrId: string, adminEmail: string, reason: string
+): Promise<{ success: boolean; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { success: false, message: 'No script URL configured' };
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'reopenDTR', dtrId, email: adminEmail, reason }),
     });
     return await res.json();
   } catch (err) { return { success: false, message: String(err) }; }
@@ -1338,6 +1413,11 @@ function doPost(e) {
     if (data.action === 'rejectWFH')          return rejectWFH(data.id, data.email, data.reason);
     if (data.action === 'requestWFHRevision') return requestWFHRevision(data.id, data.email, data.comments);
     if (data.action === 'validateDTRDay')    return validateDTRDay(data.data);
+    if (data.action === 'generateNewDTR')   return generateNewDTR(data.data);
+    if (data.action === 'updateDTRDay')     return updateDTRDayField(data.data);
+    if (data.action === 'sendDTRForReview') return sendDTRForReview(data.dtrId, data.email);
+    if (data.action === 'acknowledgeDTRNew') return acknowledgeDTRNew(data.dtrId, data.email);
+    if (data.action === 'reopenDTR')        return reopenDTRRecord(data.dtrId, data.email, data.reason);
 
     return _json({ success: false, message: 'Unknown action' });
   } catch (err) {
@@ -1391,6 +1471,8 @@ function doGet(e) {
   if (action === 'getEmployeeDTRList') return email ? getEmployeeDTRList(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getDTRById')        return p.dtrId ? getDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
   if (action === 'getDTRValidationData') return p.dtrId ? getDTRValidationData(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
+  if (action === 'getGeneratedDTR')      return p.dtrId ? getGeneratedDTRById(p.dtrId, email) : _json({ success: false, message: 'dtrId required' });
+  if (action === 'getGeneratedDTRList')  return email ? getGeneratedDTRListGAS(email) : _json({ success: false, message: 'Email required' });
   if (action === 'getEmployeesForDTR') return (email && email.toLowerCase() === ADMIN_EMAIL) ? getEmployeeList() : _json({ success: false, message: 'Unauthorized' });
   if (action === 'test')             return _json({ success: true, message: 'Smart DTR System API v4.0 ✓' });
 
@@ -4943,6 +5025,610 @@ function validateDTRDay(data) {
     validatedBy: data.adminEmail,
     validatedAt: now
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  GENERATED DTR — NEW WORKFLOW
+// ══════════════════════════════════════════════════════════════════
+
+function initGeneratedDTRSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('GeneratedDTR');
+  if (!sheet) {
+    sheet = ss.insertSheet('GeneratedDTR');
+    sheet.appendRow([
+      'ID', 'Version', 'Employee Email', 'Employee Name', 'Employee Number',
+      'Department', 'Designation', 'Branch', 'Month', 'Year', 'Cut-Off',
+      'Coverage Start', 'Coverage End', 'Status', 'Generated By', 'Generated At',
+      'Sent At', 'Acknowledged At', 'Acknowledged By', 'Reopened By', 'Reopened At',
+      'Days JSON', 'Summary JSON', 'Audit Trail JSON'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function generateNewDTR(data) {
+  var adminEmail = String(data.adminEmail || '').trim().toLowerCase();
+  var empEmail   = String(data.employeeEmail || '').trim().toLowerCase();
+  var month      = parseInt(data.month, 10);
+  var year       = parseInt(data.year, 10);
+  var cutOff     = String(data.cutOff || '1st').trim();
+
+  if (!adminEmail || !empEmail || !month || !year)
+    return _json({ success: false, message: 'Missing required parameters' });
+  if (!isAdminRole(adminEmail))
+    return _json({ success: false, message: 'Unauthorized' });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Coverage dates
+  var startDay = cutOff === '1st' ? 1 : 16;
+  var endDay   = cutOff === '1st' ? 15 : new Date(year, month, 0).getDate();
+  var coverageStart = month + '/' + startDay + '/' + year;
+  var coverageEnd   = month + '/' + endDay   + '/' + year;
+  var coverageStartTs = new Date(year, month - 1, startDay).getTime();
+  var coverageEndTs   = new Date(year, month - 1, endDay, 23, 59, 59, 999).getTime();
+
+  // Duplicate check
+  var dtrSheet = initGeneratedDTRSheet();
+  var existingRows = dtrSheet.getDataRange().getValues();
+  for (var di = 1; di < existingRows.length; di++) {
+    var exEmail  = String(existingRows[di][2] || '').trim().toLowerCase();
+    var exMonth  = Number(existingRows[di][8]);
+    var exYear   = Number(existingRows[di][9]);
+    var exCutOff = String(existingRows[di][10] || '').trim();
+    var exStatus = String(existingRows[di][13] || '').trim();
+    if (exEmail === empEmail && exMonth === month && exYear === year && exCutOff === cutOff && exStatus !== 'Regenerated') {
+      return _json({ success: false, alreadyExists: true, dtrId: String(existingRows[di][0]), message: 'A Generated DTR already exists for this period.' });
+    }
+  }
+
+  // Helper functions
+  function dateKey(d) { return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear(); }
+  var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  // Collect attendance events
+  var attSheet = ss.getSheetByName('Attendance');
+  var attRows  = attSheet ? attSheet.getDataRange().getValues() : [];
+  var allEvents = [];
+  for (var ai = 1; ai < attRows.length; ai++) {
+    var rowEmail = String(attRows[ai][3] || '').trim().toLowerCase();
+    if (rowEmail !== empEmail) continue;
+    var action = String(attRows[ai][4] || '').trim();
+    if (action !== 'TIME_IN' && action !== 'TIME_OUT') continue;
+    var tsRaw = attRows[ai][5];
+    var tsMs  = tsRaw instanceof Date ? tsRaw.getTime() : new Date(String(tsRaw || '')).getTime();
+    if (isNaN(tsMs)) continue;
+    var tsStr = tsRaw instanceof Date
+      ? Utilities.formatDate(tsRaw, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
+      : String(tsRaw || '');
+    allEvents.push({
+      action: action, tsMs: tsMs, timestamp: tsStr, date: dateKey(new Date(tsMs)),
+      time: String(attRows[ai][7] || ''),
+      latitude: Number(attRows[ai][8] || 0), longitude: Number(attRows[ai][9] || 0),
+      address: String(attRows[ai][11] || ''), deviceInfo: String(attRows[ai][12] || ''),
+      imageId: String(attRows[ai][15] || ''), imageUrl: String(attRows[ai][16] || '')
+    });
+  }
+  allEvents.sort(function(a, b) { return a.tsMs - b.tsMs; });
+
+  // Sequential pairing
+  var pairs = [];
+  var openIn = null;
+  for (var ei = 0; ei < allEvents.length; ei++) {
+    var ev = allEvents[ei];
+    if (ev.action === 'TIME_IN') {
+      if (openIn && openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+        pairs.push({ timeIn: openIn, timeOut: null });
+      }
+      openIn = ev;
+    } else {
+      if (openIn) {
+        if (openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+          pairs.push({ timeIn: openIn, timeOut: ev });
+        }
+        openIn = null;
+      }
+    }
+  }
+  if (openIn && openIn.tsMs >= coverageStartTs && openIn.tsMs <= coverageEndTs) {
+    pairs.push({ timeIn: openIn, timeOut: null });
+  }
+
+  var pairedDates = {};
+  for (var pi = 0; pi < pairs.length; pi++) { pairedDates[pairs[pi].timeIn.date] = true; }
+
+  // Load leaves
+  var leaveSheet = ss.getSheetByName('LeaveApplications');
+  var leaveRows  = leaveSheet ? leaveSheet.getDataRange().getValues() : [];
+  var approvedLeaveDates = {};
+  var leaveByDate = {};
+  for (var li = 1; li < leaveRows.length; li++) {
+    var lEmail  = String(leaveRows[li][1] || '').trim().toLowerCase();
+    if (lEmail !== empEmail) continue;
+    var lStatus = String(leaveRows[li][13] || '').trim();
+    var lStart = new Date(String(leaveRows[li][4] || ''));
+    var lEnd   = new Date(String(leaveRows[li][5] || ''));
+    if (isNaN(lStart.getTime()) || isNaN(lEnd.getTime())) continue;
+    var lObj = {
+      id: String(leaveRows[li][0] || ''), leaveType: String(leaveRows[li][3] || ''),
+      status: lStatus, startDate: String(leaveRows[li][4] || ''), endDate: String(leaveRows[li][5] || ''),
+      totalDays: Number(leaveRows[li][8] || 0)
+    };
+    var cur = new Date(lStart);
+    while (cur <= lEnd) {
+      var lKey = dateKey(cur);
+      if (lStatus === 'Approved') approvedLeaveDates[lKey] = true;
+      if (!leaveByDate[lKey]) leaveByDate[lKey] = [];
+      leaveByDate[lKey].push(lObj);
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+
+  // Load time corrections
+  var tcSheet  = ss.getSheetByName('TimeCorrectionFilings');
+  var tcRows   = tcSheet ? tcSheet.getDataRange().getValues() : [];
+  var tcHeaders = tcRows.length > 0 ? tcRows[0] : [];
+  var tcByDate = {};
+  for (var ti = 1; ti < tcRows.length; ti++) {
+    var tcEmail = String(tcRows[ti][findColumnIndex(tcHeaders, ['Email'])] || '').trim().toLowerCase();
+    if (tcEmail !== empEmail) continue;
+    var tcDateRaw = tcRows[ti][findColumnIndex(tcHeaders, ['Attendance Date'])];
+    var tcDate = tcDateRaw ? (tcDateRaw instanceof Date ? dateKey(tcDateRaw) : dateKey(new Date(String(tcDateRaw)))) : '';
+    if (!tcDate) continue;
+    if (!tcByDate[tcDate]) tcByDate[tcDate] = [];
+    tcByDate[tcDate].push({
+      id: String(tcRows[ti][0] || ''), status: String(tcRows[ti][findColumnIndex(tcHeaders, ['Status'])] || ''),
+      reason: String(tcRows[ti][findColumnIndex(tcHeaders, ['Reason'])] || ''),
+      originalTimeIn: String(tcRows[ti][findColumnIndex(tcHeaders, ['Original Time In'])] || ''),
+      originalTimeOut: String(tcRows[ti][findColumnIndex(tcHeaders, ['Original Time Out'])] || ''),
+      correctedTimeIn: String(tcRows[ti][findColumnIndex(tcHeaders, ['Corrected Time In'])] || ''),
+      correctedTimeOut: String(tcRows[ti][findColumnIndex(tcHeaders, ['Corrected Time Out'])] || ''),
+      documentUrl: String(tcRows[ti][findColumnIndex(tcHeaders, ['Document URL'])] || '')
+    });
+  }
+
+  // Load meal allowances
+  var maSheet  = ss.getSheetByName('MealAllowance');
+  var maRows   = maSheet ? maSheet.getDataRange().getValues() : [];
+  var maByDate = {};
+  for (var mi = 1; mi < maRows.length; mi++) {
+    var mEmail = String(maRows[mi][2] || '').trim().toLowerCase();
+    if (mEmail !== empEmail) continue;
+    var mTs = maRows[mi][10];
+    var mDate = mTs ? (mTs instanceof Date ? dateKey(mTs) : dateKey(new Date(String(mTs)))) : '';
+    if (!mDate) continue;
+    if (!maByDate[mDate]) maByDate[mDate] = [];
+    maByDate[mDate].push({
+      id: String(maRows[mi][0] || ''), sequence: Number(maRows[mi][4] || 1),
+      imageUrl: String(maRows[mi][6] || ''), imageId: String(maRows[mi][5] || ''),
+      address: String(maRows[mi][9] || ''),
+      timestamp: mTs instanceof Date ? Utilities.formatDate(mTs, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'") : String(mTs || ''),
+      remarks: String(maRows[mi][11] || '')
+    });
+  }
+
+  // Load WFH
+  var wfhSheet = ss.getSheetByName('WorkFromHome');
+  var wfhRows  = wfhSheet ? wfhSheet.getDataRange().getValues() : [];
+  var wfhByDate = {};
+  for (var wi = 1; wi < wfhRows.length; wi++) {
+    var wEmail = String(wfhRows[wi][2] || '').trim().toLowerCase();
+    if (wEmail !== empEmail) continue;
+    var wDateRaw = wfhRows[wi][6];
+    var wDate = wDateRaw ? (wDateRaw instanceof Date ? dateKey(wDateRaw) : dateKey(new Date(String(wDateRaw)))) : '';
+    if (!wDate) continue;
+    if (!wfhByDate[wDate]) wfhByDate[wDate] = [];
+    var wAttach = [];
+    try { wAttach = JSON.parse(String(wfhRows[wi][21] || '[]')); } catch(e) {}
+    wfhByDate[wDate].push({
+      id: String(wfhRows[wi][0] || ''), status: String(wfhRows[wi][22] || ''),
+      workDescription: String(wfhRows[wi][9] || ''),
+      eodSummary: String(wfhRows[wi][14] || ''), eodSubmittedAt: String(wfhRows[wi][20] || ''),
+      attachments: wAttach
+    });
+  }
+
+  // Build day records — NO automatic late computation
+  var days = [];
+  var summary = { presentDays: 0, absentDays: 0, holidays: 0, restDays: 0, leaveDays: 0,
+    officialBusinessDays: 0, wfhDays: 0, totalHoursWorked: 0, totalLateHours: 0,
+    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, mealEligibleDays: 0 };
+
+  // 1. Rows for attendance pairs
+  for (var pi2 = 0; pi2 < pairs.length; pi2++) {
+    var pair = pairs[pi2];
+    var tin  = pair.timeIn;
+    var tout = pair.timeOut;
+    var tinDate = new Date(tin.tsMs);
+    var dow = tinDate.getDay();
+    var workHours = 0;
+    if (tout) {
+      var diff = (new Date(tout.timestamp).getTime() - new Date(tin.timestamp).getTime()) / 3600000;
+      if (!isNaN(diff) && diff > 0) workHours = Math.round(diff * 100) / 100;
+    }
+    var hasMeal = (maByDate[tin.date] && maByDate[tin.date].length > 0);
+    var classification = (dow === 0 || dow === 6) ? 'Rest Day' : 'Present';
+    // Check if WFH covers this date
+    if (wfhByDate[tin.date] && wfhByDate[tin.date].length > 0) {
+      var anyApproved = false;
+      for (var wc = 0; wc < wfhByDate[tin.date].length; wc++) {
+        if (wfhByDate[tin.date][wc].status === 'Approved') { anyApproved = true; break; }
+      }
+      if (anyApproved) classification = 'Work From Home';
+    }
+
+    if (classification === 'Present') summary.presentDays++;
+    else if (classification === 'Rest Day') summary.restDays++;
+    else if (classification === 'Work From Home') summary.wfhDays++;
+    summary.totalHoursWorked += workHours;
+    if (hasMeal) summary.mealEligibleDays++;
+
+    days.push({
+      date: tin.date, dayOfWeek: dayNames[dow],
+      timeIn: tin.time, timeOut: tout ? tout.time : '',
+      totalHoursWorked: workHours, actualOT: 0, approvedOT: 0,
+      mealEligibility: hasMeal, attendanceClassification: classification, attendanceRemarks: '',
+      lateHours: 0, lateMinutes: 0,
+      originalRecord: {
+        timeIn: tin.timestamp, timeOut: tout ? tout.timestamp : '',
+        latitude: tin.latitude, longitude: tin.longitude, address: tin.address,
+        deviceInfo: tin.deviceInfo, timeInImageId: tin.imageId, timeInImageUrl: tin.imageUrl,
+        timeOutImageId: tout ? tout.imageId : '', timeOutImageUrl: tout ? tout.imageUrl : ''
+      },
+      sourceAttendanceIds: [], sourceMealAllowanceIds: (maByDate[tin.date] || []).map(function(m) { return m.id; }),
+      mealAllowances: maByDate[tin.date] || [],
+      timeCorrections: tcByDate[tin.date] || [],
+      leaves: leaveByDate[tin.date] || [],
+      wfh: wfhByDate[tin.date] || []
+    });
+  }
+
+  // 2. Fill absent/leave/rest/holiday rows for calendar days with no pair
+  for (var day2 = startDay; day2 <= endDay; day2++) {
+    var dt2  = new Date(year, month - 1, day2);
+    var dow2 = dt2.getDay();
+    var dKey2 = dateKey(dt2);
+    if (pairedDates[dKey2]) continue;
+
+    var isRest2 = (dow2 === 0 || dow2 === 6);
+    var isLeave2 = approvedLeaveDates[dKey2] || false;
+    var hasWfh2 = wfhByDate[dKey2] && wfhByDate[dKey2].length > 0;
+    var classification2;
+    if (isRest2) { classification2 = 'Rest Day'; summary.restDays++; }
+    else if (isLeave2) { classification2 = 'Approved Leave'; summary.leaveDays++; }
+    else if (hasWfh2) { classification2 = 'Work From Home'; summary.wfhDays++; }
+    else { classification2 = 'Absent'; summary.absentDays++; }
+
+    days.push({
+      date: dKey2, dayOfWeek: dayNames[dow2],
+      timeIn: '', timeOut: '', totalHoursWorked: 0, actualOT: 0, approvedOT: 0,
+      mealEligibility: false, attendanceClassification: classification2, attendanceRemarks: '',
+      lateHours: 0, lateMinutes: 0,
+      originalRecord: { timeIn: '', timeOut: '' },
+      sourceAttendanceIds: [], sourceMealAllowanceIds: [],
+      mealAllowances: maByDate[dKey2] || [],
+      timeCorrections: tcByDate[dKey2] || [],
+      leaves: leaveByDate[dKey2] || [],
+      wfh: wfhByDate[dKey2] || []
+    });
+  }
+
+  // Sort days chronologically
+  days.sort(function(a, b) {
+    var ta = a.originalRecord && a.originalRecord.timeIn ? new Date(a.originalRecord.timeIn).getTime() : new Date(a.date).getTime();
+    var tb = b.originalRecord && b.originalRecord.timeIn ? new Date(b.originalRecord.timeIn).getTime() : new Date(b.date).getTime();
+    return ta - tb;
+  });
+
+  summary.totalHoursWorked = Math.round(summary.totalHoursWorked * 100) / 100;
+
+  // Get employee info
+  var empSheet = ss.getSheetByName('Employee');
+  var empRows  = empSheet ? empSheet.getDataRange().getValues() : [];
+  var empName = empEmail, dept = '', desig = '', empNumber = '';
+  for (var ei2 = 1; ei2 < empRows.length; ei2++) {
+    if (String(empRows[ei2][0] || '').trim().toLowerCase() === empEmail) {
+      empName   = String(empRows[ei2][1] || empName);
+      dept      = String(empRows[ei2][5] || '');
+      desig     = String(empRows[ei2][6] || '');
+      empNumber = String(empRows[ei2][2] || '');
+      break;
+    }
+  }
+
+  var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+  var dtrId = Utilities.getUuid();
+  var auditTrail = [];
+
+  dtrSheet.appendRow([
+    dtrId, 1, empEmail, empName, empNumber,
+    dept, desig, '', month, year, cutOff,
+    coverageStart, coverageEnd, 'Generated', adminEmail, now,
+    '', '', '', '', '',
+    JSON.stringify(days), JSON.stringify(summary), JSON.stringify(auditTrail)
+  ]);
+
+  createNotificationRecord(empEmail, 'DTR_GENERATED',
+    'Your DTR for ' + (cutOff === '1st' ? '1st' : '2nd') + ' cut-off of ' +
+    new Date(year, month-1, 1).toLocaleString('default', { month: 'long' }) + ' ' + year + ' has been generated.',
+    dtrId, 'dtrId');
+
+  return _json({ success: true, message: 'DTR generated', dtrId: dtrId });
+}
+
+function getGeneratedDTRById(dtrId, requesterEmail) {
+  var sheet = initGeneratedDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    var reqLower = requesterEmail ? requesterEmail.toLowerCase() : '';
+    var isAdmin  = isAdminRole(reqLower);
+    var isOwner  = reqLower && reqLower === empEmail;
+    if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
+
+    var days = [], summary = {}, audit = [];
+    try { days    = JSON.parse(String(rows[i][21] || '[]')); } catch(e) {}
+    try { summary = JSON.parse(String(rows[i][22] || '{}')); } catch(e) {}
+    try { audit   = JSON.parse(String(rows[i][23] || '[]')); } catch(e) {}
+
+    var imgMap = getEmpImageMap();
+    return _json({ success: true, data: {
+      id: String(rows[i][0]), version: Number(rows[i][1]),
+      employeeEmail: empEmail, employeeName: String(rows[i][3]),
+      employeeId: String(rows[i][4] || ''), employeeImage: imgMap[empEmail] || '',
+      department: String(rows[i][5]), designation: String(rows[i][6]),
+      month: Number(rows[i][8]), year: Number(rows[i][9]), cutOff: String(rows[i][10]),
+      coverageStart: String(rows[i][11]), coverageEnd: String(rows[i][12]),
+      status: String(rows[i][13]), generatedBy: String(rows[i][14]), generatedAt: String(rows[i][15]),
+      acknowledgedBy: String(rows[i][18] || ''), acknowledgedAt: String(rows[i][17] || ''),
+      reopenedBy: String(rows[i][19] || ''), reopenedAt: String(rows[i][20] || ''),
+      days: days, summary: summary, auditTrail: audit
+    }});
+  }
+  return _json({ success: false, message: 'Generated DTR not found' });
+}
+
+function getGeneratedDTRListGAS(email) {
+  if (!isAdminRole(email)) {
+    // Employee: return only their own
+    var emailLower = email.toLowerCase();
+    var imgMap = getEmpImageMap();
+    var sheet = initGeneratedDTRSheet();
+    var rows  = sheet.getDataRange().getValues();
+    var records = [];
+    for (var i = 1; i < rows.length; i++) {
+      var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+      if (empEmail !== emailLower) continue;
+      records.push({
+        id: String(rows[i][0]), version: Number(rows[i][1]),
+        employeeEmail: empEmail, employeeName: String(rows[i][3]),
+        employeeImage: imgMap[empEmail] || '',
+        department: String(rows[i][5]), designation: String(rows[i][6]),
+        month: Number(rows[i][8]), year: Number(rows[i][9]), cutOff: String(rows[i][10]),
+        coverageStart: String(rows[i][11]), coverageEnd: String(rows[i][12]),
+        status: String(rows[i][13]), generatedBy: String(rows[i][14]), generatedAt: String(rows[i][15]),
+        days: [], summary: {}, auditTrail: []
+      });
+    }
+    records.reverse();
+    return _json({ success: true, records: records });
+  }
+
+  // Admin: return all
+  var imgMap2 = getEmpImageMap();
+  var sheet2 = initGeneratedDTRSheet();
+  var rows2  = sheet2.getDataRange().getValues();
+  var records2 = [];
+  for (var i2 = 1; i2 < rows2.length; i2++) {
+    var empEmail2 = String(rows2[i2][2] || '').trim().toLowerCase();
+    var status = String(rows2[i2][13] || '').trim();
+    if (status === 'Regenerated') continue;
+    records2.push({
+      id: String(rows2[i2][0]), version: Number(rows2[i2][1]),
+      employeeEmail: empEmail2, employeeName: String(rows2[i2][3]),
+      employeeImage: imgMap2[empEmail2] || '',
+      department: String(rows2[i2][5]), designation: String(rows2[i2][6]),
+      month: Number(rows2[i2][8]), year: Number(rows2[i2][9]), cutOff: String(rows2[i2][10]),
+      coverageStart: String(rows2[i2][11]), coverageEnd: String(rows2[i2][12]),
+      status: status, generatedBy: String(rows2[i2][14]), generatedAt: String(rows2[i2][15]),
+      days: [], summary: {}, auditTrail: []
+    });
+  }
+  records2.reverse();
+  return _json({ success: true, records: records2 });
+}
+
+function updateDTRDayField(data) {
+  if (!data || !data.dtrId || !data.date || !data.userEmail || !data.field)
+    return _json({ success: false, message: 'Missing parameters' });
+
+  var sheet = initGeneratedDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(data.dtrId)) continue;
+
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    var reqLower = data.userEmail.toLowerCase();
+    var isAdmin  = isAdminRole(reqLower);
+    var isOwner  = reqLower === empEmail;
+    if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
+
+    // Check locked
+    var status = String(rows[i][13] || '').trim();
+    if (status === 'Acknowledged') return _json({ success: false, message: 'DTR is locked (acknowledged).' });
+
+    var days = [];
+    try { days = JSON.parse(String(rows[i][21] || '[]')); } catch(e) {}
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][23] || '[]')); } catch(e) {}
+
+    var found = false;
+    var updatedDay = null;
+    for (var d = 0; d < days.length; d++) {
+      if (days[d].date === data.date) {
+        found = true;
+        var origVal = String(days[d][data.field] || '');
+        days[d][data.field] = data.value;
+        updatedDay = days[d];
+
+        // If field is numeric
+        if (data.field === 'lateHours' || data.field === 'lateMinutes' || data.field === 'totalHoursWorked' || data.field === 'actualOT' || data.field === 'approvedOT') {
+          days[d][data.field] = Number(data.value) || 0;
+          updatedDay = days[d];
+        }
+
+        var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+        audit.push({
+          id: Utilities.getUuid(), date: data.date, field: data.field,
+          originalValue: origVal, updatedValue: String(data.value),
+          modifiedBy: data.userEmail, modifiedAt: now,
+          remarks: data.remarks || ''
+        });
+        break;
+      }
+    }
+
+    if (!found) return _json({ success: false, message: 'Day not found in DTR' });
+
+    // Recompute summary
+    var summary = recomputeDTRSummary(days);
+
+    // Update status to Under Validation if still Generated
+    if (status === 'Generated') {
+      sheet.getRange(i + 1, 14).setValue('Under Validation');
+    }
+
+    sheet.getRange(i + 1, 22).setValue(JSON.stringify(days));
+    sheet.getRange(i + 1, 23).setValue(JSON.stringify(summary));
+    sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
+
+    return _json({ success: true, message: 'Day updated', day: updatedDay });
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function recomputeDTRSummary(days) {
+  var s = { presentDays: 0, absentDays: 0, holidays: 0, restDays: 0, leaveDays: 0,
+    officialBusinessDays: 0, wfhDays: 0, totalHoursWorked: 0, totalLateHours: 0,
+    totalLateMinutes: 0, totalApprovedOT: 0, totalActualOT: 0, mealEligibleDays: 0 };
+  for (var i = 0; i < days.length; i++) {
+    var c = days[i].attendanceClassification || '';
+    if (c === 'Present' || c === 'Late') s.presentDays++;
+    else if (c === 'Absent') s.absentDays++;
+    else if (c === 'Holiday') s.holidays++;
+    else if (c === 'Rest Day') s.restDays++;
+    else if (c === 'Approved Leave') s.leaveDays++;
+    else if (c === 'Official Business') s.officialBusinessDays++;
+    else if (c === 'Work From Home') s.wfhDays++;
+    else if (c === 'Half Day') s.presentDays += 0.5;
+    s.totalHoursWorked += (days[i].totalHoursWorked || 0);
+    s.totalLateHours += (days[i].lateHours || 0);
+    s.totalLateMinutes += (days[i].lateMinutes || 0);
+    s.totalApprovedOT += (days[i].approvedOT || 0);
+    s.totalActualOT += (days[i].actualOT || 0);
+    if (days[i].mealEligibility) s.mealEligibleDays++;
+  }
+  s.totalHoursWorked = Math.round(s.totalHoursWorked * 100) / 100;
+  // Normalize minutes to hours
+  s.totalLateHours += Math.floor(s.totalLateMinutes / 60);
+  s.totalLateMinutes = s.totalLateMinutes % 60;
+  return s;
+}
+
+function sendDTRForReview(dtrId, adminEmail) {
+  if (!dtrId || !adminEmail) return _json({ success: false, message: 'Missing parameters' });
+  if (!isAdminRole(adminEmail)) return _json({ success: false, message: 'Unauthorized' });
+
+  var sheet = initGeneratedDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var status = String(rows[i][13] || '').trim();
+    if (status === 'Acknowledged') return _json({ success: false, message: 'DTR already acknowledged, cannot send for review.' });
+
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    sheet.getRange(i + 1, 14).setValue('Ready for Review');
+    sheet.getRange(i + 1, 17).setValue(now); // Sent At
+
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][23] || '[]')); } catch(e) {}
+    audit.push({ id: Utilities.getUuid(), date: '', field: 'status', originalValue: status, updatedValue: 'Ready for Review', modifiedBy: adminEmail, modifiedAt: now, remarks: 'Sent for employee review' });
+    sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
+
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    createNotificationRecord(empEmail, 'DTR_GENERATED', 'Your DTR is ready for your review and acknowledgement.', dtrId, 'dtrId');
+    return _json({ success: true, message: 'DTR sent for review' });
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function acknowledgeDTRNew(dtrId, employeeEmail) {
+  if (!dtrId || !employeeEmail) return _json({ success: false, message: 'Missing parameters' });
+  var reqLower = employeeEmail.trim().toLowerCase();
+
+  var sheet = initGeneratedDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    var isAdmin  = isAdminRole(reqLower);
+    var isOwner  = reqLower === empEmail;
+    if (!isAdmin && !isOwner) return _json({ success: false, message: 'Unauthorized' });
+
+    var status = String(rows[i][13] || '').trim();
+    if (status === 'Acknowledged') return _json({ success: false, message: 'Already acknowledged' });
+
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    sheet.getRange(i + 1, 14).setValue('Acknowledged');
+    sheet.getRange(i + 1, 18).setValue(now); // Acknowledged At
+    sheet.getRange(i + 1, 19).setValue(employeeEmail); // Acknowledged By
+
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][23] || '[]')); } catch(e) {}
+    audit.push({ id: Utilities.getUuid(), date: '', field: 'status', originalValue: status, updatedValue: 'Acknowledged', modifiedBy: employeeEmail, modifiedAt: now, remarks: '' });
+    sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
+
+    // Notify admin
+    if (!isAdmin) {
+      createNotificationRecord(ADMIN_EMAIL, 'DTR_GENERATED', String(rows[i][3]) + ' acknowledged their DTR.', dtrId, 'dtrId');
+    }
+    return _json({ success: true, message: 'DTR acknowledged', acknowledgedAt: now });
+  }
+  return _json({ success: false, message: 'DTR not found' });
+}
+
+function reopenDTRRecord(dtrId, adminEmail, reason) {
+  if (!dtrId || !adminEmail) return _json({ success: false, message: 'Missing parameters' });
+  if (!isAdminRole(adminEmail)) return _json({ success: false, message: 'Unauthorized' });
+
+  var sheet = initGeneratedDTRSheet();
+  var rows  = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(dtrId)) continue;
+    var status = String(rows[i][13] || '').trim();
+    if (status !== 'Acknowledged') return _json({ success: false, message: 'Only acknowledged DTRs can be reopened.' });
+
+    var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss'+08:00'");
+    sheet.getRange(i + 1, 14).setValue('Reopened');
+    sheet.getRange(i + 1, 20).setValue(adminEmail); // Reopened By
+    sheet.getRange(i + 1, 21).setValue(now); // Reopened At
+    // Clear acknowledged fields
+    sheet.getRange(i + 1, 18).setValue('');
+    sheet.getRange(i + 1, 19).setValue('');
+
+    var audit = [];
+    try { audit = JSON.parse(String(rows[i][23] || '[]')); } catch(e) {}
+    audit.push({ id: Utilities.getUuid(), date: '', field: 'status', originalValue: 'Acknowledged', updatedValue: 'Reopened', modifiedBy: adminEmail, modifiedAt: now, remarks: reason || 'Reopened by admin' });
+    sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
+
+    var empEmail = String(rows[i][2] || '').trim().toLowerCase();
+    createNotificationRecord(empEmail, 'DTR_GENERATED', 'Your DTR has been reopened by admin. Please review again.', dtrId, 'dtrId');
+    return _json({ success: true, message: 'DTR reopened' });
+  }
+  return _json({ success: false, message: 'DTR not found' });
 }
 
 function createNotificationRecord(toEmail, type, message, refId, refField) {

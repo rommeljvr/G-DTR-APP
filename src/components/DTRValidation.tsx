@@ -2,15 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, RefreshCw, Loader2, Search, CheckCircle2, AlertCircle,
   ChevronDown, ChevronUp, X, Clock, MapPin, Navigation,
-  Coffee, FileText, Calendar, Briefcase, Home, Flag, ShieldCheck,
-  Smartphone, ExternalLink,
+  Coffee, FileText, Calendar, Home, ShieldCheck,
+  Smartphone, ExternalLink, Send, Unlock, Eye,
 } from 'lucide-react';
 import {
-  User, DTRRecord, DTRValidationData, DTRValidationDay,
-  ValidationStatus,
+  User, GeneratedDTR, GeneratedDTRDay, AttendanceClassification,
 } from '../types';
 import {
-  getDTRList, getDTRValidationData, validateDTRDay,
+  getGeneratedDTRList, getGeneratedDTR, updateDTRDay, sendDTRForReview, reopenDTR,
 } from '../utils/sheets';
 import DriveImage from './DriveImage';
 import EmployeeAvatar from './EmployeeAvatar';
@@ -23,6 +22,11 @@ interface Props {
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
+];
+
+const CLASSIFICATIONS: AttendanceClassification[] = [
+  'Present', 'Late', 'Absent', 'Holiday', 'Rest Day',
+  'Approved Leave', 'Official Business', 'Work From Home', 'Half Day',
 ];
 
 function fmtDate(val: string): string {
@@ -62,7 +66,7 @@ function extractDriveId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-const STATUS_BADGE: Record<string, string> = {
+const CLASS_BADGE: Record<string, string> = {
   'Present':          'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
   'Late':             'bg-amber-500/15 text-amber-300 border-amber-400/20',
   'Absent':           'bg-red-500/15 text-red-300 border-red-400/20',
@@ -71,57 +75,60 @@ const STATUS_BADGE: Record<string, string> = {
   'Holiday':          'bg-violet-500/15 text-violet-300 border-violet-400/20',
   'Rest Day':         'bg-slate-500/15 text-slate-400 border-slate-400/20',
   'Approved Leave':   'bg-teal-500/15 text-teal-300 border-teal-400/20',
-  'Missing Time In':  'bg-rose-500/15 text-rose-300 border-rose-400/20',
-  'Missing Time Out': 'bg-pink-500/15 text-pink-300 border-pink-400/20',
+  'Work From Home':   'bg-indigo-500/15 text-indigo-300 border-indigo-400/20',
 };
 
-const VAL_BADGE: Record<ValidationStatus, string> = {
-  'Pending':   'bg-slate-500/20 text-slate-300 border-slate-400/20',
-  'Validated': 'bg-emerald-500/20 text-emerald-300 border-emerald-400/20',
-  'Flagged':   'bg-red-500/20 text-red-300 border-red-400/20',
+const STATUS_STYLE: Record<string, string> = {
+  'Generated':        'bg-blue-500/15 text-blue-300 border-blue-400/20',
+  'Under Validation': 'bg-amber-500/15 text-amber-300 border-amber-400/20',
+  'Ready for Review': 'bg-violet-500/15 text-violet-300 border-violet-400/20',
+  'Acknowledged':     'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
+  'Reopened':         'bg-rose-500/15 text-rose-300 border-rose-400/20',
 };
 
-// ── Expandable Validation Day Row ────────────────────────────────────────────
-function ValidationDayRow({
-  day, dtrId, adminEmail, onValidated,
+// ── Expandable Day Row ───────────────────────────────────────────────────────
+function DayRow({
+  day, dtrId, userEmail, locked, onDayUpdated,
 }: {
-  day: DTRValidationDay;
+  day: GeneratedDTRDay;
   dtrId: string;
-  adminEmail: string;
-  onValidated: (date: string, status: ValidationStatus, by: string, at: string) => void;
+  userEmail: string;
+  locked: boolean;
+  onDayUpdated: (date: string, updatedDay: Partial<GeneratedDTRDay>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
-  const [acting, setActing] = useState(false);
-  const [showFlagModal, setShowFlagModal] = useState(false);
-  const [flagRemarks, setFlagRemarks] = useState('');
-  const isRestOrHoliday = day.attendanceStatus === 'Rest Day' || day.attendanceStatus === 'Holiday';
+  const [saving, setSaving] = useState(false);
+  const [localClass, setLocalClass] = useState(day.attendanceClassification);
+  const [localLateH, setLocalLateH] = useState(String(day.lateHours || 0));
+  const [localLateM, setLocalLateM] = useState(String(day.lateMinutes || 0));
+  const [localRemarks, setLocalRemarks] = useState(day.attendanceRemarks || '');
+  const [editRemarks, setEditRemarks] = useState('');
 
+  const isEditable = !locked;
+  const orig = day.originalRecord;
 
-  const handleValidate = async () => {
-    setActing(true);
-    const res = await validateDTRDay({ dtrId, date: day.date, adminEmail, validationStatus: 'Validated' });
-    setActing(false);
-    if (res.success) onValidated(day.date, 'Validated', res.validatedBy || adminEmail, res.validatedAt || '');
-  };
-
-  const handleFlag = async () => {
-    if (!flagRemarks.trim()) return;
-    setActing(true);
-    const res = await validateDTRDay({ dtrId, date: day.date, adminEmail, validationStatus: 'Flagged', remarks: flagRemarks.trim() });
-    setActing(false);
-    if (res.success) {
-      onValidated(day.date, 'Flagged', res.validatedBy || adminEmail, res.validatedAt || '');
-      setShowFlagModal(false);
-      setFlagRemarks('');
+  const handleSaveField = async (field: string, value: string) => {
+    setSaving(true);
+    const res = await updateDTRDay({ dtrId, date: day.date, userEmail, field, value, remarks: editRemarks || undefined });
+    setSaving(false);
+    if (res.success && res.day) {
+      onDayUpdated(day.date, res.day);
     }
   };
 
-  const handleClearFlag = async () => {
-    setActing(true);
-    const res = await validateDTRDay({ dtrId, date: day.date, adminEmail, validationStatus: 'Pending', remarks: 'Flag cleared' });
-    setActing(false);
-    if (res.success) onValidated(day.date, 'Pending', '', '');
+  const handleClassChange = async (val: AttendanceClassification) => {
+    setLocalClass(val);
+    await handleSaveField('attendanceClassification', val);
+  };
+
+  const handleLateSave = async () => {
+    await handleSaveField('lateHours', localLateH);
+    await handleSaveField('lateMinutes', localLateM);
+  };
+
+  const handleRemarksSave = async () => {
+    await handleSaveField('attendanceRemarks', localRemarks);
   };
 
   return (
@@ -136,133 +143,81 @@ function ValidationDayRow({
         </div>
       )}
 
-      {showFlagModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
-          onClick={e => { if (e.target === e.currentTarget) setShowFlagModal(false); }}>
-          <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl px-5 pt-5 pb-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold text-sm flex items-center gap-2">
-                <Flag className="w-4 h-4 text-red-400" /> Flag Day — {fmtDate(day.date)}
-              </h3>
-              <button onClick={() => setShowFlagModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10">
-                <X className="w-3.5 h-3.5 text-white" />
-              </button>
-            </div>
-            <textarea
-              value={flagRemarks}
-              onChange={e => setFlagRemarks(e.target.value)}
-              placeholder="Describe the issue or reason for flagging..."
-              rows={3}
-              className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none placeholder-white/30 resize-none"
-            />
-            <div className="flex gap-3">
-              <button onClick={() => setShowFlagModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-medium">
-                Cancel
-              </button>
-              <button onClick={handleFlag} disabled={acting || !flagRemarks.trim()}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/80 text-white text-sm font-semibold disabled:opacity-50">
-                {acting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flag className="w-3.5 h-3.5" />}
-                Flag
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={`border-b border-white/5 ${isRestOrHoliday ? 'opacity-50' : ''}`}>
+      <div className="border-b border-white/5">
         {/* Compact row */}
         <button
-          className="w-full flex items-center gap-2 px-4 py-3 active:bg-white/5 transition-colors"
+          className="w-full flex items-center gap-1.5 px-3 py-2.5 active:bg-white/5 transition-colors"
           onClick={() => setExpanded(v => !v)}
         >
-          {/* Validation dot */}
-          <span className={`w-2 h-2 rounded-full shrink-0 ${
-            day.validationStatus === 'Validated' ? 'bg-emerald-400' :
-            day.validationStatus === 'Flagged' ? 'bg-red-400' : 'bg-white/20'
-          }`} />
-
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-white text-xs font-medium">{fmtDate(day.date)}</p>
-            <p className="text-white/30 text-[10px]">{day.dayOfWeek}</p>
+          <div className="w-16 text-left shrink-0">
+            <p className="text-white text-[11px] font-medium">{fmtDate(day.date)}</p>
+            <p className="text-white/30 text-[9px]">{day.dayOfWeek}</p>
           </div>
-
-          <div className="text-right mr-1">
-            <p className="text-white text-[11px]">{day.timeIn || '—'}</p>
-            <p className="text-white/50 text-[10px]">{day.timeOut || '—'}</p>
+          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{day.timeIn || '—'}</div>
+          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{day.timeOut || '—'}</div>
+          <div className="w-12 text-[10px] text-white/50 text-center shrink-0">{day.totalHoursWorked ? fmtHours(day.totalHoursWorked) : '—'}</div>
+          <div className="w-6 text-center shrink-0">
+            {day.mealEligibility ? <span className="text-[9px] text-amber-300">YES</span> : <span className="text-[9px] text-white/20">—</span>}
           </div>
-
-          <span className="text-white/40 text-[10px] w-10 text-right">{day.workingHours ? fmtHours(day.workingHours) : '—'}</span>
-
-          <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${STATUS_BADGE[day.attendanceStatus] || 'bg-white/10 text-white/40 border-white/10'}`}>
-            {day.attendanceStatus}
+          <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 flex-1 text-center ${CLASS_BADGE[day.attendanceClassification] || 'bg-white/10 text-white/40 border-white/10'}`}>
+            {day.attendanceClassification}
           </span>
-
-          {/* Linked indicators */}
-          {day.mealAllowances.length > 0 && <Coffee className="w-3 h-3 text-amber-400 shrink-0" />}
-          {day.timeCorrections.length > 0 && <Clock className="w-3 h-3 text-blue-400 shrink-0" />}
-          {day.leaves.length > 0 && <Calendar className="w-3 h-3 text-teal-400 shrink-0" />}
-          {day.wfh.length > 0 && <Home className="w-3 h-3 text-violet-400 shrink-0" />}
-
-          {expanded ? <ChevronUp className="w-3.5 h-3.5 text-white/30 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-white/30 shrink-0" />}
+          {expanded ? <ChevronUp className="w-3 h-3 text-white/30 shrink-0" /> : <ChevronDown className="w-3 h-3 text-white/30 shrink-0" />}
         </button>
 
         {/* Expanded detail */}
         {expanded && (
-          <div className="px-4 pb-4 space-y-3 bg-white/3">
-            {/* Validation status banner */}
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${VAL_BADGE[day.validationStatus]}`}>
-                {day.validationStatus}
-              </span>
-              {day.validatedBy && (
-                <span className="text-white/30 text-[10px]">by {day.validatedBy} • {fmtDate(day.validatedAt || '')}</span>
-              )}
-              {day.validationRemarks && (
-                <span className="text-red-300/70 text-[10px] italic ml-1">"{day.validationRemarks}"</span>
-              )}
-            </div>
+          <div className="px-3 pb-4 space-y-3 bg-white/[0.02]">
 
-            {/* ─── ATTENDANCE ─────────────────────────────── */}
-            <div className="bg-white/5 border border-white/8 rounded-xl p-3 space-y-2">
-              <p className="text-white/50 text-[10px] font-semibold uppercase tracking-wider">Attendance</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {day.timeInTimestamp && (
-                  <div>
-                    <p className="text-white/30 text-[9px]">Clock-In</p>
-                    <p className="text-white/70">{fmtTime(day.timeInTimestamp)}</p>
-                  </div>
-                )}
-                {day.timeOutTimestamp && (
-                  <div>
-                    <p className="text-white/30 text-[9px]">Clock-Out</p>
-                    <p className="text-white/70">{fmtTime(day.timeOutTimestamp)}</p>
-                  </div>
-                )}
+            {/* ── ORIGINAL RECORD REFERENCE ─────────────── */}
+            <div className="bg-slate-800/50 border border-white/8 rounded-xl p-3 space-y-2">
+              <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <Eye className="w-3 h-3" /> Original Record
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div><span className="text-white/30">Time In:</span> <span className="text-white/70">{fmtTime(orig.timeIn || '')}</span></div>
+                <div><span className="text-white/30">Time Out:</span> <span className="text-white/70">{fmtTime(orig.timeOut || '')}</span></div>
               </div>
-
+              {orig.address && (
+                <div className="flex items-start gap-1.5">
+                  <MapPin className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                  <span className="text-white/50 text-[10px]">{orig.address}</span>
+                </div>
+              )}
+              {!!(orig.latitude && orig.longitude) && (
+                <div className="flex items-center gap-1.5">
+                  <Navigation className="w-3 h-3 text-violet-400 shrink-0" />
+                  <a href={`https://maps.google.com/?q=${orig.latitude},${orig.longitude}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-violet-300 text-[10px] underline">
+                    {orig.latitude.toFixed(5)}, {orig.longitude.toFixed(5)}
+                  </a>
+                </div>
+              )}
+              {orig.deviceInfo && (
+                <div className="flex items-center gap-1.5">
+                  <Smartphone className="w-3 h-3 text-white/30 shrink-0" />
+                  <span className="text-white/40 text-[9px]">{orig.deviceInfo}</span>
+                </div>
+              )}
               {/* Photos */}
-              {(day.timeInImageId || day.timeInImageUrl || day.timeOutImageId || day.timeOutImageUrl) && (
+              {(orig.timeInImageId || orig.timeInImageUrl || orig.timeOutImageId || orig.timeOutImageUrl) && (
                 <div className="flex gap-2 mt-1">
-                  {(day.timeInImageId || day.timeInImageUrl) && (
+                  {(orig.timeInImageId || orig.timeInImageUrl) && (
                     <div className="flex flex-col items-center gap-0.5">
                       <DriveImage
-                        imageId={day.timeInImageId || extractDriveId(day.timeInImageUrl ?? '') || undefined}
-                        alt="Time In"
-                        className="w-14 h-14 rounded-lg"
-                        thumbnail
+                        imageId={orig.timeInImageId || extractDriveId(orig.timeInImageUrl ?? '') || undefined}
+                        alt="Time In" className="w-12 h-12 rounded-lg" thumbnail
                         onClick={(src) => setLightbox(src)}
                       />
                       <span className="text-white/30 text-[8px]">In</span>
                     </div>
                   )}
-                  {(day.timeOutImageId || day.timeOutImageUrl) && (
+                  {(orig.timeOutImageId || orig.timeOutImageUrl) && (
                     <div className="flex flex-col items-center gap-0.5">
                       <DriveImage
-                        imageId={day.timeOutImageId || extractDriveId(day.timeOutImageUrl ?? '') || undefined}
-                        alt="Time Out"
-                        className="w-14 h-14 rounded-lg"
-                        thumbnail
+                        imageId={orig.timeOutImageId || extractDriveId(orig.timeOutImageUrl ?? '') || undefined}
+                        alt="Time Out" className="w-12 h-12 rounded-lg" thumbnail
                         onClick={(src) => setLightbox(src)}
                       />
                       <span className="text-white/30 text-[8px]">Out</span>
@@ -270,35 +225,62 @@ function ValidationDayRow({
                   )}
                 </div>
               )}
-
-              {/* GPS/Location */}
-              {day.address && (
-                <div className="flex items-start gap-1.5 mt-1">
-                  <MapPin className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
-                  <span className="text-white/50 text-[10px] leading-relaxed">{day.address}</span>
-                </div>
-              )}
-              {!!(day.latitude && day.longitude) && (
-                <div className="flex items-center gap-1.5">
-                  <Navigation className="w-3 h-3 text-violet-400 shrink-0" />
-                  <a href={`https://maps.google.com/?q=${day.latitude},${day.longitude}`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="text-violet-300 text-[10px] underline">
-                    {day.latitude.toFixed(5)}, {day.longitude.toFixed(5)}
-                  </a>
-                </div>
-              )}
-
-              {/* Device */}
-              {day.deviceInfo && (
-                <div className="flex items-center gap-1.5">
-                  <Smartphone className="w-3 h-3 text-white/30 shrink-0" />
-                  <span className="text-white/40 text-[10px]">{day.deviceInfo}</span>
-                </div>
-              )}
             </div>
 
-            {/* ─── MEAL ALLOWANCE ─────────────────────────── */}
+            {/* ── EDITABLE CLASSIFICATION ─────────────── */}
+            {isEditable && (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+                <p className="text-white/50 text-[10px] font-semibold uppercase tracking-wider">Classification</p>
+                <select
+                  value={localClass}
+                  onChange={e => handleClassChange(e.target.value as AttendanceClassification)}
+                  disabled={saving}
+                  className="w-full bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-3 py-2 outline-none"
+                >
+                  {CLASSIFICATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                {/* Late adjustment — only visible if classification is Late */}
+                {localClass === 'Late' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-white/40 text-[10px]">Late:</span>
+                    <input type="number" min="0" max="24" value={localLateH}
+                      onChange={e => setLocalLateH(e.target.value)}
+                      className="w-12 bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 text-center outline-none"
+                    />
+                    <span className="text-white/30 text-[10px]">h</span>
+                    <input type="number" min="0" max="59" value={localLateM}
+                      onChange={e => setLocalLateM(e.target.value)}
+                      className="w-12 bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 text-center outline-none"
+                    />
+                    <span className="text-white/30 text-[10px]">m</span>
+                    <button onClick={handleLateSave} disabled={saving}
+                      className="ml-auto text-[9px] bg-blue-500/20 text-blue-300 border border-blue-400/20 px-2 py-1 rounded-lg font-semibold disabled:opacity-50">
+                      {saving ? '...' : 'Save'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Remarks */}
+                <div className="mt-2">
+                  <input type="text" value={localRemarks}
+                    onChange={e => setLocalRemarks(e.target.value)}
+                    onBlur={handleRemarksSave}
+                    placeholder="Attendance remarks..."
+                    className="w-full bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-3 py-2 outline-none placeholder-white/20"
+                  />
+                </div>
+
+                {/* Reason for change */}
+                <input type="text" value={editRemarks}
+                  onChange={e => setEditRemarks(e.target.value)}
+                  placeholder="Reason for adjustment (optional)..."
+                  className="w-full bg-slate-800/50 border border-white/5 text-white/60 text-[10px] rounded-lg px-3 py-1.5 outline-none placeholder-white/20"
+                />
+              </div>
+            )}
+
+            {/* ── LINKED: MEAL ALLOWANCE ─────────────── */}
             {day.mealAllowances.length > 0 && (
               <div className="bg-amber-500/5 border border-amber-400/15 rounded-xl p-3 space-y-2">
                 <p className="text-amber-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
@@ -309,9 +291,7 @@ function ValidationDayRow({
                     {(ma.imageId || ma.imageUrl) && (
                       <DriveImage
                         imageId={ma.imageId || extractDriveId(ma.imageUrl ?? '') || undefined}
-                        alt="Meal"
-                        className="w-10 h-10 rounded-lg shrink-0"
-                        thumbnail
+                        alt="Meal" className="w-10 h-10 rounded-lg shrink-0" thumbnail
                         onClick={(src) => setLightbox(src)}
                       />
                     )}
@@ -319,14 +299,13 @@ function ValidationDayRow({
                       <p className="text-white/70">Meal #{ma.sequence}</p>
                       {ma.address && <p className="text-white/40 truncate">{ma.address}</p>}
                       <p className="text-white/30">{fmtTime(ma.timestamp)}</p>
-                      {ma.remarks && <p className="text-white/40 italic">{ma.remarks}</p>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* ─── TIME CORRECTION ───────────────────────── */}
+            {/* ── LINKED: TIME CORRECTION ─────────────── */}
             {day.timeCorrections.length > 0 && (
               <div className="bg-blue-500/5 border border-blue-400/15 rounded-xl p-3 space-y-2">
                 <p className="text-blue-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
@@ -334,20 +313,16 @@ function ValidationDayRow({
                 </p>
                 {day.timeCorrections.map(tc => (
                   <div key={tc.id} className="bg-white/5 rounded-lg p-2 text-[10px] space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
-                        tc.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' :
-                        tc.status === 'Rejected' ? 'bg-red-500/15 text-red-300 border-red-400/20' :
-                        'bg-amber-500/15 text-amber-300 border-amber-400/20'
-                      }`}>{tc.status}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1">
-                      <div><span className="text-white/30">Orig In:</span> <span className="text-white/60">{tc.originalTimeIn || '—'}</span></div>
-                      <div><span className="text-white/30">Orig Out:</span> <span className="text-white/60">{tc.originalTimeOut || '—'}</span></div>
+                    <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
+                      tc.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' :
+                      tc.status === 'Rejected' ? 'bg-red-500/15 text-red-300 border-red-400/20' :
+                      'bg-amber-500/15 text-amber-300 border-amber-400/20'
+                    }`}>{tc.status}</span>
+                    <div className="grid grid-cols-2 gap-1 mt-1">
                       <div><span className="text-white/30">Corr In:</span> <span className="text-blue-300">{tc.correctedTimeIn || '—'}</span></div>
                       <div><span className="text-white/30">Corr Out:</span> <span className="text-blue-300">{tc.correctedTimeOut || '—'}</span></div>
                     </div>
-                    {tc.reason && <p className="text-white/40 italic">Reason: {tc.reason}</p>}
+                    {tc.reason && <p className="text-white/40 italic">{tc.reason}</p>}
                     {tc.documentUrl && (
                       <a href={tc.documentUrl} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-blue-300 underline text-[9px]">
@@ -359,48 +334,37 @@ function ValidationDayRow({
               </div>
             )}
 
-            {/* ─── LEAVE ─────────────────────────────────── */}
+            {/* ── LINKED: LEAVE ─────────────────────────── */}
             {day.leaves.length > 0 && (
               <div className="bg-teal-500/5 border border-teal-400/15 rounded-xl p-3 space-y-2">
                 <p className="text-teal-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-3 h-3" /> Leave ({day.leaves.length})
+                  <Calendar className="w-3 h-3" /> Leave
                 </p>
                 {day.leaves.map(lv => (
-                  <div key={lv.id} className="bg-white/5 rounded-lg p-2 text-[10px] space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white/70 font-medium">{lv.leaveType}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
-                        lv.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' :
-                        lv.status === 'Rejected' ? 'bg-red-500/15 text-red-300 border-red-400/20' :
-                        'bg-amber-500/15 text-amber-300 border-amber-400/20'
-                      }`}>{lv.status}</span>
-                    </div>
-                    <p className="text-white/40">{fmtDate(lv.startDate)} – {fmtDate(lv.endDate)} ({lv.totalDays}d)</p>
+                  <div key={lv.id} className="bg-white/5 rounded-lg p-2 text-[10px]">
+                    <span className="text-white/70 font-medium">{lv.leaveType}</span>
+                    <span className={`ml-2 px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
+                      lv.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' : 'bg-amber-500/15 text-amber-300 border-amber-400/20'
+                    }`}>{lv.status}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* ─── WFH ───────────────────────────────────── */}
+            {/* ── LINKED: WFH ───────────────────────────── */}
             {day.wfh.length > 0 && (
               <div className="bg-violet-500/5 border border-violet-400/15 rounded-xl p-3 space-y-2">
                 <p className="text-violet-300/80 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <Home className="w-3 h-3" /> Work From Home ({day.wfh.length})
+                  <Home className="w-3 h-3" /> Work From Home
                 </p>
                 {day.wfh.map(w => (
                   <div key={w.id} className="bg-white/5 rounded-lg p-2 text-[10px] space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
-                        w.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' :
-                        w.status === 'Rejected' ? 'bg-red-500/15 text-red-300 border-red-400/20' :
-                        'bg-violet-500/15 text-violet-300 border-violet-400/20'
-                      }`}>{w.status}</span>
-                    </div>
-                    <p className="text-white/50">{w.workDescription}</p>
-                    {w.eodSummary && <p className="text-white/40 italic">EOD: {w.eodSummary}</p>}
-                    {w.eodSubmittedAt && <p className="text-white/30">Submitted: {fmtTime(w.eodSubmittedAt)}</p>}
+                    <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-semibold ${
+                      w.status === 'Approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20' : 'bg-violet-500/15 text-violet-300 border-violet-400/20'
+                    }`}>{w.status}</span>
+                    {w.eodSummary && <p className="text-white/40 italic mt-1">EOD: {w.eodSummary}</p>}
                     {w.attachments && w.attachments.length > 0 && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
+                      <div className="flex gap-1 flex-wrap mt-1">
                         {w.attachments.map((att, i) => (
                           <a key={i} href={att.fileUrl} target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-violet-300 underline text-[9px]">
@@ -414,30 +378,8 @@ function ValidationDayRow({
               </div>
             )}
 
-            {/* ─── ACTIONS ───────────────────────────────── */}
-            {!isRestOrHoliday && (
-              <div className="flex gap-2 pt-1">
-                {day.validationStatus !== 'Validated' && (
-                  <button onClick={handleValidate} disabled={acting}
-                    className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 text-[10px] font-semibold px-3 py-2 rounded-xl active:scale-95 transition-transform disabled:opacity-50">
-                    {acting ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                    Validate
-                  </button>
-                )}
-                {day.validationStatus !== 'Flagged' && (
-                  <button onClick={() => setShowFlagModal(true)} disabled={acting}
-                    className="flex items-center gap-1.5 bg-red-500/15 text-red-300 border border-red-400/20 text-[10px] font-semibold px-3 py-2 rounded-xl active:scale-95 transition-transform disabled:opacity-50">
-                    <Flag className="w-3 h-3" />
-                    Flag
-                  </button>
-                )}
-                {day.validationStatus !== 'Pending' && (
-                  <button onClick={handleClearFlag} disabled={acting}
-                    className="flex items-center gap-1.5 bg-white/5 text-white/50 border border-white/10 text-[10px] font-medium px-3 py-2 rounded-xl active:scale-95 transition-transform disabled:opacity-50">
-                    Reset
-                  </button>
-                )}
-              </div>
+            {day.lastModifiedBy && (
+              <p className="text-white/20 text-[9px] pt-1">Last modified by {day.lastModifiedBy} • {fmtDate(day.lastModifiedAt || '')}</p>
             )}
           </div>
         )}
@@ -448,12 +390,13 @@ function ValidationDayRow({
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function DTRValidation({ user, onBack }: Props) {
-  const [records, setRecords] = useState<DTRRecord[]>([]);
+  const [records, setRecords] = useState<GeneratedDTR[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDTR, setSelectedDTR] = useState<string | null>(null);
-  const [valData, setValData] = useState<DTRValidationData | null>(null);
-  const [valLoading, setValLoading] = useState(false);
+  const [dtrData, setDtrData] = useState<GeneratedDTR | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [acting, setActing] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -463,36 +406,60 @@ export default function DTRValidation({ user, onBack }: Props) {
 
   const loadRecords = useCallback(async () => {
     setLoading(true);
-    const res = await getDTRList(user.email);
+    const res = await getGeneratedDTRList(user.email);
     setRecords(res.records || []);
     setLoading(false);
   }, [user.email]);
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
-  const loadValidation = async (dtrId: string) => {
+  const loadDetail = async (dtrId: string) => {
     setSelectedDTR(dtrId);
-    setValLoading(true);
-    const res = await getDTRValidationData(dtrId, user.email);
+    setDetailLoading(true);
+    const res = await getGeneratedDTR(dtrId, user.email);
     if (res.success && res.data) {
-      setValData(res.data);
+      setDtrData(res.data);
     } else {
-      showToast('error', res.message || 'Failed to load validation data');
+      showToast('error', res.message || 'Failed to load DTR');
       setSelectedDTR(null);
     }
-    setValLoading(false);
+    setDetailLoading(false);
   };
 
-  const handleDayValidated = (date: string, status: ValidationStatus, by: string, at: string) => {
-    if (!valData) return;
-    setValData({
-      ...valData,
-      days: valData.days.map(d => d.date === date ? { ...d, validationStatus: status, validatedBy: by, validatedAt: at } : d),
+  const handleDayUpdated = (date: string, updatedDay: Partial<GeneratedDTRDay>) => {
+    if (!dtrData) return;
+    setDtrData({
+      ...dtrData,
+      days: dtrData.days.map(d => d.date === date ? { ...d, ...updatedDay } : d),
     });
-    showToast('success', `${fmtDate(date)} → ${status}`);
   };
 
-  // Filter records for DTR picker
+  const handleSendForReview = async () => {
+    if (!dtrData) return;
+    setActing(true);
+    const res = await sendDTRForReview(dtrData.id, user.email);
+    setActing(false);
+    if (res.success) {
+      setDtrData({ ...dtrData, status: 'Ready for Review' });
+      showToast('success', 'DTR sent for employee review');
+    } else {
+      showToast('error', res.message);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!dtrData) return;
+    setActing(true);
+    const res = await reopenDTR(dtrData.id, user.email, 'Reopened by admin');
+    setActing(false);
+    if (res.success) {
+      setDtrData({ ...dtrData, status: 'Reopened' });
+      showToast('success', 'DTR reopened');
+    } else {
+      showToast('error', res.message);
+    }
+  };
+
   const filtered = useMemo(() => {
     if (!search.trim()) return records;
     const q = search.toLowerCase();
@@ -501,19 +468,12 @@ export default function DTRValidation({ user, onBack }: Props) {
     );
   }, [records, search]);
 
-  // Validation summary stats
-  const valStats = useMemo(() => {
-    if (!valData) return { total: 0, validated: 0, flagged: 0, pending: 0 };
-    const days = valData.days.filter(d => d.attendanceStatus !== 'Rest Day' && d.attendanceStatus !== 'Holiday');
-    return {
-      total: days.length,
-      validated: days.filter(d => d.validationStatus === 'Validated').length,
-      flagged: days.filter(d => d.validationStatus === 'Flagged').length,
-      pending: days.filter(d => d.validationStatus === 'Pending').length,
-    };
-  }, [valData]);
+  const isLocked = dtrData?.status === 'Acknowledged';
 
-  // ─── DTR Selection Screen ───────────────────────
+  // Summary stats
+  const summary = dtrData?.summary;
+
+  // ─── DTR Selection Screen ─────────────────────
   if (!selectedDTR) {
     return (
       <div className="min-h-dvh bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col pb-20">
@@ -533,7 +493,7 @@ export default function DTRValidation({ user, onBack }: Props) {
             </button>
             <div className="flex-1">
               <h1 className="text-white font-bold text-base">DTR Validation</h1>
-              <p className="text-white/40 text-xs">Select a DTR to validate</p>
+              <p className="text-white/40 text-xs">Select a Generated DTR</p>
             </div>
             <button onClick={loadRecords} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
               <RefreshCw className={`w-4 h-4 text-white ${loading ? 'animate-spin' : ''}`} />
@@ -542,11 +502,8 @@ export default function DTRValidation({ user, onBack }: Props) {
 
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
             <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
-            <input
-              value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search employee..."
-              className="bg-transparent text-white text-xs flex-1 outline-none placeholder-white/30"
-            />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search employee..." className="bg-transparent text-white text-xs flex-1 outline-none placeholder-white/30" />
             {search && <button onClick={() => setSearch('')}><X className="w-3.5 h-3.5 text-white/30" /></button>}
           </div>
         </div>
@@ -559,10 +516,10 @@ export default function DTRValidation({ user, onBack }: Props) {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center py-16 gap-2">
               <ShieldCheck className="w-12 h-12 text-white/10" />
-              <p className="text-white/40 text-sm">No DTR records found</p>
+              <p className="text-white/40 text-sm">No Generated DTRs found</p>
             </div>
           ) : filtered.map(r => (
-            <button key={r.id} onClick={() => loadValidation(r.id)}
+            <button key={r.id} onClick={() => loadDetail(r.id)}
               className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-left active:bg-white/8 transition-colors">
               <div className="flex items-center gap-3">
                 <EmployeeAvatar src={r.employeeImage} name={r.employeeName} size="sm" />
@@ -571,8 +528,10 @@ export default function DTRValidation({ user, onBack }: Props) {
                   <p className="text-white/40 text-[10px] truncate">{r.employeeEmail}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-white/60 text-[10px]">{MONTHS[(r.month || 1) - 1]} {r.year}</p>
-                  <p className="text-white/40 text-[10px]">{r.cutOff} Cut-Off</p>
+                  <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-white/10 text-white/40 border-white/10'}`}>
+                    {r.status}
+                  </span>
+                  <p className="text-white/40 text-[10px] mt-1">{MONTHS[(r.month || 1) - 1]} {r.year} • {r.cutOff}</p>
                 </div>
               </div>
             </button>
@@ -582,7 +541,7 @@ export default function DTRValidation({ user, onBack }: Props) {
     );
   }
 
-  // ─── Validation Detail Screen ──────────────────────
+  // ─── DTR Detail / Validation Screen ───────────────
   return (
     <div className="min-h-dvh bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col pb-20">
       {toast && (
@@ -596,136 +555,132 @@ export default function DTRValidation({ user, onBack }: Props) {
 
       {/* Header */}
       <div className="bg-slate-900/80 backdrop-blur-xl border-b border-white/10 px-4 pt-12 pb-4 sticky top-0 z-30">
-        <div className="flex items-center gap-3 mb-3">
-          <button onClick={() => { setSelectedDTR(null); setValData(null); }}
+        <div className="flex items-center gap-3 mb-2">
+          <button onClick={() => { setSelectedDTR(null); setDtrData(null); }}
             className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
             <ArrowLeft className="w-4 h-4 text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-white font-bold text-base truncate">DTR Validation</h1>
-            {valData && (
-              <p className="text-white/40 text-xs truncate">
-                {valData.employeeName} — {MONTHS[(valData.month || 1) - 1]} {valData.year}, {valData.cutOff} Cut-Off
+            <h1 className="text-white font-bold text-sm truncate">{dtrData?.employeeName || 'Loading...'}</h1>
+            {dtrData && (
+              <p className="text-white/40 text-[10px]">
+                {MONTHS[(dtrData.month || 1) - 1]} {dtrData.year} • {dtrData.cutOff} Cut-Off
               </p>
             )}
           </div>
-          <button onClick={() => selectedDTR && loadValidation(selectedDTR)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90 transition-transform">
-            <RefreshCw className={`w-4 h-4 text-white ${valLoading ? 'animate-spin' : ''}`} />
-          </button>
+          {dtrData && (
+            <span className={`text-[9px] font-semibold px-2 py-1 rounded-full border ${STATUS_STYLE[dtrData.status] || ''}`}>
+              {dtrData.status}
+            </span>
+          )}
         </div>
 
-        {/* Stats */}
-        {valData && (
-          <div className="grid grid-cols-4 gap-2">
-            <div className="bg-white/5 rounded-xl p-2 text-center border border-white/5">
-              <p className="text-sm font-bold text-white">{valStats.total}</p>
-              <p className="text-white/40 text-[9px]">Total</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-2 text-center border border-white/5">
-              <p className="text-sm font-bold text-emerald-300">{valStats.validated}</p>
-              <p className="text-white/40 text-[9px]">Validated</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-2 text-center border border-white/5">
-              <p className="text-sm font-bold text-red-300">{valStats.flagged}</p>
-              <p className="text-white/40 text-[9px]">Flagged</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-2 text-center border border-white/5">
-              <p className="text-sm font-bold text-slate-300">{valStats.pending}</p>
-              <p className="text-white/40 text-[9px]">Pending</p>
-            </div>
+        {/* Action buttons */}
+        {dtrData && (
+          <div className="flex gap-2 mt-2">
+            {(dtrData.status === 'Generated' || dtrData.status === 'Under Validation' || dtrData.status === 'Reopened') && (
+              <button onClick={handleSendForReview} disabled={acting}
+                className="flex items-center gap-1.5 bg-violet-500/20 text-violet-300 border border-violet-400/20 text-[10px] font-semibold px-3 py-2 rounded-xl disabled:opacity-50">
+                {acting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                Send for Review
+              </button>
+            )}
+            {dtrData.status === 'Acknowledged' && (
+              <button onClick={handleReopen} disabled={acting}
+                className="flex items-center gap-1.5 bg-rose-500/20 text-rose-300 border border-rose-400/20 text-[10px] font-semibold px-3 py-2 rounded-xl disabled:opacity-50">
+                {acting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlock className="w-3 h-3" />}
+                Reopen
+              </button>
+            )}
+            <button onClick={() => selectedDTR && loadDetail(selectedDTR)}
+              className="ml-auto w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 active:scale-90">
+              <RefreshCw className={`w-3.5 h-3.5 text-white ${detailLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-4 pt-4 space-y-4">
-        {valLoading ? (
+      <div className="flex-1 px-3 pt-4 space-y-4">
+        {detailLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
           </div>
-        ) : !valData ? (
+        ) : !dtrData ? (
           <div className="flex flex-col items-center py-16 gap-2">
             <AlertCircle className="w-10 h-10 text-white/10" />
-            <p className="text-white/40 text-sm">No data loaded</p>
+            <p className="text-white/40 text-sm">No data</p>
           </div>
         ) : (
           <>
-            {/* Employee info */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-              <div className="flex items-center gap-3">
-                <EmployeeAvatar src={valData.employeeImage} name={valData.employeeName} size="md" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold text-sm truncate">{valData.employeeName}</p>
-                  <p className="text-white/40 text-xs truncate">{valData.employeeEmail}</p>
-                  <div className="flex items-center gap-3 mt-1 text-[10px] text-white/40">
-                    {valData.department && <span className="flex items-center gap-1"><Briefcase className="w-2.5 h-2.5" />{valData.department}</span>}
-                    {valData.designation && <span>{valData.designation}</span>}
-                  </div>
+            {/* Summary cards */}
+            {summary && (
+              <div className="grid grid-cols-4 gap-1.5 text-center">
+                <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                  <p className="text-xs font-bold text-emerald-300">{summary.presentDays}</p>
+                  <p className="text-white/30 text-[8px]">Present</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                  <p className="text-xs font-bold text-red-300">{summary.absentDays}</p>
+                  <p className="text-white/30 text-[8px]">Absent</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                  <p className="text-xs font-bold text-teal-300">{summary.leaveDays}</p>
+                  <p className="text-white/30 text-[8px]">Leave</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                  <p className="text-xs font-bold text-white">{fmtHours(summary.totalHoursWorked)}</p>
+                  <p className="text-white/30 text-[8px]">Hours</p>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <p className="text-white/30 text-[9px]">Coverage</p>
-                  <p className="text-white/70">{fmtDate(valData.coverageStart)} – {fmtDate(valData.coverageEnd)}</p>
-                </div>
-                <div>
-                  <p className="text-white/30 text-[9px]">Cut-Off</p>
-                  <p className="text-white/70">{valData.cutOff} Cut-Off</p>
-                </div>
-              </div>
-            </div>
+            )}
 
-            {/* Day records table */}
+            {/* Timesheet table */}
             <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                <h2 className="text-white/70 text-xs font-semibold uppercase tracking-wider">Daily Records</h2>
-                <span className="text-white/30 text-xs">{valData.days.length} days</span>
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10">
+                <h2 className="text-white/60 text-[10px] font-semibold uppercase tracking-wider">Timesheet Details</h2>
+                {isLocked && <span className="text-[9px] text-amber-300 bg-amber-500/15 border border-amber-400/20 px-1.5 py-0.5 rounded-full font-semibold">Locked</span>}
               </div>
               {/* Column headers */}
-              <div className="flex items-center gap-2 px-4 py-2 bg-white/3 border-b border-white/5 text-[9px] text-white/30">
-                <span className="w-2" />
-                <span className="flex-1">Date</span>
-                <span className="w-12 text-right">In/Out</span>
-                <span className="w-10 text-right">Hours</span>
-                <span className="w-16 text-right">Status</span>
-                <span className="w-4" />
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/3 border-b border-white/5 text-[8px] text-white/30 font-medium">
+                <span className="w-16">Date</span>
+                <span className="w-14 text-center">TIME IN</span>
+                <span className="w-14 text-center">TIME OUT</span>
+                <span className="w-12 text-center">HOURS</span>
+                <span className="w-6 text-center">MEAL</span>
+                <span className="flex-1 text-center">REMARKS</span>
+                <span className="w-3" />
               </div>
-              {valData.days.map(day => (
-                <ValidationDayRow
+              {dtrData.days.map(day => (
+                <DayRow
                   key={day.date}
                   day={day}
-                  dtrId={valData.dtrId}
-                  adminEmail={user.email}
-                  onValidated={handleDayValidated}
+                  dtrId={dtrData.id}
+                  userEmail={user.email}
+                  locked={isLocked}
+                  onDayUpdated={handleDayUpdated}
                 />
               ))}
             </div>
 
             {/* Audit Trail */}
-            {valData.auditTrail.length > 0 && (
+            {dtrData.auditTrail.length > 0 && (
               <div className="bg-white/3 border border-white/8 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-white/5">
-                  <h2 className="text-white/40 text-xs font-semibold uppercase tracking-wider">Validation Audit Trail</h2>
+                  <h2 className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">Audit Trail</h2>
                 </div>
-                <div className="px-4 py-3 space-y-3 max-h-64 overflow-y-auto">
-                  {valData.auditTrail.map((entry, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
-                        entry.action === 'FLAGGED' ? 'bg-red-400' :
-                        entry.action === 'VALIDATED' ? 'bg-emerald-400' : 'bg-blue-400'
-                      }`} />
-                      <div>
-                        <p className="text-white/70 text-[10px] font-medium">
-                          {entry.action} — {entry.field && <span className="text-white/40">{fmtDate(entry.field)}</span>}
+                <div className="px-4 py-3 space-y-2.5 max-h-60 overflow-y-auto">
+                  {dtrData.auditTrail.map((entry, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-400" />
+                      <div className="text-[10px]">
+                        <p className="text-white/60">
+                          <span className="font-medium text-white/80">{entry.field}</span>: {entry.originalValue} → {entry.updatedValue}
                         </p>
                         <p className="text-white/30 text-[9px]">
-                          by {entry.by} • {fmtDate(entry.timestamp)} {fmtTime(entry.timestamp)}
+                          by {entry.modifiedBy} • {fmtDate(entry.modifiedAt)} {fmtTime(entry.modifiedAt)}
                         </p>
-                        {entry.remarks && <p className="text-white/40 text-[9px] italic mt-0.5">"{entry.remarks}"</p>}
-                        {entry.previousValue && entry.updatedValue && (
-                          <p className="text-white/30 text-[9px]">{entry.previousValue} → {entry.updatedValue}</p>
-                        )}
+                        {entry.remarks && <p className="text-white/40 text-[9px] italic">"{entry.remarks}"</p>}
                       </div>
                     </div>
                   ))}
