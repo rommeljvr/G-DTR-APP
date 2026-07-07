@@ -39,6 +39,7 @@ function fmtDate(val: string): string {
 
 function fmtTime(val: string): string {
   if (!val) return '—';
+  // ISO datetime: 2025-07-01T08:30:00+08:00
   const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (isoMatch) {
     const h = parseInt(isoMatch[4], 10), m = isoMatch[5];
@@ -46,8 +47,10 @@ function fmtTime(val: string): string {
     const h12 = h % 12 || 12;
     return `${h12}:${m} ${ampm}`;
   }
+  // Plain time like "8:30 AM" or "08:30"
   if (/^\d{1,2}:\d{2}/.test(val)) return val;
-  const d = new Date(val.replace(/-/g, '/'));
+  // Google Sheets serialized time (comes back as full Date string with Dec 30 1899)
+  const d = new Date(val);
   if (!isNaN(d.getTime())) {
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   }
@@ -154,8 +157,8 @@ function DayRow({
             <p className="text-white text-[11px] font-medium">{fmtDate(day.date)}</p>
             <p className="text-white/30 text-[9px]">{day.dayOfWeek}</p>
           </div>
-          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{day.timeIn || '—'}</div>
-          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{day.timeOut || '—'}</div>
+          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{fmtTime(day.timeIn || '')}</div>
+          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{fmtTime(day.timeOut || '')}</div>
           <div className="w-12 text-[10px] text-white/50 text-center shrink-0">{day.totalHoursWorked ? fmtHours(day.totalHoursWorked) : '—'}</div>
           <div className="w-6 text-center shrink-0">
             {day.mealEligibility ? <span className="text-[9px] text-amber-300">YES</span> : <span className="text-[9px] text-white/20">—</span>}

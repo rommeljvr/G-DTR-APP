@@ -5103,9 +5103,21 @@ function generateNewDTR(data) {
     var tsStr = tsRaw instanceof Date
       ? Utilities.formatDate(tsRaw, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
       : String(tsRaw || '');
+    // Derive display time from the ISO timestamp to avoid raw GSheets time serial (Dec 30 1899 garbage)
+    var timeDisplay = tsRaw instanceof Date
+      ? Utilities.formatDate(tsRaw, 'Asia/Manila', 'h:mm a')
+      : (function() {
+          var m = tsStr.match(/T(\d{2}):(\d{2})/);
+          if (m) {
+            var h = parseInt(m[1], 10);
+            var ampm = h >= 12 ? 'PM' : 'AM';
+            return (h % 12 || 12) + ':' + m[2] + ' ' + ampm;
+          }
+          return String(attRows[ai][7] || '');
+        })();
     allEvents.push({
       action: action, tsMs: tsMs, timestamp: tsStr, date: dateKey(new Date(tsMs)),
-      time: String(attRows[ai][7] || ''),
+      time: timeDisplay,
       latitude: Number(attRows[ai][8] || 0), longitude: Number(attRows[ai][9] || 0),
       address: String(attRows[ai][11] || ''), deviceInfo: String(attRows[ai][12] || ''),
       imageId: String(attRows[ai][15] || ''), imageUrl: String(attRows[ai][16] || '')
