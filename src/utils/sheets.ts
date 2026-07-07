@@ -5103,18 +5103,21 @@ function generateNewDTR(data) {
     var tsStr = tsRaw instanceof Date
       ? Utilities.formatDate(tsRaw, 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00")
       : String(tsRaw || '');
-    // Derive display time from the ISO timestamp to avoid raw GSheets time serial (Dec 30 1899 garbage)
-    var timeDisplay = tsRaw instanceof Date
-      ? Utilities.formatDate(tsRaw, 'Asia/Manila', 'h:mm a')
-      : (function() {
+    // Combine col 6 (Date) + col 7 (Time) from Attendance sheet for consistent display
+    // col 7 (Time) may be a Sheets time serial that serializes to "Dec 30 1899" — use the Date object's time portion only
+    var colDate = attRows[ai][6]; // e.g. "7/7/2026" or Date object
+    var colTime = attRows[ai][7]; // e.g. "8:30 AM" or Date object (time serial)
+    var datePart = colDate instanceof Date
+      ? Utilities.formatDate(colDate, 'Asia/Manila', 'M/d/yyyy')
+      : String(colDate || '');
+    var timePart = colTime instanceof Date
+      ? Utilities.formatDate(colTime, 'Asia/Manila', 'h:mm a')
+      : (String(colTime || '').match(/^\d{1,2}:\d{2}/) ? String(colTime) : (function() {
           var m = tsStr.match(/T(\d{2}):(\d{2})/);
-          if (m) {
-            var h = parseInt(m[1], 10);
-            var ampm = h >= 12 ? 'PM' : 'AM';
-            return (h % 12 || 12) + ':' + m[2] + ' ' + ampm;
-          }
-          return String(attRows[ai][7] || '');
-        })();
+          if (m) { var h = parseInt(m[1], 10); var ampm = h >= 12 ? 'PM' : 'AM'; return (h % 12 || 12) + ':' + m[2] + ' ' + ampm; }
+          return '';
+        })());
+    var timeDisplay = (datePart && timePart) ? datePart + ' ' + timePart : (timePart || datePart);
     allEvents.push({
       action: action, tsMs: tsMs, timestamp: tsStr, date: dateKey(new Date(tsMs)),
       time: timeDisplay,

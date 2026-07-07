@@ -47,6 +47,9 @@ function fmtTime(val: string): string {
     const h12 = h % 12 || 12;
     return `${h12}:${m} ${ampm}`;
   }
+  // Combined "M/d/yyyy h:mm a" from Attendance Date+Time columns e.g. "7/7/2026 8:30 AM"
+  const combinedMatch = val.match(/^\d{1,2}\/\d{1,2}\/\d{4}\s+(\d{1,2}:\d{2}\s*[AP]M)/i);
+  if (combinedMatch) return combinedMatch[1];
   // Plain time like "8:30 AM" or "08:30"
   if (/^\d{1,2}:\d{2}/.test(val)) return val;
   // Google Sheets serialized time (comes back as full Date string with Dec 30 1899)
