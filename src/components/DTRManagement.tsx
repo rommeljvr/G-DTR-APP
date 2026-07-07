@@ -323,7 +323,7 @@ export default function DTRManagement({ user, onBack }: Props) {
     }
     setGenerating(true);
     // Generate both legacy DTR and new Generated DTR
-    const [res] = await Promise.all([
+    const [res, newRes] = await Promise.all([
       generateDTR({
         adminEmail: user.email,
         employeeEmail: genEmpEmail.trim(),
@@ -336,6 +336,9 @@ export default function DTRManagement({ user, onBack }: Props) {
       }),
     ]);
     setGenerating(false);
+    if (!newRes.success && !newRes.message?.includes('already exists')) {
+      console.warn('[GeneratedDTR] Generation failed:', newRes.message);
+    }
     if (res.success && res.dtrId) {
       setShowGenerate(false);
       setGenEmpEmail('');
