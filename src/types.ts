@@ -562,7 +562,7 @@ export interface GeneratedDTRSummary {
 
 // ── Overtime Filing ───────────────────────────────────────────────
 
-export type OTType = 'Pre-Shift' | 'Post-Shift' | 'Both';
+export type OTType = 'Pre-Shift' | 'Post-Shift';
 
 export type OTStatus =
   | 'Draft'

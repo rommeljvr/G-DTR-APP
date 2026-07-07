@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   ArrowLeft, Plus, ChevronDown, ChevronUp, Clock, CheckCircle2,
-  AlertCircle, Loader2, Send, Save, Trash2,
+  AlertCircle, Loader2, Send, Save, Trash2, Paperclip, X,
 } from 'lucide-react';
 import { User, OTRequest, OTType, OTStatus } from '../types';
 import { getOTList, submitOT, updateOTDraft, cancelOT } from '../utils/sheets';
@@ -56,25 +56,39 @@ function OTForm({
   const [postStart, setPostStart] = useState(editRecord?.postShiftStart || '');
   const [postEnd, setPostEnd] = useState(editRecord?.postShiftEnd || '');
   const [reason, setReason] = useState(editRecord?.reason || '');
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docData, setDocData] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setDocFile(f);
+    if (f) {
+      const reader = new FileReader();
+      reader.onload = () => setDocData(reader.result as string);
+      reader.readAsDataURL(f);
+    } else { setDocData(''); }
+  };
 
   const showToast = (type: 'success' | 'error', msg: string) => {
     setToast({ type, msg });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const preHours  = (otType === 'Pre-Shift'  || otType === 'Both') ? computeHours(preStart, preEnd) : 0;
-  const postHours = (otType === 'Post-Shift' || otType === 'Both') ? computeHours(postStart, postEnd) : 0;
+  const preHours  = otType === 'Pre-Shift'  ? computeHours(preStart, preEnd)   : 0;
+  const postHours = otType === 'Post-Shift' ? computeHours(postStart, postEnd) : 0;
   const totalHours = preHours + postHours;
 
   const handleSubmit = async (isDraft: boolean) => {
     if (!otDate) { showToast('error', 'OT Date is required'); return; }
     if (!reason.trim()) { showToast('error', 'Reason / Justification is required'); return; }
-    if ((otType === 'Pre-Shift' || otType === 'Both') && (!preStart || !preEnd))
+    if (otType === 'Pre-Shift' && (!preStart || !preEnd))
       { showToast('error', 'Pre-Shift start and end time are required'); return; }
-    if ((otType === 'Post-Shift' || otType === 'Both') && (!postStart || !postEnd))
+    if (otType === 'Post-Shift' && (!postStart || !postEnd))
       { showToast('error', 'Post-Shift start and end time are required'); return; }
+    if (docFile && docFile.size > 5 * 1024 * 1024)
+      { showToast('error', 'Document must be under 5MB'); return; }
 
     setSaving(true);
     let res;
@@ -84,7 +98,7 @@ function OTForm({
         submit: !isDraft, otDate, otType,
         preShiftStart: preStart, preShiftEnd: preEnd,
         postShiftStart: postStart, postShiftEnd: postEnd,
-        reason,
+        reason, attachmentUrl: docData || undefined,
       });
     } else {
       res = await submitOT({
@@ -94,6 +108,7 @@ function OTForm({
         preShiftStart: preStart, preShiftEnd: preEnd,
         postShiftStart: postStart, postShiftEnd: postEnd,
         totalRequestedHours: totalHours, reason,
+        attachmentUrl: docData || undefined,
         isDraft,
       } as Parameters<typeof submitOT>[0]);
     }
@@ -141,10 +156,10 @@ function OTForm({
         {/* OT Type */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
           <label className="text-white/50 text-xs font-medium">OT Type <span className="text-red-400">*</span></label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['Pre-Shift', 'Post-Shift', 'Both'] as OTType[]).map(t => (
+          <div className="grid grid-cols-2 gap-2">
+            {(['Pre-Shift', 'Post-Shift'] as OTType[]).map(t => (
               <button key={t} type="button" onClick={() => setOtType(t)}
-                className={`py-2 rounded-xl text-xs font-medium border transition-colors ${
+                className={`py-2.5 rounded-xl text-xs font-medium border transition-colors ${
                   otType === t ? 'bg-blue-500/20 text-blue-300 border-blue-400/30' : 'bg-slate-800 text-white/50 border-white/10'
                 }`}>{t}</button>
             ))}
@@ -152,7 +167,7 @@ function OTForm({
         </div>
 
         {/* Pre-Shift times */}
-        {(otType === 'Pre-Shift' || otType === 'Both') && (
+        {otType === 'Pre-Shift' && (
           <div className="bg-violet-500/5 border border-violet-400/15 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-violet-300 text-xs font-semibold uppercase tracking-wider">Pre-Shift OT</p>
@@ -174,7 +189,7 @@ function OTForm({
         )}
 
         {/* Post-Shift times */}
-        {(otType === 'Post-Shift' || otType === 'Both') && (
+        {otType === 'Post-Shift' && (
           <div className="bg-amber-500/5 border border-amber-400/15 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-amber-300 text-xs font-semibold uppercase tracking-wider">Post-Shift OT</p>
@@ -209,6 +224,31 @@ function OTForm({
           <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
             placeholder="Describe the reason for overtime..."
             className="w-full bg-slate-800 border border-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none placeholder-white/20 resize-none" />
+        </div>
+
+        {/* Supporting Document */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
+          <label className="text-white/50 text-xs font-medium">
+            Supporting Document <span className="text-white/25 font-normal">(Optional)</span>
+          </label>
+          {docFile ? (
+            <div className="flex items-center justify-between bg-white/8 border border-white/10 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Paperclip className="w-4 h-4 text-blue-300 shrink-0" />
+                <span className="text-white/80 text-xs truncate">{docFile.name}</span>
+                <span className="text-white/30 text-[10px] shrink-0">({(docFile.size / 1024 / 1024).toFixed(2)}MB)</span>
+              </div>
+              <button onClick={() => { setDocFile(null); setDocData(''); }} className="ml-2 text-white/30 hover:text-red-400 transition-colors shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex items-center gap-3 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/8 transition-colors">
+              <Paperclip className="w-4 h-4 text-blue-300/60" />
+              <span className="text-white/40 text-sm">Attach PDF, JPG, JPEG, PNG (max 5MB)</span>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFileChange} />
+            </label>
+          )}
         </div>
 
       </div>
@@ -278,12 +318,12 @@ function OTCard({ record, userEmail, onRefresh }: { record: OTRequest; userEmail
         <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
           {/* Details */}
           <div className="grid grid-cols-2 gap-2 text-[10px]">
-            {(record.otType === 'Pre-Shift' || record.otType === 'Both') && (<>
+            {record.otType === 'Pre-Shift' && (<>
               <div className="col-span-2 text-violet-300/70 font-semibold uppercase tracking-wider text-[9px]">Pre-Shift</div>
               <div><span className="text-white/30">Start: </span><span className="text-white/70">{fmt(record.preShiftStart || '')}</span></div>
               <div><span className="text-white/30">End: </span><span className="text-white/70">{fmt(record.preShiftEnd || '')}</span></div>
             </>)}
-            {(record.otType === 'Post-Shift' || record.otType === 'Both') && (<>
+            {record.otType === 'Post-Shift' && (<>
               <div className="col-span-2 text-amber-300/70 font-semibold uppercase tracking-wider text-[9px] mt-1">Post-Shift</div>
               <div><span className="text-white/30">Start: </span><span className="text-white/70">{fmt(record.postShiftStart || '')}</span></div>
               <div><span className="text-white/30">End: </span><span className="text-white/70">{fmt(record.postShiftEnd || '')}</span></div>
@@ -299,6 +339,14 @@ function OTCard({ record, userEmail, onRefresh }: { record: OTRequest; userEmail
               <p className="text-white/30 text-[9px] mb-0.5">Reason</p>
               <p className="text-white/70">{record.reason}</p>
             </div>
+          )}
+
+          {record.attachmentUrl && (
+            <a href={record.attachmentUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-blue-500/8 border border-blue-400/15 rounded-xl px-3 py-2 text-[10px] text-blue-300 hover:bg-blue-500/15 transition-colors">
+              <Paperclip className="w-3 h-3 shrink-0" />
+              View Supporting Document
+            </a>
           )}
 
           {record.returnRemarks && (

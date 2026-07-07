@@ -6694,19 +6694,45 @@ function submitOTRequest(data) {
   var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
   var id = Utilities.getUuid();
   var totalHours = 0;
-  if (data.otType === 'Pre-Shift' || data.otType === 'Both')
+  if (data.otType === 'Pre-Shift')
     totalHours += computeOTHours(data.preShiftStart, data.preShiftEnd);
-  if (data.otType === 'Post-Shift' || data.otType === 'Both')
+  if (data.otType === 'Post-Shift')
     totalHours += computeOTHours(data.postShiftStart, data.postShiftEnd);
   var status = data.isDraft ? 'Draft' : 'Submitted';
   var audit = [{ action: status === 'Draft' ? 'CREATED_DRAFT' : 'SUBMITTED', by: data.employeeEmail, at: now, remarks: '' }];
   // Look up approver
   var approverEmail = '';
   var approverName = '';
-  var approverCfg = getApproverSettings();
-  if (approverCfg && approverCfg.approverEmail) {
-    approverEmail = approverCfg.approverEmail;
-    approverName  = approverCfg.approverName || '';
+  var approverCfgRaw = getApproverSettings(data.employeeEmail);
+  try {
+    var approverCfgJson = JSON.parse(approverCfgRaw.getContent());
+    if (approverCfgJson.success && approverCfgJson.settings) {
+      approverEmail = approverCfgJson.settings.approverEmail || '';
+      approverName  = approverCfgJson.settings.approverName  || '';
+    }
+  } catch(e) {}
+  // Upload attachment to Drive if provided
+  var docId = '', docUrl = '';
+  if (data.attachmentUrl && String(data.attachmentUrl).indexOf('base64,') > -1) {
+    try {
+      var folderId2 = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+      var otFolder;
+      try { otFolder = DriveApp.getFolderById(folderId2); } catch(fe) { otFolder = DriveApp.getRootFolder(); }
+      var monthKey2  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+      var subName2   = 'OT_DOCS_' + monthKey2;
+      var subIter2   = otFolder.getFoldersByName(subName2);
+      var subFolder2 = subIter2.hasNext() ? subIter2.next() : otFolder.createFolder(subName2);
+      var parts2     = data.attachmentUrl.split(',');
+      var mime2      = parts2[0].match(/:(.*?);/)[1];
+      var ext2       = mime2.split('/')[1] || 'bin';
+      var ts2        = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+      var safeName2  = (data.employeeName || data.employeeEmail || 'user').replace(/[^a-zA-Z0-9]/g, '_');
+      var blob2      = Utilities.newBlob(Utilities.base64Decode(parts2[1]), mime2, 'OT_' + safeName2 + '_' + ts2 + '.' + ext2);
+      var file2      = subFolder2.createFile(blob2);
+      file2.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      docId  = file2.getId();
+      docUrl = 'https://drive.google.com/file/d/' + file2.getId() + '/view';
+    } catch(e2) { Logger.log('OT doc upload error: ' + e2.toString()); }
   }
   sheet.appendRow([
     id, data.employeeEmail, data.employeeName || '', data.department || '', data.designation || '',
@@ -6714,7 +6740,7 @@ function submitOTRequest(data) {
     data.preShiftStart || '', data.preShiftEnd || '',
     data.postShiftStart || '', data.postShiftEnd || '',
     totalHours, data.reason || '',
-    data.attachmentUrl || '', data.attachmentId || '',
+    docUrl, docId,
     status, approverEmail, approverName,
     '', '', '', '', status !== 'Draft' ? now : '', now,
     JSON.stringify(audit)
@@ -6740,14 +6766,37 @@ function updateOTDraft(data) {
     var now = Utilities.formatDate(new Date(), 'Asia/Manila', "yyyy-MM-dd'T'HH:mm:ss+08:00");
     var totalHours = 0;
     var otType = data.otType || String(rows[i][6]);
-    if (otType === 'Pre-Shift' || otType === 'Both') totalHours += computeOTHours(data.preShiftStart || String(rows[i][7]), data.preShiftEnd || String(rows[i][8]));
-    if (otType === 'Post-Shift' || otType === 'Both') totalHours += computeOTHours(data.postShiftStart || String(rows[i][9]), data.postShiftEnd || String(rows[i][10]));
+    if (otType === 'Pre-Shift')  totalHours += computeOTHours(data.preShiftStart  || String(rows[i][7]),  data.preShiftEnd   || String(rows[i][8]));
+    if (otType === 'Post-Shift') totalHours += computeOTHours(data.postShiftStart || String(rows[i][9]),  data.postShiftEnd  || String(rows[i][10]));
+    var rowRef = sheet.getRange(i + 1, 1, 1, 25);
+    var vals = rowRef.getValues()[0];
+    // Upload new attachment if a fresh base64 is provided
+    var updDocUrl = String(vals[13] || ''), updDocId = String(vals[14] || '');
+    if (data.attachmentUrl && String(data.attachmentUrl).indexOf('base64,') > -1) {
+      try {
+        var folderId3 = getSetting('FOLDER_ID') || DEFAULT_FOLDER_ID;
+        var otFolder3;
+        try { otFolder3 = DriveApp.getFolderById(folderId3); } catch(fe3) { otFolder3 = DriveApp.getRootFolder(); }
+        var monthKey3  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+        var subName3   = 'OT_DOCS_' + monthKey3;
+        var subIter3   = otFolder3.getFoldersByName(subName3);
+        var subFolder3 = subIter3.hasNext() ? subIter3.next() : otFolder3.createFolder(subName3);
+        var parts3     = data.attachmentUrl.split(',');
+        var mime3      = parts3[0].match(/:(.*?);/)[1];
+        var ext3       = mime3.split('/')[1] || 'bin';
+        var ts3        = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+        var safeName3  = (String(rows[i][2]) || data.email || 'user').replace(/[^a-zA-Z0-9]/g, '_');
+        var blob3      = Utilities.newBlob(Utilities.base64Decode(parts3[1]), mime3, 'OT_' + safeName3 + '_' + ts3 + '.' + ext3);
+        var file3      = subFolder3.createFile(blob3);
+        file3.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        updDocId  = file3.getId();
+        updDocUrl = 'https://drive.google.com/file/d/' + file3.getId() + '/view';
+      } catch(e3) { Logger.log('OT doc update upload error: ' + e3.toString()); }
+    }
     var newStatus = data.submit ? 'Submitted' : status;
     var audit = [];
     try { audit = JSON.parse(String(rows[i][24] || '[]')); } catch(e) {}
     audit.push({ action: data.submit ? 'SUBMITTED' : 'UPDATED', by: data.email, at: now, remarks: data.remarks || '' });
-    var rowRef = sheet.getRange(i + 1, 1, 1, 25);
-    var vals = rowRef.getValues()[0];
     vals[5]  = data.otDate        || vals[5];
     vals[6]  = data.otType        || vals[6];
     vals[7]  = data.preShiftStart || vals[7];
@@ -6756,8 +6805,8 @@ function updateOTDraft(data) {
     vals[10] = data.postShiftEnd  || vals[10];
     vals[11] = totalHours;
     vals[12] = data.reason        || vals[12];
-    vals[13] = data.attachmentUrl || vals[13];
-    vals[14] = data.attachmentId  || vals[14];
+    vals[13] = updDocUrl;
+    vals[14] = updDocId;
     vals[15] = newStatus;
     vals[22] = newStatus === 'Submitted' && !vals[22] ? now : vals[22];
     vals[24] = JSON.stringify(audit);

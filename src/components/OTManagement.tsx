@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, RefreshCw, Search, X, CheckCircle2, AlertCircle,
-  Loader2, Clock, Check, RotateCcw, XCircle,
+  Loader2, Clock, Check, RotateCcw, XCircle, Paperclip,
 } from 'lucide-react';
 import { User, OTRequest, OTStatus } from '../types';
 import { getOTList, approveOT, returnOT, rejectOT } from '../utils/sheets';
@@ -139,7 +139,7 @@ function OTDetailView({ record, adminEmail, onBack, onActioned }: {
             <p className="text-white/50 text-[10px] font-semibold uppercase tracking-wider">Overtime Details</p>
             <span className="text-white/60 text-xs font-semibold">{record.otType}</span>
           </div>
-          {(record.otType === 'Pre-Shift' || record.otType === 'Both') && (
+          {record.otType === 'Pre-Shift' && (
             <div className="bg-violet-500/5 border border-violet-400/15 rounded-xl p-3 text-[10px] space-y-1">
               <p className="text-violet-300/70 font-semibold uppercase tracking-wider text-[9px]">Pre-Shift</p>
               <div className="grid grid-cols-2 gap-1">
@@ -148,7 +148,7 @@ function OTDetailView({ record, adminEmail, onBack, onActioned }: {
               </div>
             </div>
           )}
-          {(record.otType === 'Post-Shift' || record.otType === 'Both') && (
+          {record.otType === 'Post-Shift' && (
             <div className="bg-amber-500/5 border border-amber-400/15 rounded-xl p-3 text-[10px] space-y-1">
               <p className="text-amber-300/70 font-semibold uppercase tracking-wider text-[9px]">Post-Shift</p>
               <div className="grid grid-cols-2 gap-1">
@@ -175,6 +175,15 @@ function OTDetailView({ record, adminEmail, onBack, onActioned }: {
             <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">Justification</p>
             <p className="text-white/80 text-sm">{record.reason}</p>
           </div>
+        )}
+
+        {/* Supporting Document */}
+        {record.attachmentUrl && (
+          <a href={record.attachmentUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2.5 bg-blue-500/8 border border-blue-400/15 rounded-2xl px-4 py-3 text-sm text-blue-300 hover:bg-blue-500/15 transition-colors">
+            <Paperclip className="w-4 h-4 shrink-0" />
+            View Supporting Document
+          </a>
         )}
 
         {/* Audit Trail */}
