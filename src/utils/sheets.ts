@@ -5559,7 +5559,7 @@ function sendDTRForReview(dtrId, adminEmail) {
     sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
 
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
-    createNotificationRecord(empEmail, 'DTR_GENERATED', 'Your DTR is ready for your review and acknowledgement.', dtrId, 'dtrId');
+    createNotificationRecord(empEmail, 'DTR_READY_FOR_REVIEW', 'Your DTR is ready for your review and acknowledgement.', dtrId, 'dtrId');
     return _json({ success: true, message: 'DTR sent for review' });
   }
   return _json({ success: false, message: 'DTR not found' });
@@ -5593,7 +5593,7 @@ function acknowledgeDTRNew(dtrId, employeeEmail) {
 
     // Notify admin
     if (!isAdmin) {
-      createNotificationRecord(ADMIN_EMAIL, 'DTR_GENERATED', String(rows[i][3]) + ' acknowledged their DTR.', dtrId, 'dtrId');
+      createNotificationRecord(ADMIN_EMAIL, 'DTR_ACKNOWLEDGED', String(rows[i][3]) + ' acknowledged their DTR.', dtrId, 'dtrId');
     }
     return _json({ success: true, message: 'DTR acknowledged', acknowledgedAt: now });
   }
@@ -5625,7 +5625,7 @@ function reopenDTRRecord(dtrId, adminEmail, reason) {
     sheet.getRange(i + 1, 24).setValue(JSON.stringify(audit));
 
     var empEmail = String(rows[i][2] || '').trim().toLowerCase();
-    createNotificationRecord(empEmail, 'DTR_GENERATED', 'Your DTR has been reopened by admin. Please review again.', dtrId, 'dtrId');
+    createNotificationRecord(empEmail, 'DTR_REOPENED', 'Your DTR has been reopened by admin. Please review again.', dtrId, 'dtrId');
     return _json({ success: true, message: 'DTR reopened' });
   }
   return _json({ success: false, message: 'DTR not found' });

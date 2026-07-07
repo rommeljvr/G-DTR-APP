@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, RefreshCw, Loader2, Search, CheckCircle2, AlertCircle,
   ChevronDown, ChevronUp, X, Clock, MapPin, Calendar, Coffee,
-  FileText, Home, Smartphone, Eye,
+  FileText, Home, Smartphone, Eye, ExternalLink,
 } from 'lucide-react';
 import { User, GeneratedDTR, GeneratedDTRDay } from '../types';
 import { getGeneratedDTRList, getGeneratedDTR, acknowledgeDTRNew } from '../utils/sheets';
+import { exportDTRToPrint, exportDTRToCSV } from '../utils/dtrExport';
 import DriveImage from './DriveImage';
 import EmployeeAvatar from './EmployeeAvatar';
 
@@ -299,6 +300,16 @@ export default function DTRAcknowledgement({ user, onBack }: Props) {
               {selected.status}
             </span>
           </div>
+          <div className="flex gap-2 mt-2 justify-end">
+            <button onClick={() => exportDTRToPrint(selected)} title="Print / PDF"
+              className="flex items-center gap-1 bg-white/10 text-white/70 text-[10px] font-medium px-2.5 py-1.5 rounded-lg active:scale-95">
+              <FileText className="w-3 h-3" /> PDF
+            </button>
+            <button onClick={() => exportDTRToCSV(selected)} title="Export CSV"
+              className="flex items-center gap-1 bg-white/10 text-white/70 text-[10px] font-medium px-2.5 py-1.5 rounded-lg active:scale-95">
+              <ExternalLink className="w-3 h-3" /> CSV
+            </button>
+          </div>
         </div>
 
         {/* Summary Card */}
@@ -347,6 +358,33 @@ export default function DTRAcknowledgement({ user, onBack }: Props) {
             <ReviewDayRow key={day.date} day={day} />
           ))}
         </div>
+
+        {/* Audit Trail (read-only for employees) */}
+        {selected.auditTrail && selected.auditTrail.length > 0 && (
+          <div className="px-4 pt-4">
+            <div className="bg-white/3 border border-white/8 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/5">
+                <h2 className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">Change History</h2>
+              </div>
+              <div className="px-4 py-3 space-y-2.5 max-h-48 overflow-y-auto">
+                {selected.auditTrail.map((entry, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-400" />
+                    <div className="text-[10px]">
+                      <p className="text-white/60">
+                        <span className="font-medium text-white/80">{entry.field}</span>: {entry.originalValue} → {entry.updatedValue}
+                      </p>
+                      <p className="text-white/30 text-[9px]">
+                        by {entry.modifiedBy} • {fmtDate(entry.modifiedAt)}
+                      </p>
+                      {entry.remarks && <p className="text-white/40 text-[9px] italic">"{entry.remarks}"</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Acknowledge Button */}
         {canAcknowledge && (

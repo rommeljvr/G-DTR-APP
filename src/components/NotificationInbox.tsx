@@ -14,6 +14,7 @@ interface Props {
   onBack: () => void;
   onRead: () => void;
   onNavigateDTR?: () => void;
+  onNavigateMyDTR?: () => void;
 }
 
 const TYPE_META: Record<NotificationType, { label: string; icon: string; color: string }> = {
@@ -31,6 +32,9 @@ const TYPE_META: Record<NotificationType, { label: string; icon: string; color: 
   DTR_GENERATED:            { label: 'DTR Generated',          icon: '📄', color: 'bg-blue-500/15 border-blue-400/20 text-blue-300' },
   DTR_REGENERATED:          { label: 'DTR Regenerated',        icon: '🔄', color: 'bg-orange-500/15 border-orange-400/20 text-orange-300' },
   DTR_ISSUE_SUBMITTED:      { label: 'DTR Issue Reported',     icon: '⚠️', color: 'bg-amber-500/15 border-amber-400/20 text-amber-300' },
+  DTR_READY_FOR_REVIEW:     { label: 'DTR Ready for Review',   icon: '👀', color: 'bg-violet-500/15 border-violet-400/20 text-violet-300' },
+  DTR_ACKNOWLEDGED:         { label: 'DTR Acknowledged',       icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
+  DTR_REOPENED:             { label: 'DTR Reopened',           icon: '🔓', color: 'bg-rose-500/15 border-rose-400/20 text-rose-300' },
   WFH_SUBMITTED:            { label: 'WFH Registered',         icon: '🏠', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
   WFH_EOD_SUBMITTED:        { label: 'EOD Report Submitted',   icon: '📝', color: 'bg-sky-500/15 border-sky-400/20 text-sky-300' },
   WFH_APPROVED:             { label: 'WFH Approved',           icon: '✅', color: 'bg-emerald-500/15 border-emerald-400/20 text-emerald-300' },
@@ -52,7 +56,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR }: Props) {
+export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR, onNavigateMyDTR }: Props) {
   const [items, setItems]           = useState<AppNotification[]>([]);
   const [loading, setLoading]       = useState(true);
   const [actingId, setActingId]     = useState<string | null>(null);
@@ -341,13 +345,23 @@ export default function NotificationInbox({ user, onBack, onRead, onNavigateDTR 
                   </button>
                 )}
                 {/* View DTR — for DTR_ notifications */}
-                {n.dtrId && onNavigateDTR && (
+                {n.dtrId && onNavigateDTR && !['DTR_READY_FOR_REVIEW','DTR_ACKNOWLEDGED','DTR_REOPENED'].includes(n.type) && (
                   <button
                     onClick={async () => { await dismiss(n.id); onNavigateDTR(); }}
                     className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-blue-500/15"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     View DTR
+                  </button>
+                )}
+                {/* My DTR — for new workflow notifications */}
+                {n.dtrId && onNavigateMyDTR && ['DTR_READY_FOR_REVIEW','DTR_ACKNOWLEDGED','DTR_REOPENED'].includes(n.type) && (
+                  <button
+                    onClick={async () => { await dismiss(n.id); onNavigateMyDTR(); }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-500/10 border border-violet-400/20 text-violet-300 text-xs font-medium active:scale-[0.97] transition-transform hover:bg-violet-500/15"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Review My DTR
                   </button>
                 )}
                 {/* Acknowledge + Reject for PENDING_APPROVAL (Leave) */}
