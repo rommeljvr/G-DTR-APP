@@ -39,23 +39,23 @@ function fmtDate(val: string): string {
 
 function fmtTime(val: string): string {
   if (!val) return '—';
-  // ISO datetime: 2025-07-01T08:30:00+08:00
+  // ISO datetime: 2025-07-01T08:30:00+08:00 — show date + time (overnight records span next day)
   const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (isoMatch) {
+    const dateLabel = `${parseInt(isoMatch[2], 10)}/${parseInt(isoMatch[3], 10)}/${isoMatch[1]}`;
     const h = parseInt(isoMatch[4], 10), m = isoMatch[5];
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
-    return `${h12}:${m} ${ampm}`;
+    return `${dateLabel} ${h12}:${m} ${ampm}`;
   }
-  // Combined "M/d/yyyy h:mm a" from Attendance Date+Time columns e.g. "7/7/2026 8:30 AM"
-  const combinedMatch = val.match(/^\d{1,2}\/\d{1,2}\/\d{4}\s+(\d{1,2}:\d{2}\s*[AP]M)/i);
-  if (combinedMatch) return combinedMatch[1];
+  // Combined "M/d/yyyy h:mm a" from Attendance Date+Time columns — return as-is (already has date)
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}/i.test(val)) return val;
   // Plain time like "8:30 AM" or "08:30"
   if (/^\d{1,2}:\d{2}/.test(val)) return val;
   // Google Sheets serialized time (comes back as full Date string with Dec 30 1899)
   const d = new Date(val);
   if (!isNaN(d.getTime())) {
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return d.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
   }
   return val;
 }
@@ -160,8 +160,8 @@ function DayRow({
             <p className="text-white text-[11px] font-medium">{fmtDate(day.date)}</p>
             <p className="text-white/30 text-[9px]">{day.dayOfWeek}</p>
           </div>
-          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{fmtTime(day.timeIn || '')}</div>
-          <div className="w-14 text-[10px] text-white/70 text-center shrink-0">{fmtTime(day.timeOut || '')}</div>
+          <div className="w-24 text-[9px] text-white/70 text-center shrink-0 leading-tight">{fmtTime(day.timeIn || '')}</div>
+          <div className="w-24 text-[9px] text-white/70 text-center shrink-0 leading-tight">{fmtTime(day.timeOut || '')}</div>
           <div className="w-12 text-[10px] text-white/50 text-center shrink-0">{day.totalHoursWorked ? fmtHours(day.totalHoursWorked) : '—'}</div>
           <div className="w-6 text-center shrink-0">
             {day.mealEligibility ? <span className="text-[9px] text-amber-300">YES</span> : <span className="text-[9px] text-white/20">—</span>}
@@ -659,8 +659,8 @@ export default function DTRValidation({ user, onBack }: Props) {
               {/* Column headers */}
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/3 border-b border-white/5 text-[8px] text-white/30 font-medium">
                 <span className="w-16">Date</span>
-                <span className="w-14 text-center">TIME IN</span>
-                <span className="w-14 text-center">TIME OUT</span>
+                <span className="w-24 text-center">TIME IN</span>
+                <span className="w-24 text-center">TIME OUT</span>
                 <span className="w-12 text-center">HOURS</span>
                 <span className="w-6 text-center">MEAL</span>
                 <span className="flex-1 text-center">REMARKS</span>
