@@ -6292,7 +6292,7 @@ function submitWFHEOD(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({
           fileId:     file.getId(),
           fileName:   att.fileName,
@@ -6393,7 +6393,7 @@ function resubmitWFH(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
-        
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({ fileId: file.getId(), fileName: att.fileName, fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view', uploadedAt: now, version: version });
       } catch(ae) {
         Logger.log('WFH resubmit attachment error: ' + ae);
@@ -6478,6 +6478,7 @@ function resubmitWFHEOD(data, clientFolderId) {
         var bytes = Utilities.base64Decode(b64data);
         var blob  = Utilities.newBlob(bytes, mime, att.fileName);
         var file  = subFolder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         attachments.push({ fileId: file.getId(), fileName: att.fileName,
           fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
           uploadedAt: now, version: version });
@@ -6729,7 +6730,6 @@ function submitOTRequest(data) {
       var safeName2  = (data.employeeName || data.employeeEmail || 'user').replace(/[^a-zA-Z0-9]/g, '_');
       var blob2      = Utilities.newBlob(Utilities.base64Decode(parts2[1]), mime2, 'OT_' + safeName2 + '_' + ts2 + '.' + ext2);
       var file2      = subFolder2.createFile(blob2);
-      file2.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       docId  = file2.getId();
       docUrl = 'https://drive.google.com/file/d/' + file2.getId() + '/view';
     } catch(e2) { Logger.log('OT doc upload error: ' + e2.toString()); }
@@ -6788,7 +6788,6 @@ function updateOTDraft(data) {
         var safeName3  = (String(rows[i][2]) || data.email || 'user').replace(/[^a-zA-Z0-9]/g, '_');
         var blob3      = Utilities.newBlob(Utilities.base64Decode(parts3[1]), mime3, 'OT_' + safeName3 + '_' + ts3 + '.' + ext3);
         var file3      = subFolder3.createFile(blob3);
-        file3.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         updDocId  = file3.getId();
         updDocUrl = 'https://drive.google.com/file/d/' + file3.getId() + '/view';
       } catch(e3) { Logger.log('OT doc update upload error: ' + e3.toString()); }

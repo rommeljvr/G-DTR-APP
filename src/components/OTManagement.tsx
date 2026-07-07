@@ -21,6 +21,17 @@ const STATUS_STYLE: Record<OTStatus, string> = {
   'Cancelled':             'bg-white/5 text-white/30 border-white/10',
 };
 
+function fmtDate(val: string) {
+  if (!val) return '—';
+  const parts = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (parts) {
+    const d = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? val : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 function fmt(iso: string) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -116,7 +127,7 @@ function OTDetailView({ record, adminEmail, onBack, onActioned }: {
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-white font-bold text-sm truncate">{record.employeeName}</h1>
-            <p className="text-white/40 text-[10px]">OT Request • {record.otDate}</p>
+            <p className="text-white/40 text-[10px]">OT Request • {fmtDate(record.otDate)}</p>
           </div>
           <span className={`text-[9px] font-semibold px-2 py-1 rounded-full border ${STATUS_STYLE[record.status]}`}>{record.status}</span>
         </div>
@@ -315,7 +326,7 @@ export default function OTManagement({ user, onBack }: Props) {
               <EmployeeAvatar src={r.employeeImage} name={r.employeeName} size="sm" />
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium text-sm truncate">{r.employeeName}</p>
-                <p className="text-white/40 text-[10px]">{r.otDate} · {r.otType} · {fmtHours(r.totalRequestedHours)}</p>
+                <p className="text-white/40 text-[10px]">{fmtDate(r.otDate)} · {r.otType} · {fmtHours(r.totalRequestedHours)}</p>
               </div>
               <div className="text-right shrink-0">
                 <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full border ${STATUS_STYLE[r.status]}`}>{r.status}</span>

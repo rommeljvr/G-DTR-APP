@@ -20,6 +20,17 @@ const STATUS_STYLE: Record<OTStatus, string> = {
   'Cancelled':             'bg-white/5 text-white/30 border-white/10',
 };
 
+function fmtDate(val: string) {
+  if (!val) return '—';
+  const parts = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (parts) {
+    const d = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? val : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 function fmt(iso: string) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -305,7 +316,7 @@ function OTCard({ record, userEmail, onRefresh }: { record: OTRequest; userEmail
           <Clock className="w-5 h-5 text-blue-300" />
         </div>
         <div className="flex-1 text-left min-w-0">
-          <p className="text-white text-sm font-medium">{record.otDate}</p>
+          <p className="text-white text-sm font-medium">{fmtDate(record.otDate)}</p>
           <p className="text-white/40 text-[10px]">{record.otType} • {record.totalRequestedHours > 0 ? fmtHours(record.totalRequestedHours) : '—'}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
