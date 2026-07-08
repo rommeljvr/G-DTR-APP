@@ -240,12 +240,33 @@ export function exportDTRToPrint(dtr: GeneratedDTR): void {
 </body>
 </html>`;
 
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => printWindow.print(), 300);
-    };
+  const filename = `DTR_${dtr.employeeName.replace(/\s+/g, '_')}_${MONTHS[dtr.month - 1]}_${dtr.year}_${dtr.cutOff}.html`;
+
+  const isMobile =
+    window.matchMedia('(pointer: coarse)').matches ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // On mobile: download as a self-contained HTML file.
+    // The user can open it in their browser and use Share → Print to export as PDF.
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } else {
+    // On desktop: open print window as before.
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        setTimeout(() => printWindow.print(), 300);
+      };
+    }
   }
 }
